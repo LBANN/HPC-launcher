@@ -18,3 +18,5 @@ def main():
     args = parser.parse_args()
     print('Verbose:', args.verbose)
 
+if __name__ == '__main__':
+    main()
