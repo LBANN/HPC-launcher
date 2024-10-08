@@ -15,6 +15,7 @@ def main():
     print('Verbose:', args.verbose)
     system = autodetect.autodetect_current_system()
     print('Detected system:', type(system).__name__)
+    print('Launch command:', system.preferred_scheduler.launch_command(False))
 
 
 if __name__ == '__main__':
