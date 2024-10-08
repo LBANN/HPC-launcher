@@ -35,6 +35,7 @@ class GenericSystem(System):
     def environment_variables(self) -> list[tuple[str, str]]:
         return []
 
+    @property
     def preferred_scheduler(self) -> type[Scheduler]:
         raise NotImplementedError  # TODO: Use SLURM?
 
