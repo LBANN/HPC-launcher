@@ -6,20 +6,39 @@ if TYPE_CHECKING:
     from hpc_launcher.systems import System
 
 from hpc_launcher.schedulers.scheduler import Scheduler
+from hpc_launcher.systems import autodetect
 
 @dataclass
 class FluxScheduler(Scheduler):
     def launch_command(self, blocking: bool = True) -> list[str]:
         return 'flux run' if blocking else 'flux batch'
 
-    def launcher_script(self, system: 'System') -> str:
-        raise NotImplementedError
+    def launcher_script(self, system: 'System', command: str,
+                        args: Optional[list[str]] = None,
+                        blocking: bool = True) -> str:
+        # String IO
 
-    def internal_script(self, system: 'System') -> Optional[str]:
-        return None
+        system = autodetect.autodetect_current_system()
+        env_vars = system.environment_variables()
 
-    def launch(self, system: 'System', program: str,
-               args: Optional[list[str]] = None,
-               blocking: bool = True,
-               verbose: bool = False) -> str:
-        raise NotImplementedError
+        script = ''
+        for k,v in env_vars:
+            script += f'export {k}={v}\n'
+
+        script += self.launch_command(blocking)
+        script += ' --exclusive'
+        script += ' -u'  # Unbuffered
+        script += f' -N{self.nodes}' # --nodes
+        script += f' -n{self.nodes * self.procs_per_node}' # --ntasks
+
+        if self.work_dir:
+            script += f' --setattr=system.cwd={self.work_dir}'
+
+        script += ' -o nosetpgrp'
+
+        script += f' {command}'
+
+        for arg in args:
+            script += f' {arg}'
+
+        return script

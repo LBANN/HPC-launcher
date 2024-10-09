@@ -6,28 +6,6 @@ from hpc_launcher.systems.lc.el_capitan_family import ElCapitan
 import socket
 import re
 
-# ==============================================
-# Set system parameters
-# ==============================================
-
-class SystemParams:
-    """Simple data structure to describe an LC system."""
-    def __init__(self, cores_per_node, gpus_per_node, scheduler):
-        self.cores_per_node = cores_per_node
-        self.gpus_per_node = gpus_per_node
-        self.scheduler = scheduler
-
-# Supported LC systems
-_system_params = {
-    'corona':   SystemParams(48, 8, 'flux'),
-    'lassen':   SystemParams(44, 4, 'lsf'),
-    'pascal':   SystemParams(36, 2, 'slurm'),
-    'rzansel':  SystemParams(44, 4, 'lsf'),
-    'rzvernal': SystemParams(64, 8, 'flux'),
-    'sierra':   SystemParams(44, 4, 'lsf'),
-    'tioga':    SystemParams(64, 8, 'flux'),
-}
-
 # Detect system
 _system = re.sub(r'\d+', '', socket.gethostname())
 

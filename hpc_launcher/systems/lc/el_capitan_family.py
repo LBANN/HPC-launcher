@@ -1,6 +1,15 @@
 from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.schedulers.flux import FluxScheduler
-from hpc_launcher.systems.system import System
+from hpc_launcher.systems.system import System, SystemParams
+#from hpc_launcher.systems.system import SystemParams
+
+
+# Supported LC systems
+_system_params = SystemParams(64, 8, 'gfx90a,gfx942', 4, 'flux')
+
+# _system_params = {
+#     'tioga':    SystemParams(64, 8, 'gfx90a,gfx942', 1, 'flux'),
+# }
 
 class ElCapitan(System):
     """
@@ -8,7 +17,12 @@ class ElCapitan(System):
     """
 
     def environment_variables(self) -> list[tuple[str, str]]:
-        return [('foo', 1), ('bar', 2)]
+#flux run --exclusive -N2 -n8 -c21 -g1 ...        
+        return [('MPICH_OFI_NIC_POLICY', 'GPU'),
+                ('OMP_NUM_THREADS', '21'),
+                ('OMP_PLACES', 'threads'),
+                ('OMP_PROC_BIND', 'spread'),
+        ]
 
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
