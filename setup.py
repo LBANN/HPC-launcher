@@ -16,19 +16,19 @@ setup(name='hpc-launcher',
       url='https://github.com/LBANN/HPC-launcher',
       author='Lawrence Livermore National Laboratory',
       author_email='lbann@llnl.gov',
-      description='Launcher utilities for distributed jobs on HPC clusters',
+      description='LBANN Launcher utilities for distributed jobs on HPC clusters',
       long_description=long_description,
       long_description_content_type='text/markdown',
       classifiers=[
           "Programming Language :: Python :: 3",
-          "License :: OSI Approved :: BSD License",
+          "License :: OSI Approved :: Apache Software License",
           "Operating System :: OS Independent",
       ],
       python_requires='>=3.9, <3.13',
       packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
       entry_points={
           'console_scripts': [
-              'torchrun-hpc = hpc_launcher.cli.torchrun:main',
+              'torchrun-hpc = hpc_launcher.cli.torchrun_hpc:main',
               'launch = hpc_launcher.cli.launch:main',
           ],
       }
