@@ -28,7 +28,9 @@ class FluxScheduler(Scheduler):
             script += f'export {k}={v}\n'
 
         script += self.launch_command(True)
-        script += ' --exclusive'
+        if self.launcher_flags:
+            script += f' {" ".join(self.launcher_flags)}'
+
         script += ' -u'  # Unbuffered
         script += f' -N{self.nodes}' # --nodes
         script += f' -n{self.nodes * self.procs_per_node}' # --ntasks
