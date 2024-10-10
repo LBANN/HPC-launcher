@@ -20,6 +20,8 @@ class FluxScheduler(Scheduler):
         system = autodetect.autodetect_current_system()
         env_vars = system.environment_variables()
         passthrough_env_vars = system.passthrough_environment_variables()
+        # Enable the system to apply some customization to the scheduler instance
+        system.customize_scheduler(self)
 
         script = ''
         for k,v in env_vars:

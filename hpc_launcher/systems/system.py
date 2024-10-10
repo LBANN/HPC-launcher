@@ -25,6 +25,12 @@ class System:
         """
         return []
 
+    def customize_scheduler(self, Scheduler):
+        """
+        Add any system specific customizations to the scheduler.
+        """
+        return
+
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
         """

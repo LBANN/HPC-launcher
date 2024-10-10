@@ -26,13 +26,11 @@ class ElCapitan(System):
         ]
 
 
-    # def passthrough_environment_variables(self) ->:
-    #     ld_preloads
-    # use_this_rccl=os.getenv('LBANN_USE_THIS_RCCL')
-
-    #     if use_this_rccl is not None:
-    #         script += f'--env=LD_PRELOAD={use_this_rccl}'
-
+    def customize_scheduler(self, Scheduler):
+        use_this_rccl=os.getenv('LBANN_USE_THIS_RCCL')
+        if use_this_rccl is not None:
+            Scheduler.ld_preloads = [f'{use_this_rccl}']
+        return
 
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
