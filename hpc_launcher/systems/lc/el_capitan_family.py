@@ -26,7 +26,7 @@ class ElCapitan(System):
         ]
 
 
-    # def passthru_environment_variables(self) ->:
+    # def passthrough_environment_variables(self) ->:
     #     ld_preloads
     # use_this_rccl=os.getenv('LBANN_USE_THIS_RCCL')
 
