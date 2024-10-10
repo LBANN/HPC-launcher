@@ -16,6 +16,15 @@ class System:
         """
         raise NotImplementedError
 
+    def passthrough_environment_variables(self) -> list[tuple[str, str]]:
+        """
+        Returns a list of environment variables that are passed through
+        the scheduler to the command.
+
+        :return: A list of (environment variable name, value) tuples.
+        """
+        return []
+
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
         """

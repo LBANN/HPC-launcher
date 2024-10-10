@@ -30,6 +30,8 @@ class Scheduler:
     account: Optional[str] = None
     # Additional launcher flags
     launcher_flags: Optional[str] = None
+    # Hijack preload commands into a scheduler
+    ld_preloads: Optional[list[str]] = None
 
     def launch_command(self, blocking: bool = True) -> list[str]:
         """
@@ -44,8 +46,7 @@ class Scheduler:
         raise NotImplementedError
 
     def launcher_script(self, system: 'System', command: str,
-                        args: Optional[list[str]] = None,
-                        blocking: bool = True) -> str:
+                        args: Optional[list[str]] = None) -> str:
         """
         Returns the full launcher script, which can be saved as a batch
         script, for the given system and launcher configuration.

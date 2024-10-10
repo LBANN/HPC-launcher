@@ -14,18 +14,18 @@ class FluxScheduler(Scheduler):
         return 'flux run' if blocking else 'flux batch'
 
     def launcher_script(self, system: 'System', command: str,
-                        args: Optional[list[str]] = None,
-                        blocking: bool = True) -> str:
+                        args: Optional[list[str]] = None) -> str:
         # String IO
 
         system = autodetect.autodetect_current_system()
         env_vars = system.environment_variables()
+        passthrough_env_vars = system.passthrough_environment_variables()
 
         script = ''
         for k,v in env_vars:
             script += f'export {k}={v}\n'
 
-        script += self.launch_command(blocking)
+        script += self.launch_command(True)
         script += ' --exclusive'
         script += ' -u'  # Unbuffered
         script += f' -N{self.nodes}' # --nodes
@@ -35,6 +35,21 @@ class FluxScheduler(Scheduler):
             script += f' --setattr=system.cwd={self.work_dir}'
 
         script += ' -o nosetpgrp'
+
+        if self.ld_preloads:
+            script += f' --env=LD_PRELOAD={",".join(self.ld_preloads)}'
+
+        for k,v in passthrough_env_vars:
+            script += f' --env={k}={v}'
+
+        if self.time_limit is not None:
+            script += f' --time={self.time_limit}m'
+        if self.job_name:
+            script += f' --job-name={self.job_name}'
+        if self.partition:
+            script += f' --queue={self.partition}'
+        if self.account:
+            script += f' --account={self.account}'
 
         script += f' {command}'
 

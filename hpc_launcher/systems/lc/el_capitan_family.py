@@ -2,6 +2,7 @@ from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.schedulers.flux import FluxScheduler
 from hpc_launcher.systems.system import System, SystemParams
 #from hpc_launcher.systems.system import SystemParams
+import os
 
 
 # Supported LC systems
@@ -23,6 +24,15 @@ class ElCapitan(System):
                 ('OMP_PLACES', 'threads'),
                 ('OMP_PROC_BIND', 'spread'),
         ]
+
+
+    # def passthru_environment_variables(self) ->:
+    #     ld_preloads
+    # use_this_rccl=os.getenv('LBANN_USE_THIS_RCCL')
+
+    #     if use_this_rccl is not None:
+    #         script += f'--env=LD_PRELOAD={use_this_rccl}'
+
 
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
