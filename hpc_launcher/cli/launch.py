@@ -18,6 +18,12 @@ def main():
     parser.add_argument('--procs-per-node', '-n',
 			default=1,
 			help='Number of compute nodes for the job')
+    parser.add_argument('--out',
+			default=None,
+			help='Capture stdout in a log file')
+    parser.add_argument('--err',
+			default=None,
+			help='Capture stderr in a log file')
     # Grab the rest of the command line to launch
     parser.add_argument('command',
 			help='command that should be executed')
@@ -30,6 +36,11 @@ def main():
     system = autodetect.autodetect_current_system()
     print('Detected system:', type(system).__name__)
     scheduler=system.preferred_scheduler(args.nodes, args.procs_per_node)
+
+    if args.out:
+        scheduler.out_log_file = f'{args.out}'
+    if args.err:
+        scheduler.err_log_file = f'{args.err}'
 
     print('Launch command:', scheduler.launch_command(False))
     print(f'system parameters: node={scheduler.nodes} ppn={scheduler.procs_per_node}')

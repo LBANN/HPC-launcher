@@ -22,6 +22,10 @@ class Scheduler:
     job_name: Optional[str] = None
     # Working directory (by default, uses current working directory)
     work_dir: Optional[str] = None
+    # File for logging output stream (stdout)
+    out_log_file: Optional[str] = None
+    # File for logging error stream (stderr)
+    err_log_file: Optional[str] = None
     # Time limit (in minutes), default is no limit
     time_limit: Optional[int] = None
     # The partition or queue to use with the scheduler

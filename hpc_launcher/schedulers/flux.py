@@ -24,6 +24,11 @@ class FluxScheduler(Scheduler):
         system.customize_scheduler(self)
 
         script = ''
+        if self.out_log_file:
+            script += f'#flux --output={self.out_log_file}\n'
+        if self.err_log_file:
+            script += f'#flux --error={self.err_log_file}\n'
+
         for k,v in env_vars:
             script += f'export {k}={v}\n'
 
