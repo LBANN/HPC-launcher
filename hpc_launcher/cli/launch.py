@@ -1,4 +1,5 @@
 import argparse
+from hpc_launcher.cli import common_args
 from hpc_launcher.systems import autodetect
 
 # launch -N 2 -n 4 -- python -u ../PyTorch/pt-distconv.git/main.py
@@ -8,27 +9,13 @@ from hpc_launcher.systems import autodetect
 def main():
     parser = argparse.ArgumentParser(
 	description='Launches a distributed job on the current HPC cluster or cloud.')
-    parser.add_argument('--verbose', '-v',
-			action='store_true',
-			default=False,
-			help='Run in verbose mode')
-    parser.add_argument('--nodes', '-N',
-			default=1,
-			help='Number of compute nodes for the job')
-    parser.add_argument('--procs-per-node', '-n',
-			default=1,
-			help='Number of compute nodes for the job')
-    parser.add_argument('--out',
-			default=None,
-			help='Capture stdout in a log file')
-    parser.add_argument('--err',
-			default=None,
-			help='Capture stderr in a log file')
+    common_args.setup_arguments(parser)
+
     # Grab the rest of the command line to launch
     parser.add_argument('command',
-			help='command that should be executed')
+			help='Command to be executed')
     parser.add_argument('args', nargs=argparse.REMAINDER,
-			help='arguments to the command that should be executed')
+			help='Arguments to the command that should be executed')
 
     args = parser.parse_args()
 

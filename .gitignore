@@ -167,3 +167,4 @@ cython_debug/
 # Use wildcards as well
 *~
 *.o
+.vscode/
