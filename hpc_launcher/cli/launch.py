@@ -18,6 +18,7 @@ def main():
 			help='Arguments to the command that should be executed')
 
     args = parser.parse_args()
+    common_args.validate_arguments(args)
 
     print('Verbose:', args.verbose)
     system = autodetect.autodetect_current_system()

@@ -16,6 +16,7 @@ def main():
                         help='Arguments to the Python script')
 
     args = parser.parse_args()
+    common_args.validate_arguments(args)
 
     try:
         import torch

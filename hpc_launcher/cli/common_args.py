@@ -97,3 +97,8 @@ def validate_arguments(args: argparse.Namespace):
     if args.gpumem_at_least and args.total_gpus:
         raise ValueError('The --gpumem-at-least and --total-gpus flags '
                          'are mutually exclusive')
+    if (not args.procs_per_node and not args.gpumem_at_least
+            and not args.total_gpus):
+        raise ValueError(
+            'Number of processes must be provided via --procs-per-node, '
+            '--total_gpus, or constraints such as --gpumem-at-least')
