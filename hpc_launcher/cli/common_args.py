@@ -50,6 +50,12 @@ def setup_arguments(parser: argparse.ArgumentParser):
                        'are not necessary. Requires the system to be '
                        'registered with the launcher.')
 
+    group.add_argument('--local',
+                       action='store_true',
+                       default=False,
+                       help='Run locally (i.e., one process without a batch '
+                       'scheduler)')
+
     # Schedule
     group = parser.add_argument_group(
         'Schedule', 'Arguments that determine when a job will run')
@@ -98,7 +104,9 @@ def validate_arguments(args: argparse.Namespace):
         raise ValueError('The --gpumem-at-least and --total-gpus flags '
                          'are mutually exclusive')
     if (not args.procs_per_node and not args.gpumem_at_least
-            and not args.total_gpus):
+            and not args.total_gpus and not args.local):
         raise ValueError(
             'Number of processes must be provided via --procs-per-node, '
             '--total_gpus, or constraints such as --gpumem-at-least')
+    if args.local and args.bg:
+        raise ValueError('"--local" jobs cannot be run in the background')
