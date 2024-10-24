@@ -45,60 +45,63 @@ class SlurmScheduler(Scheduler):
         system.customize_scheduler(self)
 
         script = ''
+        header_lines = ''
+        cmd_string = ''
         if self.out_log_file:
-            script += f'#SBATCH --output={self.out_log_file}\n'
+            header_lines += f'#SBATCH --output={self.out_log_file}\n'
         if self.err_log_file:
-            script += f'#SBATCH --error={self.err_log_file}\n'
+            header_lines += f'#SBATCH --error={self.err_log_file}\n'
 
-        # Configure header with Slurm job options
-        # self.add_header_line(f'#SBATCH --chdir={self.work_dir}')
-        # self.add_header_line(f'#SBATCH --nodes={self.nodes}')
-        # self.add_header_line(f'#SBATCH --ntasks={self.nodes * self.procs_per_node}')
-        # self.add_header_line(f'#SBATCH --ntasks-per-node={self.procs_per_node}')
-        # if self.time_limit is not None:
-        #     self.add_header_line(f'#SBATCH --time={_time_string(self.time_limit)}')
-        # if self.job_name:
-        #     self.add_header_line(f'#SBATCH --job-name={self.job_name}')
-        # if self.partition:
-        #     self.add_header_line(f'#SBATCH --partition={self.partition}')
-        # if self.account:
-        #     self.add_header_line(f'#SBATCH --account={self.account}')
+        if self.launcher_flags:
+            cmd_string += f' {" ".join(self.launcher_flags)}'
 
+        cmd_string += ' -u'  # Unbuffered
+
+        cmd_string += f' --nodes={self.nodes}'
+        header_lines += f'#SBATCH --nodes={self.nodes}\n'
+
+        cmd_string += f' --ntasks={self.nodes * self.procs_per_node}'
+        header_lines += f'#SBATCH --ntasks={self.nodes * self.procs_per_node}\n'
+
+        cmd_string += f' --ntasks-per-node={self.procs_per_node}'
+        header_lines += f'#SBATCH --ntasks-per-node={self.procs_per_node}\n'
+
+        if self.work_dir:
+            cmd_string += f' --setattr=system.cwd={self.work_dir}'
+
+        cmd_string += ' -o nosetpgrp'
+
+        if self.work_dir is not None:
+            cmd_string += f'--chdir={self.work_dir}'
+            header_lines += f'#SBATCH --chdir={self.work_dir}\n'
+
+        if self.ld_preloads:
+            cmd_string += f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}'
+
+        for k,v in passthrough_env_vars:
+            cmd_string += f' --env={k}={v}'
+
+        if self.time_limit is not None:
+            cmd_string += f' --time={self.time_limit}m'
+            header_lines += f'#SBATCH --time={_time_string(self.time_limit)}\n'
+
+        if self.job_name:
+            cmd_string += f' --job-name={self.job_name}'
+            header_lines += f'#SBATCH --job-name={self.job_name}\n'
+        if self.partition:
+            cmd_string += f' --partition={self.partition}'
+            header_lines += f'#SBATCH --partition={self.partition}\n'
+        if self.account:
+            cmd_string += f' --account={self.account}'
+            header_lines += f'#SBATCH --account={self.account}\n'
+
+        # Configure header and command line with Slurm job options
+        script += header_lines
         for k,v in env_vars:
             script += f'export {k}={v}\n'
 
         script += self.launch_command(True)
-        if self.launcher_flags:
-            script += f' {" ".join(self.launcher_flags)}'
-
-        script += ' -u'  # Unbuffered
-        script += f'--nodes={self.nodes}'
-        script += f'--ntasks={self.nodes * self.procs_per_node}'
-        script += f'--ntasks-per-node={self.procs_per_node}'
-
-        if self.work_dir:
-            script += f' --setattr=system.cwd={self.work_dir}'
-
-        script += ' -o nosetpgrp'
-
-        if self.work_dir is not None:
-            script += f'--chdir={self.work_dir}'
-
-        if self.ld_preloads:
-            script += f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}'
-
-        for k,v in passthrough_env_vars:
-            script += f' --env={k}={v}'
-
-        if self.time_limit is not None:
-            script += f' --time={self.time_limit}m'
-        if self.job_name:
-            script += f' --job-name={self.job_name}'
-        if self.partition:
-            script += f' --partition={self.partition}'
-        if self.account:
-            script += f' --account={self.account}'
-
+        script += cmd_string
         script += f' {command}'
 
         for arg in args:
