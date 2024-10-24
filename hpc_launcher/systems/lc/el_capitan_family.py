@@ -1,21 +1,41 @@
+# Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
+# Produced at the Lawrence Livermore National Laboratory.
+# Written by the LBANN Research Team (B. Van Essen, et al.) listed in
+# the CONTRIBUTORS file. See the top-level LICENSE file for details.
+#
+# LLNL-CODE-697807.
+# All rights reserved.
+#
+# This file is part of LBANN: Livermore Big Artificial Neural Network
+# Toolkit. For details, see http://software.llnl.gov/LBANN or
+# https://github.com/LBANN and https://github.com/LLNL/LBANN.
+#
+# SPDX-License-Identifier: (Apache-2.0)
 from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.schedulers.flux import FluxScheduler
 from hpc_launcher.systems.system import System, SystemParams
-#from hpc_launcher.systems.system import SystemParams
 import os
 
 
-# Supported LC systems
-_system_params = SystemParams(64, 8, 'gfx90a,gfx942', 4, 'flux')
-
-# _system_params = {
-#     'tioga':    SystemParams(64, 8, 'gfx90a,gfx942', 1, 'flux'),
-# }
+# Known LC systems
+_mi250x_node =  SystemParams(64, 8, 'gfx90a', 64, 4, 'flux')
+_mi300a_node =  SystemParams(96, 4, 'gfx942', 128, 4, 'flux')
+_system_params = {
+    'tioga':     ('pdebug',  {'pdebug' : _mi250x_node,
+                              'mi300a' : _mi300a_node,
+                              }),
+    'tuolumne':  ('pbatch',  {'pbatch' : _mi300a_node,
+                              'pdebug' : _mi300a_node,
+                              }),
+}
 
 class ElCapitan(System):
     """
     LLNL LC Systems based on the El Capitan MI300a architecture.
     """
+    def __init__(self, system_name):
+        super().__init__(system_name, _system_params)
+
 
     def environment_variables(self) -> list[tuple[str, str]]:
 #flux run --exclusive -N2 -n8 -c21 -g1 ...
@@ -42,6 +62,8 @@ class ElCapitan(System):
         env_list.append(('OMP_PLACES', 'threads'))
         env_list.append(('OMP_PROC_BIND', 'spread'))
 
+        # add -fastload
+
         return env_list
 
     def customize_scheduler(self, Scheduler):
@@ -54,4 +76,3 @@ class ElCapitan(System):
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
         return FluxScheduler
-    
