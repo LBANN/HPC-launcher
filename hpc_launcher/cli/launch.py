@@ -23,7 +23,7 @@ def main():
 
     print('Verbose:', args.verbose)
     system = autodetect.autodetect_current_system()
-    print('Detected system:', type(system).__name__)
+    print('Detected system:', system.system_name, f'[{type(system).__name__}-class]')
     system_params = system.system_parameters(args.queue)
 
     # If the user requested a specific number of process per node, honor that

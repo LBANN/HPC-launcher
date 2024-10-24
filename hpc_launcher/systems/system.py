@@ -7,11 +7,12 @@ import warnings
 
 class SystemParams:
     """Simple data structure to describe an LC system."""
-    def __init__(self, cores_per_node, gpus_per_node, gpu_arch, mem_per_gpu, numa_domains, scheduler):
+    def __init__(self, cores_per_node, gpus_per_node, gpu_arch, mem_per_gpu, cpus_per_node, numa_domains, scheduler):
         self.cores_per_node = cores_per_node
         self.gpus_per_node = gpus_per_node
         self.gpu_arch = gpu_arch
         self.mem_per_gpu = mem_per_gpu # GB
+        self.cpus_per_node = cpus_per_node
         self.scheduler = scheduler
         self.numa_domains = numa_domains
 

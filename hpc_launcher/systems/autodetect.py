@@ -14,7 +14,7 @@
 import warnings
 from hpc_launcher.systems.system import System, GenericSystem
 from hpc_launcher.systems.lc.el_capitan_family import ElCapitan
-#from hpc_launcher.systems.lc.cts2 import CTS2
+from hpc_launcher.systems.lc.cts2 import CTS2
 
 """Default settings for LC systems."""
 import socket
@@ -45,8 +45,8 @@ def autodetect_current_system() -> System:
     if sys == 'tioga' or sys == 'tuolumne':
         return ElCapitan(sys)
 
-    # if sys == 'ipa':
-    #     return CTS2()
+    if sys == 'ipa':
+        return CTS2(sys)
 
     # TODO: Try to find current system
     warnings.warn('Could not auto-detect current system, defaulting '
