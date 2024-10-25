@@ -59,4 +59,4 @@ def autodetect_current_system(quiet: bool = False) -> System:
         logger.warning('Could not auto-detect current system, defaulting '
                        'to generic system')
 
-    return GenericSystem()
+    return GenericSystem('generic')

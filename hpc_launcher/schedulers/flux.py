@@ -49,7 +49,7 @@ class FluxScheduler(Scheduler):
         for k, v in env_vars:
             script += f'export {k}={v}\n'
 
-        script += self.launch_command(True)
+        script += ' '.join(self.launch_command(True))
         if self.launcher_flags:
             script += f' {" ".join(self.launcher_flags)}'
 
@@ -81,6 +81,8 @@ class FluxScheduler(Scheduler):
 
         for arg in args:
             script += f' {arg}'
+
+        script += '\n'
 
         return script
 

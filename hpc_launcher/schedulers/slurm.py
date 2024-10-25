@@ -16,10 +16,10 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
-    from hpc_launcher.systems import System
+    from hpc_launcher.systems.system import System
 
 from hpc_launcher.schedulers.scheduler import Scheduler
-from hpc_launcher.systems import autodetect
+
 
 def _time_string(minutes):
     """Time D-hh:mm:ss format."""
@@ -29,12 +29,16 @@ def _time_string(minutes):
     days, hours = divmod(hours, 24)
     return f'{days}-{hours:02}:{minutes:02}:{seconds:02}'
 
+
 @dataclass
 class SlurmScheduler(Scheduler):
-    def launch_command(self, blocking: bool = True) -> list[str]:
-        return 'srun' if blocking else 'sbatch'
 
-    def launcher_script(self, system: 'System', command: str,
+    def launch_command(self, blocking: bool = True) -> list[str]:
+        return ['srun'] if blocking else ['sbatch']
+
+    def launcher_script(self,
+                        system: 'System',
+                        command: str,
                         args: Optional[list[str]] = None) -> str:
         env_vars = system.environment_variables()
         passthrough_env_vars = system.passthrough_environment_variables()
@@ -42,7 +46,7 @@ class SlurmScheduler(Scheduler):
         system.customize_scheduler(self)
 
         script = ''
-        header_lines = ''
+        header_lines = '#!/bin/sh\n'
         cmd_string = ''
         if self.out_log_file:
             header_lines += f'#SBATCH --output={self.out_log_file}\n'
@@ -63,7 +67,7 @@ class SlurmScheduler(Scheduler):
         cmd_string += f' --ntasks-per-node={self.procs_per_node}'
         header_lines += f'#SBATCH --ntasks-per-node={self.procs_per_node}\n'
 
-        cmd_string += ' -o nosetpgrp'
+        #cmd_string += ' -o nosetpgrp'
 
         if self.work_dir:
             cmd_string += f'--chdir={self.work_dir}'
@@ -72,7 +76,7 @@ class SlurmScheduler(Scheduler):
         if self.ld_preloads:
             cmd_string += f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}'
 
-        for k,v in passthrough_env_vars:
+        for k, v in passthrough_env_vars:
             cmd_string += f' --env={k}={v}'
 
         if self.time_limit:
@@ -91,14 +95,23 @@ class SlurmScheduler(Scheduler):
 
         # Configure header and command line with Slurm job options
         script += header_lines
-        for k,v in env_vars:
+        for k, v in env_vars:
             script += f'export {k}={v}\n'
 
-        script += self.launch_command(True)
+        script += ' '.join(self.launch_command(True))
         script += cmd_string
         script += f' {command}'
 
         for arg in args:
             script += f' {arg}'
 
+        script += '\n'
+
         return script
+
+    def get_job_id(self, output: str) -> Optional[str]:
+        # The job ID is the last number in the printout
+        last_line = output.split('\n')[-1].strip()
+        if last_line.startswith('Submitted batch job'):
+            return last_line.split(' ')[-1]
+        return None

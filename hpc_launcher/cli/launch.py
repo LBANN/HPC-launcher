@@ -51,7 +51,7 @@ def main():
 
     system = autodetect.autodetect_current_system()
     logger.info(
-        f'Detected system: {system.system_name}[{type(system).__name__}-class]'
+        f'Detected system: {system.system_name} [{type(system).__name__}-class]'
     )
     system_params = system.system_parameters(args.queue)
 
@@ -75,7 +75,7 @@ def main():
     if args.local:
         scheduler_class = LocalScheduler
     elif args.scheduler:
-        scheduler_class = get_schedulers()
+        scheduler_class = get_schedulers()[args.scheduler]
     else:
         scheduler_class = system.preferred_scheduler
     logger.info(f'Using {scheduler_class.__name__}')
