@@ -54,11 +54,9 @@ class System:
         self.default_queue = None
         self.system_params = None
         self.known_systems = known_systems
-#        print(f'BVE initialie System with {system_name}')
         if self.known_systems:
             if system_name in self.known_systems.keys():
                 (self.default_queue, self.system_params) = self.known_systems[system_name]
-#                print(f'BVE the default queue is {self.default_queue} and the paras {self.system_params}')
             else:
                 warnings.warn('Could not auto-detect current system parameters')
         else:

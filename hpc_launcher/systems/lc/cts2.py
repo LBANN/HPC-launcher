@@ -42,12 +42,6 @@ class CTS2(System):
 
         return env_list
 
-    # def customize_scheduler(self, Scheduler):
-    #     use_this_rccl=os.getenv('LBANN_USE_THIS_RCCL')
-    #     Scheduler.launcher_flags = ['--exclusive']
-    #     if use_this_rccl is not None:
-    #         Scheduler.ld_preloads = [f'{use_this_rccl}']
-    #     return
 
     @property
     def preferred_scheduler(self) -> type[Scheduler]:

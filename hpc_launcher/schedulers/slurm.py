@@ -38,7 +38,6 @@ class SlurmScheduler(Scheduler):
                         args: Optional[list[str]] = None) -> str:
         # String IO
 
-        system = autodetect.autodetect_current_system()
         env_vars = system.environment_variables()
         passthrough_env_vars = system.passthrough_environment_variables()
         # Enable the system to apply some customization to the scheduler instance
