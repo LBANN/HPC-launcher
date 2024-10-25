@@ -1,5 +1,63 @@
+# Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
+# Produced at the Lawrence Livermore National Laboratory.
+# Written by the LBANN Research Team (B. Van Essen, et al.) listed in
+# the CONTRIBUTORS file. See the top-level LICENSE file for details.
+#
+# LLNL-CODE-697807.
+# All rights reserved.
+#
+# This file is part of LBANN: Livermore Big Artificial Neural Network
+# Toolkit. For details, see http://software.llnl.gov/LBANN or
+# https://github.com/LBANN and https://github.com/LLNL/LBANN.
+#
+# SPDX-License-Identifier: (Apache-2.0)
+from dataclasses import dataclass
+import logging
 from hpc_launcher.schedulers.scheduler import Scheduler
-from hpc_launcher.schedulers.local import LocalScheduler
+
+logger = logging.getLogger(__name__)
+
+# ==============================================
+# Set system parameters
+# ==============================================
+
+
+@dataclass
+class SystemParams:
+    """Simple data structure to describe an LC system."""
+
+    # Number of CPU cores per compute node
+    cores_per_node: int
+    # Number of GPUs per node
+    gpus_per_node: int
+    # Vendor specific GPU compiler architecture
+    gpu_arch: str
+    # Number of GB of memory per GPU
+    mem_per_gpu: int
+    # Physical number of CPUs per node
+    cpus_per_node: int
+    # String name of the Schedular class
+    scheduler: str
+    # Number of NUMA domains
+    numa_domains: int
+
+    def print_params(self):
+        logger.info(
+            f'c={self.cores_per_node} g={self.gpus_per_node} s={self.scheduler} arch={self.gpu_arch} numa={self.numa_domains}'
+        )
+
+    def has_gpu(self):
+        """Whether LC system has GPUs."""
+        return self.gpus_per_node > 0
+
+    def procs_per_node(self):
+        """Default number of processes per node."""
+        if self.has_gpu():
+            return self.gpus_per_node
+        else:
+            # Assign one rank / process to each NUMA domain to play nice with OPENMP
+            return self.numa_domains
+
 
 class System:
     """
@@ -7,6 +65,21 @@ class System:
     cloud service provider) that can be used to launch distributed
     jobs.
     """
+
+    def __init__(self, system_name, known_systems=None):
+        self.system_name = system_name
+        self.default_queue = None
+        self.system_params = None
+        self.known_systems = known_systems
+        if self.known_systems:
+            if system_name in self.known_systems.keys():
+                (self.default_queue,
+                 self.system_params) = self.known_systems[system_name]
+            else:
+                logger.warning(
+                    'Could not auto-detect current system parameters')
+        else:
+            logger.warning('No list of known systems')
 
     def environment_variables(self) -> list[tuple[str, str]]:
         """
@@ -32,6 +105,22 @@ class System:
         """
         return
 
+    def system_parameters(self, requested_queue=None) -> SystemParams:
+        queue = self.default_queue
+        if requested_queue:
+            queue = requested_queue
+        if self.system_params:
+            if queue not in self.system_params:
+                logger.warning(
+                    f'Unknown queue {queue} on system {self.system_name} using system parameters from default queue {self.default_queue}'
+                )
+                params = self.system_params[self.default_queue]
+            else:
+                params = self.system_params[queue]
+            return params
+        else:
+            return None
+
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
         """
@@ -53,73 +142,6 @@ class GenericSystem(System):
 
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
-        return LocalScheduler  # TODO: Use SLURM
-
-
-# ==============================================
-# Set system parameters
-# ==============================================
-
-
-class SystemParams:
-    """Simple data structure to describe an LC system."""
-
-    def __init__(self, cores_per_node, gpus_per_node, gpu_arch, numa_domains,
-                 scheduler):
-        self.cores_per_node = cores_per_node
-        self.gpus_per_node = gpus_per_node
-        self.scheduler = scheduler
-        self.gpu_arch = gpu_arch
-        self.numa_domains = numa_domains
-
-    def print_params(self):
-        print(f'c={self.cores_per_node}', f'g={self.gpus_per_node}',
-              f's={self.scheduler}',
-              f'arch={self.gpu_arch} numa={self.numa_domains}')
-
-
-# Supported LC systems
-# _system_params = {
-#     'corona':   SystemParams(48, 8, 'flux'),
-#     'lassen':   SystemParams(44, 4, 'lsf'),
-#     'pascal':   SystemParams(36, 2, 'slurm'),
-#     'rzansel':  SystemParams(44, 4, 'lsf'),
-#     'rzvernal': SystemParams(64, 8, 'flux'),
-#     'sierra':   SystemParams(44, 4, 'lsf'),
-#     'tioga':    SystemParams(64, 8, 'flux'),
-# }
-
-# def is_lc_system(system = system()):
-#     """Whether current system is a supported LC system."""
-#     return _system in _system_params.keys()
-
-# def gpus_per_node(system = system()):
-#     """Number of GPUs per node."""
-#     if not is_lc_system(system):
-#         raise RuntimeError('unknown system (' + system + ')')
-#     return _system_params[system].gpus_per_node
-
-# def has_gpu(system = system()):
-#     """Whether LC system has GPUs."""
-#     return gpus_per_node(system) > 0
-
-# def cores_per_node(system = system()):
-#     """Number of CPU cores per node."""
-#     if not is_lc_system(system):
-#         raise RuntimeError('unknown system (' + system + ')')
-#     return _system_params[system].cores_per_node
-
-# def scheduler(system = system()):
-#     """Job scheduler for LC system."""
-#     if not is_lc_system(system):
-#         raise RuntimeError('unknown system (' + system + ')')
-#     return _system_params[system].scheduler
-
-# def procs_per_node(system = system()):
-#     """Default number of processes per node."""
-#     if has_gpu(system):
-#         return gpus_per_node(system)
-#     else:
-#         # Catalyst and Quartz have 2 sockets per node
-#         ### @todo Think of a smarter heuristic
-#         return 2
+        # SLURM is a relatively safe bet for a scheduler
+        from hpc_launcher.schedulers.slurm import SlurmScheduler
+        return SlurmScheduler

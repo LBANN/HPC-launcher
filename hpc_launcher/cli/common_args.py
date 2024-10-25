@@ -1,3 +1,16 @@
+# Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
+# Produced at the Lawrence Livermore National Laboratory.
+# Written by the LBANN Research Team (B. Van Essen, et al.) listed in
+# the CONTRIBUTORS file. See the top-level LICENSE file for details.
+#
+# LLNL-CODE-697807.
+# All rights reserved.
+#
+# This file is part of LBANN: Livermore Big Artificial Neural Network
+# Toolkit. For details, see http://software.llnl.gov/LBANN or
+# https://github.com/LBANN and https://github.com/LLNL/LBANN.
+#
+# SPDX-License-Identifier: (Apache-2.0)
 """
 Common arguments for CLI utilities.
 """
@@ -30,13 +43,19 @@ def setup_arguments(parser: argparse.ArgumentParser):
         '-n',
         '--procs-per-node',
         type=int,
-        default=0,
+        default=None,
         help='Specifies the number of requested processes per node')
+
+    group.add_argument(
+        '-q',
+        '--queue',
+        default=None,
+        help='Specifies the queue to use')
 
     # Constraints
     group.add_argument(
         '-g',
-        '--total-gpus',
+        '--gpus-at-least',
         type=int,
         default=0,
         help='Specifies the total number of accelerators requested. Mutually '
@@ -120,24 +139,26 @@ def validate_arguments(args: argparse.Namespace):
     """
     # TODO(later): Convert some mutual exclusive behavior to constraints on
     #              number of nodes/ranks
-    if (args.nodes and not args.procs_per_node) or (not args.nodes
-                                                    and args.procs_per_node):
+    # if (args.nodes and not args.procs_per_node) or (not args.nodes
+    #                                                 and args.procs_per_node):
+    if (not args.nodes and not args.gpus_at_least) or (not args.nodes
+                                                    and not args.gpumem_at_least):
         raise ValueError(
-            'The --nodes and --procs-per-node flags must be given together')
-    if args.total_gpus and args.procs_per_node:
-        raise ValueError('The --total-gpus and --procs-per-node flags '
+            'One of the following flags has to be set: --nodes, --gpus-at-least, or --gpumem-at-least')
+    if args.gpus_at_least and args.procs_per_node:
+        raise ValueError('The --gpus-at-least and --procs-per-node flags '
                          'are mutually exclusive')
     if args.gpumem_at_least and args.procs_per_node:
         raise ValueError('The --gpumem-at-least and --procs-per-node flags '
                          'are mutually exclusive')
-    if args.gpumem_at_least and args.total_gpus:
-        raise ValueError('The --gpumem-at-least and --total-gpus flags '
+    if args.gpumem_at_least and args.gpus_at_least:
+        raise ValueError('The --gpumem-at-least and --gpus-at-least flags '
                          'are mutually exclusive')
     if (not args.procs_per_node and not args.gpumem_at_least
-            and not args.total_gpus and not args.local):
+            and not args.gpus_at_least and not args.local):
         raise ValueError(
             'Number of processes must be provided via --procs-per-node, '
-            '--total_gpus, or constraints such as --gpumem-at-least')
+            '--gpus-at-least, or constraints such as --gpumem-at-least')
     if args.local and args.bg:
         raise ValueError('"--local" jobs cannot be run in the background')
     if args.local and args.scheduler:

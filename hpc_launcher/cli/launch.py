@@ -1,8 +1,22 @@
+# Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
+# Produced at the Lawrence Livermore National Laboratory.
+# Written by the LBANN Research Team (B. Van Essen, et al.) listed in
+# the CONTRIBUTORS file. See the top-level LICENSE file for details.
+#
+# LLNL-CODE-697807.
+# All rights reserved.
+#
+# This file is part of LBANN: Livermore Big Artificial Neural Network
+# Toolkit. For details, see http://software.llnl.gov/LBANN or
+# https://github.com/LBANN and https://github.com/LLNL/LBANN.
+#
+# SPDX-License-Identifier: (Apache-2.0)
 import argparse
 from hpc_launcher.cli import common_args
 from hpc_launcher.systems import autodetect
 from hpc_launcher.schedulers import get_schedulers
 from hpc_launcher.schedulers.local import LocalScheduler
+from hpc_launcher.utils import ceildiv
 
 import logging
 
@@ -36,15 +50,37 @@ def main():
     logger.info(f'Verbose: {args.verbose}')
 
     system = autodetect.autodetect_current_system()
-    logger.info(f'Detected system: {type(system).__name__}')
+    logger.info(
+        f'Detected system: {system.system_name}[{type(system).__name__}-class]'
+    )
+    system_params = system.system_parameters(args.queue)
+
+    # If the user requested a specific number of process per node, honor that
+    nodes = args.nodes
+    procs_per_node = args.procs_per_node
+
+    # Otherwise ...
+    # If there is a valid set of system parameters, try to fill in the blanks provided by the user
+    if system_params is not None:
+        procs_per_node = system_params.procs_per_node()
+        if args.gpus_at_least > 0:
+            nodes = ceildiv(args.gpus_at_least, procs_per_node)
+        elif args.gpumem_at_least > 0:
+            num_gpus = ceildiv(args.gpumem_at_least, system_params.mem_per_gpu)
+            nodes = ceildiv(num_gpus, procs_per_node)
+            if nodes == 1:
+                procs_per_node = num_gpus
+
+    # Pick batch scheduler
     if args.local:
-        scheduler = LocalScheduler(args.nodes, args.procs_per_node)
-    if args.scheduler:
-        scheduler = get_schedulers()[args.scheduler](args.nodes,
-                                                     args.procs_per_node)
+        scheduler_class = LocalScheduler
+    elif args.scheduler:
+        scheduler_class = get_schedulers()
     else:
-        scheduler = system.preferred_scheduler(args.nodes, args.procs_per_node)
-    logger.info(f'Using {type(scheduler).__name__}')
+        scheduler_class = system.preferred_scheduler
+    logger.info(f'Using {scheduler_class.__name__}')
+
+    scheduler = scheduler_class(nodes, procs_per_node, partition=args.queue)
 
     if args.out:
         scheduler.out_log_file = f'{args.out}'
