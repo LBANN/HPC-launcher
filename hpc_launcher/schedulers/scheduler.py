@@ -1,9 +1,18 @@
+from hpc_launcher.cli.console_pipe import run_process_with_live_output
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
+import os
+import tempfile
+import subprocess
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
-    from hpc_launcher.systems import System
+    from hpc_launcher.systems.system import System
+
 
 @dataclass
 class Scheduler:
@@ -49,7 +58,9 @@ class Scheduler:
         """
         raise NotImplementedError
 
-    def launcher_script(self, system: 'System', command: str,
+    def launcher_script(self,
+                        system: 'System',
+                        command: str,
                         args: Optional[list[str]] = None) -> str:
         """
         Returns the full launcher script, which can be saved as a batch
@@ -75,10 +86,25 @@ class Scheduler:
         # By default, no internal script is required
         return None
 
-    def launch(self, system: 'System', command: str,
+    def get_job_id(self, output: str) -> Optional[str]:
+        """
+        Parses and returns the job ID from a batch job submission (running in
+        the background). Returns ``None`` if parsing cannot be performed.
+
+        :param output: Console outputs of the batch submission.
+        :return: A string containing the job ID, or None if the output cannot
+                 be parsed.
+        """
+        return None
+
+    def launch(self,
+               system: 'System',
+               command: str,
                args: Optional[list[str]] = None,
                blocking: bool = True,
-               verbose: bool = False) -> str:
+               script_file: Optional[str] = None,
+               setup_only: bool = False,
+               color_stderr: bool = False) -> str:
         """
         Launches the given command and arguments uaing this launcher.
 
@@ -87,33 +113,49 @@ class Scheduler:
         :param args: The arguments to use for the command.
         :param blocking: If True, blocks until the job is complete
                          and redirects/duplicates outputs to the terminal.
+        :param script_file: If given, saves the output script to this file.
         :param verbose: If True, prints more information about the job details.
-                        This information is also stored in the output log.
+        :param setup_only: If True, only sets up the job and does not launch it.
+        :param color_stderr: If True, colors stderr terminal outputs in red.
         :return: The queued job ID as a string.
         """
-        foo = self.launcher_script(system, command, args)
-        # write foo
-        with open('lbann_batch.sh', 'w') as fp:
-            fp.write(foo)
+        # Create a temporary file or a script file, if given
+        if script_file is not None:
+            if os.path.dirname(script_file):
+                os.makedirs(os.path.dirname(script_file), exist_ok=True)
 
-        return "foo"
+            # TODO: Should we warn if this file exists or fail without "-f"?
+            file = open(script_file, 'w')
+            filename = os.path.abspath(script_file)
+        else:
+            file = tempfile.NamedTemporaryFile('w',
+                                               prefix='launch-',
+                                               suffix='.sh',
+                                               delete=False)
+            filename = file.name
 
-        # # Submit batch script and pipe output to log files
-        # run_proc = subprocess.Popen([self.launch_command(blocking), 'lbann_batch.sh'],
-        #                             stdout=subprocess.PIPE,
-        #                             stderr=subprocess.PIPE,
-        #                             cwd=self.work_dir)
-        # # out_proc = subprocess.Popen(['tee', self.out_log_file],
-        # #                             stdin=run_proc.stdout,
-        # #                             cwd=self.work_dir)
-        # # err_proc = subprocess.Popen(['tee', self.err_log_file],
-        # #                             stdin=run_proc.stderr,
-        # #                             cwd=self.work_dir)
-        # run_proc.stdout.close()
-        # run_proc.stderr.close()
-        # run_proc.wait()
-        # # out_proc.wait()
-        # # err_proc.wait()
-            
-        # run_subprocess(self.launch_command(blocking), command, args)
-        # return run_proc.returncode
+        logger.info(f'Script filename: {filename}')
+        with file as fp:
+            fp.write(self.launcher_script(system, command, args))
+        os.chmod(filename, 0o700)
+
+        if setup_only:
+            return ''
+
+        cmd = self.launch_command(blocking)
+        full_cmdline = cmd + [filename]
+        logger.info(f'Launching {" ".join(full_cmdline)}')
+
+        try:
+            if blocking:  # Launch job and trace outputs live
+                run_process_with_live_output(full_cmdline,
+                                             color_stderr=color_stderr)
+                # In this mode, there is no job ID
+                return None
+            else:
+                # Run batch script and get job ID
+                process = subprocess.run(cmd, capture_output=True)
+                return self.get_job_id(process.stdout)
+        finally:
+            if script_file is None:  # Erase temporary file
+                os.unlink(filename)

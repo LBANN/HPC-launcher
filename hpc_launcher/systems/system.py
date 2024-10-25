@@ -1,4 +1,5 @@
 from hpc_launcher.schedulers.scheduler import Scheduler
+from hpc_launcher.schedulers.local import LocalScheduler
 
 class System:
     """
@@ -52,24 +53,30 @@ class GenericSystem(System):
 
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
-        raise NotImplementedError  # TODO: Use SLURM?
+        return LocalScheduler  # TODO: Use SLURM
 
 
 # ==============================================
 # Set system parameters
 # ==============================================
 
+
 class SystemParams:
     """Simple data structure to describe an LC system."""
-    def __init__(self, cores_per_node, gpus_per_node, gpu_arch, numa_domains, scheduler):
+
+    def __init__(self, cores_per_node, gpus_per_node, gpu_arch, numa_domains,
+                 scheduler):
         self.cores_per_node = cores_per_node
         self.gpus_per_node = gpus_per_node
         self.scheduler = scheduler
         self.gpu_arch = gpu_arch
         self.numa_domains = numa_domains
 
-    def print_params():
-        print(f'c={self.cores_per_node} g={self.gpus_per_node} s={self.scheduler} arch={self.gpu_arch} numa={self.numa_domains}')
+    def print_params(self):
+        print(f'c={self.cores_per_node}', f'g={self.gpus_per_node}',
+              f's={self.scheduler}',
+              f'arch={self.gpu_arch} numa={self.numa_domains}')
+
 
 # Supported LC systems
 # _system_params = {
@@ -81,8 +88,6 @@ class SystemParams:
 #     'sierra':   SystemParams(44, 4, 'lsf'),
 #     'tioga':    SystemParams(64, 8, 'flux'),
 # }
-
-    
 
 # def is_lc_system(system = system()):
 #     """Whether current system is a supported LC system."""

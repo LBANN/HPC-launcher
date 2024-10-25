@@ -8,12 +8,16 @@ if TYPE_CHECKING:
 from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.systems import autodetect
 
+
 @dataclass
 class FluxScheduler(Scheduler):
-    def launch_command(self, blocking: bool = True) -> list[str]:
-        return 'flux run' if blocking else 'flux batch'
 
-    def launcher_script(self, system: 'System', command: str,
+    def launch_command(self, blocking: bool = True) -> list[str]:
+        return ['flux', 'run'] if blocking else ['flux', 'batch']
+
+    def launcher_script(self,
+                        system: 'System',
+                        command: str,
                         args: Optional[list[str]] = None) -> str:
         # String IO
 
@@ -29,7 +33,7 @@ class FluxScheduler(Scheduler):
         if self.err_log_file:
             script += f'#flux --error={self.err_log_file}\n'
 
-        for k,v in env_vars:
+        for k, v in env_vars:
             script += f'export {k}={v}\n'
 
         script += self.launch_command(True)
@@ -37,8 +41,8 @@ class FluxScheduler(Scheduler):
             script += f' {" ".join(self.launcher_flags)}'
 
         script += ' -u'  # Unbuffered
-        script += f' -N{self.nodes}' # --nodes
-        script += f' -n{self.nodes * self.procs_per_node}' # --ntasks
+        script += f' -N{self.nodes}'  # --nodes
+        script += f' -n{self.nodes * self.procs_per_node}'  # --ntasks
 
         if self.work_dir:
             script += f' --setattr=system.cwd={self.work_dir}'
@@ -48,7 +52,7 @@ class FluxScheduler(Scheduler):
         if self.ld_preloads:
             script += f' --env=LD_PRELOAD={",".join(self.ld_preloads)}'
 
-        for k,v in passthrough_env_vars:
+        for k, v in passthrough_env_vars:
             script += f' --env={k}={v}'
 
         if self.time_limit is not None:
@@ -66,3 +70,7 @@ class FluxScheduler(Scheduler):
             script += f' {arg}'
 
         return script
+
+    def get_job_id(self, output: str) -> Optional[str]:
+        # The job ID is the only printout when calling flux batch
+        return output.strip()

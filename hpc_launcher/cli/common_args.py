@@ -80,6 +80,29 @@ def setup_arguments(parser: argparse.ArgumentParser):
         default=None,
         help='Capture standard error to a log file. If not given, only prints '
         'out logs to the console')
+    group.add_argument(
+        '--color-stderr',
+        action='store_true',
+        default=False,
+        help='If True, uses terminal colors to color the standard error '
+        'outputs in red. This does not affect the output files')
+
+    group = parser.add_argument_group('Script',
+                                      'Batch scheduler script parameters')
+
+    group.add_argument(
+        '-o',
+        '--output-script',
+        default=None,
+        help='Output job setup script file. If not given, uses a temporary file'
+    )
+
+    group.add_argument(
+        '--setup-only',
+        action='store_true',
+        default=False,
+        help='If set, the launcher will only write the job setup script file, '
+        'without scheduling it.')
 
 
 def validate_arguments(args: argparse.Namespace):
@@ -110,3 +133,6 @@ def validate_arguments(args: argparse.Namespace):
             '--total_gpus, or constraints such as --gpumem-at-least')
     if args.local and args.bg:
         raise ValueError('"--local" jobs cannot be run in the background')
+    if args.setup_only and not args.output_script:
+        raise ValueError('Cannot use "--setup-only" without an output script '
+                         'file. Use -o to save the script to a file.')
