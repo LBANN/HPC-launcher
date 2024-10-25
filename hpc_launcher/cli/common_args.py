@@ -46,11 +46,10 @@ def setup_arguments(parser: argparse.ArgumentParser):
         default=None,
         help='Specifies the number of requested processes per node')
 
-    group.add_argument(
-        '-q',
-        '--queue',
-        default=None,
-        help='Specifies the queue to use')
+    group.add_argument('-q',
+                       '--queue',
+                       default=None,
+                       help='Specifies the queue to use')
 
     # Constraints
     group.add_argument(
@@ -141,10 +140,12 @@ def validate_arguments(args: argparse.Namespace):
     #              number of nodes/ranks
     # if (args.nodes and not args.procs_per_node) or (not args.nodes
     #                                                 and args.procs_per_node):
-    if (not args.nodes and not args.gpus_at_least) or (not args.nodes
-                                                    and not args.gpumem_at_least):
+    if (not args.nodes
+            and not args.gpus_at_least) or (not args.nodes
+                                            and not args.gpumem_at_least):
         raise ValueError(
-            'One of the following flags has to be set: --nodes, --gpus-at-least, or --gpumem-at-least')
+            'One of the following flags has to be set: --nodes, --gpus-at-least, or --gpumem-at-least'
+        )
     if args.gpus_at_least and args.procs_per_node:
         raise ValueError('The --gpus-at-least and --procs-per-node flags '
                          'are mutually exclusive')

@@ -167,7 +167,7 @@ class Scheduler:
                 return None
             else:
                 # Run batch script and get job ID
-                process = subprocess.run(cmd, capture_output=True)
+                process = subprocess.run(full_cmdline, capture_output=True)
                 return self.get_job_id(process.stdout)
         finally:
             if script_file is None:  # Erase temporary file

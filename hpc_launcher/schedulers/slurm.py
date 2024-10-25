@@ -111,7 +111,7 @@ class SlurmScheduler(Scheduler):
 
     def get_job_id(self, output: str) -> Optional[str]:
         # The job ID is the last number in the printout
-        last_line = output.split('\n')[-1].strip()
+        last_line = output.decode().strip().split('\n')[-1].strip()
         if last_line.startswith('Submitted batch job'):
             return last_line.split(' ')[-1]
         return None
