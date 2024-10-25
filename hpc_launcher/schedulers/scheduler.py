@@ -144,6 +144,7 @@ class Scheduler:
             file = tempfile.NamedTemporaryFile('w',
                                                prefix='launch-',
                                                suffix='.sh',
+                                               dir='.',
                                                delete=False)
             filename = file.name
 
