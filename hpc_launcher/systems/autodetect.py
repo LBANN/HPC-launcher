@@ -1,17 +1,18 @@
-import warnings
 from hpc_launcher.systems.system import System, GenericSystem
 from hpc_launcher.systems.lc.el_capitan_family import ElCapitan
-
-"""Default settings for LC systems."""
+import logging
 import socket
 import re
 
-# Detect system
-_system = re.sub(r'\d+', '', socket.gethostname())
+logger = logging.getLogger(__name__)
+
+# Detect system lazily
+_system = None
 
 # ==============================================
 # Access functions
 # ==============================================
+
 
 def system():
     """Name of system.
@@ -19,7 +20,11 @@ def system():
     Hostname with trailing digits removed.
 
     """
+    global _system
+    if _system is None:
+        _system = re.sub(r'\d+', '', socket.gethostname())
     return _system
+
 
 def autodetect_current_system() -> System:
     """
@@ -32,7 +37,6 @@ def autodetect_current_system() -> System:
         return ElCapitan()
 
     # TODO: Try to find current system
-    warnings.warn('Could not auto-detect current system, defaulting '
-                  'to generic system')
+    logger.warning('Could not auto-detect current system, defaulting '
+                   'to generic system')
     return GenericSystem()
-
