@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from hpc_launcher.schedulers.scheduler import Scheduler
 import warnings
 
@@ -5,16 +6,24 @@ import warnings
 # Set system parameters
 # ==============================================
 
+@dataclass
 class SystemParams:
     """Simple data structure to describe an LC system."""
-    def __init__(self, cores_per_node, gpus_per_node, gpu_arch, mem_per_gpu, cpus_per_node, numa_domains, scheduler):
-        self.cores_per_node = cores_per_node
-        self.gpus_per_node = gpus_per_node
-        self.gpu_arch = gpu_arch
-        self.mem_per_gpu = mem_per_gpu # GB
-        self.cpus_per_node = cpus_per_node
-        self.scheduler = scheduler
-        self.numa_domains = numa_domains
+
+    # Number of CPU cores per compute node
+    cores_per_node: int
+    # Number of GPUs per node
+    gpus_per_node: int
+    # Vendor specific GPU compiler architecture
+    gpu_arch: str
+    # Number of GB of memory per GPU
+    mem_per_gpu: int
+    # Physical number of CPUs per node
+    cpus_per_node: int
+    # String name of the Schedular class
+    scheduler: str
+    # Number of NUMA domains
+    numa_domains: int
 
     def print_params(self):
         print(f'c={self.cores_per_node} g={self.gpus_per_node} s={self.scheduler} arch={self.gpu_arch} numa={self.numa_domains}')

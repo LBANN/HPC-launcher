@@ -27,6 +27,12 @@ _system_params = {
     'tuolumne':  ('pbatch',  {'pbatch' : _mi300a_node,
                               'pdebug' : _mi300a_node,
                               }),
+    'elcapitan':  ('pbatch',  {'pbatch' : _mi300a_node,
+                              'pdebug' : _mi300a_node,
+                              }),
+    'rzadams':  ('pbatch',  {'pbatch' : _mi300a_node,
+                              'pdebug' : _mi300a_node,
+                              }),
 }
 
 class ElCapitan(System):

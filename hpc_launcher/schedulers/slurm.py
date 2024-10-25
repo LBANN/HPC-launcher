@@ -36,8 +36,6 @@ class SlurmScheduler(Scheduler):
 
     def launcher_script(self, system: 'System', command: str,
                         args: Optional[list[str]] = None) -> str:
-        # String IO
-
         env_vars = system.environment_variables()
         passthrough_env_vars = system.passthrough_environment_variables()
         # Enable the system to apply some customization to the scheduler instance
@@ -65,12 +63,9 @@ class SlurmScheduler(Scheduler):
         cmd_string += f' --ntasks-per-node={self.procs_per_node}'
         header_lines += f'#SBATCH --ntasks-per-node={self.procs_per_node}\n'
 
-        if self.work_dir:
-            cmd_string += f' --setattr=system.cwd={self.work_dir}'
-
         cmd_string += ' -o nosetpgrp'
 
-        if self.work_dir is not None:
+        if self.work_dir:
             cmd_string += f'--chdir={self.work_dir}'
             header_lines += f'#SBATCH --chdir={self.work_dir}\n'
 
@@ -80,7 +75,7 @@ class SlurmScheduler(Scheduler):
         for k,v in passthrough_env_vars:
             cmd_string += f' --env={k}={v}'
 
-        if self.time_limit is not None:
+        if self.time_limit:
             cmd_string += f' --time={self.time_limit}m'
             header_lines += f'#SBATCH --time={_time_string(self.time_limit)}\n'
 
