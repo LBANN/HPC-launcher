@@ -41,10 +41,10 @@ def main():
     if args.verbose:
         # Another option: format='%(levelname)-7s: %(message)s',
         logging.basicConfig(level=logging.INFO,
-                            format='hpc-launcher: %(message)s')
+                            format='\033[2mhpc-launcher\033[0m: %(message)s')
     else:
         logging.basicConfig(level=logging.WARNING,
-                            format='hpc-launcher: %(message)s')
+                            format='\033[2mhpc-launcher\033[0m: %(message)s')
 
     logger.info(f'Verbose: {args.verbose}')
 
@@ -79,7 +79,9 @@ def main():
         scheduler_class = system.preferred_scheduler
     logger.info(f'Using {scheduler_class.__name__}')
 
-    scheduler = scheduler_class(args.nodes, procs_per_node, partition=args.queue)
+    scheduler = scheduler_class(args.nodes,
+                                procs_per_node,
+                                partition=args.queue)
 
     if args.out:
         scheduler.out_log_file = f'{args.out}'
