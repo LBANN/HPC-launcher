@@ -14,6 +14,7 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 import os
+import sys
 import tempfile
 import subprocess
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
@@ -169,6 +170,12 @@ class Scheduler:
             else:
                 # Run batch script and get job ID
                 process = subprocess.run(full_cmdline, capture_output=True)
+                if process.returncode or process.stderr:
+                    logging.error(
+                        f'Batch scheduler exited with error code {process.returncode}'
+                    )
+                    sys.stderr.buffer.write(process.stderr)
+                    return None
                 return self.get_job_id(process.stdout.decode())
         finally:
             if script_file is None:  # Erase temporary file
