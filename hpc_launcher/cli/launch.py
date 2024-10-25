@@ -37,7 +37,6 @@ def main():
         help='Arguments to the command that should be executed')
 
     args = parser.parse_args()
-    common_args.validate_arguments(args)
 
     if args.verbose:
         # Another option: format='%(levelname)-7s: %(message)s',
@@ -56,7 +55,6 @@ def main():
     system_params = system.system_parameters(args.queue)
 
     # If the user requested a specific number of process per node, honor that
-    nodes = args.nodes
     procs_per_node = args.procs_per_node
 
     # Otherwise ...
@@ -64,13 +62,14 @@ def main():
     if system_params is not None:
         procs_per_node = system_params.procs_per_node()
         if args.gpus_at_least > 0:
-            nodes = ceildiv(args.gpus_at_least, procs_per_node)
+            args.nodes = ceildiv(args.gpus_at_least, procs_per_node)
         elif args.gpumem_at_least > 0:
             num_gpus = ceildiv(args.gpumem_at_least, system_params.mem_per_gpu)
-            nodes = ceildiv(num_gpus, procs_per_node)
-            if nodes == 1:
+            args.nodes = ceildiv(num_gpus, procs_per_node)
+            if args.nodes == 1:
                 procs_per_node = num_gpus
 
+    common_args.validate_arguments(args)
     # Pick batch scheduler
     if args.local:
         scheduler_class = LocalScheduler
@@ -80,7 +79,7 @@ def main():
         scheduler_class = system.preferred_scheduler
     logger.info(f'Using {scheduler_class.__name__}')
 
-    scheduler = scheduler_class(nodes, procs_per_node, partition=args.queue)
+    scheduler = scheduler_class(args.nodes, procs_per_node, partition=args.queue)
 
     if args.out:
         scheduler.out_log_file = f'{args.out}'
