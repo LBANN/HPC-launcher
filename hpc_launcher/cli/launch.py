@@ -1,6 +1,8 @@
 import argparse
 from hpc_launcher.cli import common_args
 from hpc_launcher.systems import autodetect
+from hpc_launcher.schedulers import get_schedulers
+from hpc_launcher.schedulers.local import LocalScheduler
 
 import logging
 
@@ -35,7 +37,14 @@ def main():
 
     system = autodetect.autodetect_current_system()
     logger.info(f'Detected system: {type(system).__name__}')
-    scheduler = system.preferred_scheduler(args.nodes, args.procs_per_node)
+    if args.local:
+        scheduler = LocalScheduler(args.nodes, args.procs_per_node)
+    if args.scheduler:
+        scheduler = get_schedulers()[args.scheduler](args.nodes,
+                                                     args.procs_per_node)
+    else:
+        scheduler = system.preferred_scheduler(args.nodes, args.procs_per_node)
+    logger.info(f'Using {type(scheduler).__name__}')
 
     if args.out:
         scheduler.out_log_file = f'{args.out}'

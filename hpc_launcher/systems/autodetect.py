@@ -26,7 +26,7 @@ def system():
     return _system
 
 
-def autodetect_current_system() -> System:
+def autodetect_current_system(quiet: bool = False) -> System:
     """
     Tries to detect the current system based on information such
     as the hostname and HPC center.
@@ -36,7 +36,10 @@ def autodetect_current_system() -> System:
     if sys == 'tioga':
         return ElCapitan()
 
-    # TODO: Try to find current system
-    logger.warning('Could not auto-detect current system, defaulting '
-                   'to generic system')
+    # TODO: Try to find current system via other means
+
+    if not quiet:
+        logger.warning('Could not auto-detect current system, defaulting '
+                       'to generic system')
+
     return GenericSystem()
