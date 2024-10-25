@@ -86,7 +86,7 @@ def run_process_without_files(command: list[str]) -> int:
     :param command: The command to run and its arguments.
     :return: The command's exit code.
     """
-    result = subprocess.run(command, shell=True)
+    result = subprocess.run(' '.join(command), shell=True)
     return result.returncode
 
 
