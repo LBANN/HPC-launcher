@@ -13,6 +13,7 @@
 # SPDX-License-Identifier: (Apache-2.0)
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
+from io import StringIO
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -21,63 +22,115 @@ if TYPE_CHECKING:
 from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.systems import autodetect
 
+def select_interactive_or_batch(tmp: str,
+                                header: StringIO(),
+                                cmd_args: list[str],
+                                blocking: bool = True) -> (str, list[str]):
+    if blocking:
+        cmd_args += [tmp]
+    else:
+        header.write(f'# FLUX: {tmp}\n')
+    return(header, cmd_args)
 
 @dataclass
 class FluxScheduler(Scheduler):
 
-    def launch_command(self, blocking: bool = True) -> list[str]:
-        return ['flux', 'run'] if blocking else ['flux', 'batch']
+    def build_command_string_and_batch_script(self,
+                                              system: 'System',
+                                              blocking: bool = True) -> (str, list[str]):
 
-    def launcher_script(self,
-                        system: 'System',
-                        command: str,
-                        args: Optional[list[str]] = None) -> str:
-        # String IO
-
-        system = autodetect.autodetect_current_system()
         env_vars = system.environment_variables()
         passthrough_env_vars = system.passthrough_environment_variables()
         # Enable the system to apply some customization to the scheduler instance
         system.customize_scheduler(self)
 
-        script = ''
+        header = StringIO()
+        header.write('#!/bin/sh\n')
+        cmd_args = []
         if self.out_log_file:
-            script += f'#flux --output={self.out_log_file}\n'
+            header += f'# FLUX: --output={self.out_log_file}\n'
         if self.err_log_file:
-            script += f'#flux --error={self.err_log_file}\n'
+            header += f'# FLUX: --error={self.err_log_file}\n'
 
-        for k, v in env_vars:
-            script += f'export {k}={v}\n'
+        # Unbuffered output
+        tmp = '-u'
+        (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
-        script += ' '.join(self.launch_command(True))
-        if self.launcher_flags:
-            script += f' {" ".join(self.launcher_flags)}'
+        # Number of Nodes
+        tmp = f'-N{self.nodes}'
+        (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
-        script += ' -u'  # Unbuffered
-        script += f' -N{self.nodes}'  # --nodes
-        script += f' -n{self.nodes * self.procs_per_node}'  # --ntasks
+        # Total number of Tasks / Processes
+        tmp = f'-n{self.nodes * self.procs_per_node}'
+        (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.work_dir:
-            script += f' --setattr=system.cwd={self.work_dir}'
+            tmp = f'--setattr=system.cwd={self.work_dir}'
+            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
-        script += ' -o nosetpgrp'
+        tmp = '-o nosetpgrp'
+        (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.ld_preloads:
-            script += f' --env=LD_PRELOAD={",".join(self.ld_preloads)}'
-
-        for k, v in passthrough_env_vars:
-            script += f' --env={k}={v}'
+            tmp = f'--env=LD_PRELOAD={",".join(self.ld_preloads)}'
+            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.time_limit is not None:
-            script += f' --time={self.time_limit}m'
-        if self.job_name:
-            script += f' --job-name={self.job_name}'
-        if self.partition:
-            script += f' --queue={self.partition}'
-        if self.account:
-            script += f' --account={self.account}'
+            tmp = f'--time={self.time_limit}m'
+            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
-        script += f' {command}'
+        if self.job_name:
+            tmp = f'--job-name={self.job_name}'
+            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        if self.partition:
+            tmp = f'--queue={self.partition}'
+            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        if self.account:
+            tmp = f'--account={self.account}'
+            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        if self.launcher_flags:
+            tmp = f'{" ".join(self.launcher_flags)}'
+            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        for k, v in env_vars:
+            header.write(f'export {k}={v}\n')
+
+        for k, v in passthrough_env_vars:
+            if not blocking:
+                cmd_args += [f' --env={k}={v}']
+            else:
+                header += f'export {k}={v}\n'
+
+        return (header.getvalue(), cmd_args)
+
+    def launch_command(self, system: 'System', blocking: bool = True) -> list[str]:
+        if not blocking:
+            return ['flux', 'batch']
+
+        # Launch command only use the cmd_args to construct the shell script to be launched
+        (header_lines, cmd_args) = self.build_command_string_and_batch_script(system, blocking)
+
+        return ['flux', 'run'] + cmd_args
+
+    def launcher_script(self,
+                        system: 'System',
+                        command: str,
+                        args: Optional[list[str]] = None,
+                        blocking: bool = True) -> str:
+
+        script = ''
+        # Launcher script only use the header_lines to construct the shell script to be launched
+        (header_lines, cmd_string) = self.build_command_string_and_batch_script(system, blocking)
+        script += header_lines
+        script += '\n'
+
+        if not blocking:
+            script += 'flux run '
+
+        script += f'{command}'
 
         for arg in args:
             script += f' {arg}'

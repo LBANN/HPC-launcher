@@ -60,7 +60,21 @@ class Scheduler:
     # Hijack preload commands into a scheduler
     ld_preloads: Optional[list[str]] = None
 
-    def launch_command(self, blocking: bool = True) -> list[str]:
+    def build_command_string_and_batch_script(self,
+                                              system: 'System') -> (str, list[str]):
+
+        """
+        Returns the strings used for a launch command as well as a batch script
+        full launcher script, which can be saved as a batch
+        script, for the given system and launcher configuration.
+        This script usually performs node/resource allocation and manages I/O.
+
+        :param system: The system to use.
+        :return: A shell script as a string.
+        """
+        return ('','')
+
+    def launch_command(self, system: 'System', blocking: bool = True) -> list[str]:
         """
         Returns the launch command for this scheduler. Returns the
         command prefix before the program to run.
@@ -149,16 +163,18 @@ class Scheduler:
                                                delete=False)
             filename = file.name
 
+        cmd = self.launch_command(system, blocking)
+        full_cmdline = cmd + [filename]
+
         logger.info(f'Script filename: {filename}')
         with file as fp:
-            fp.write(self.launcher_script(system, command, args))
+            fp.write(self.launcher_script(system, command, args, blocking))
+            fp.write(f'# Launch command: ' + ' '.join(full_cmdline))
         os.chmod(filename, 0o700)
 
         if setup_only:
             return ''
 
-        cmd = self.launch_command(blocking)
-        full_cmdline = cmd + [filename]
         logger.info(f'Launching {" ".join(full_cmdline)}')
 
         try:
