@@ -54,15 +54,18 @@ class FluxScheduler(Scheduler):
 
         # Unbuffered output
         tmp = '-u'
-        (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+        cmd_args += [tmp]
+        header.write(f'# FLUX: {tmp}\n')
 
         # Number of Nodes
         tmp = f'-N{self.nodes}'
-        (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+        cmd_args += [tmp]
+        header.write(f'# FLUX: {tmp}\n')
 
         # Total number of Tasks / Processes
         tmp = f'-n{self.nodes * self.procs_per_node}'
-        (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+        cmd_args += [tmp]
+        header.write(f'# FLUX: {tmp}\n')
 
         if self.work_dir:
             tmp = f'--setattr=system.cwd={self.work_dir}'
@@ -107,11 +110,11 @@ class FluxScheduler(Scheduler):
         return (header.getvalue(), cmd_args)
 
     def launch_command(self, system: 'System', blocking: bool = True) -> list[str]:
-        if not blocking:
-            return ['flux', 'batch']
-
         # Launch command only use the cmd_args to construct the shell script to be launched
         (header_lines, cmd_args) = self.build_command_string_and_batch_script(system, blocking)
+
+        if not blocking:
+            return ['flux', 'batch'] + cmd_args
 
         return ['flux', 'run'] + cmd_args
 
@@ -128,7 +131,10 @@ class FluxScheduler(Scheduler):
         script += '\n'
 
         if not blocking:
-            script += 'flux run '
+            # Use the --parent flag to run under the existing allocation
+            script += 'flux --parent run '
+            script += ' '.join(cmd_string)
+            script += ' '
 
         script += f'{command}'
 
