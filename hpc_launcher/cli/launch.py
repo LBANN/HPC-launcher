@@ -12,31 +12,46 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 import argparse
-import warnings
 from hpc_launcher.cli import common_args
 from hpc_launcher.systems import autodetect
+from hpc_launcher.schedulers import get_schedulers
+from hpc_launcher.schedulers.local import LocalScheduler
 from hpc_launcher.utils import ceildiv
 
-# launch -N 2 -n 4 -- python -u ../PyTorch/pt-distconv.git/main.py
+import logging
 
-# -> flux run -N 2 -n 4 python -u main.py --mlperf --use-batchnorm --input-width=512 --depth-groups=8 --train-data=$TRAIN_DIR
+logger = logging.getLogger(__name__)
+
 
 def main():
     parser = argparse.ArgumentParser(
-	description='Launches a distributed job on the current HPC cluster or cloud.')
+        description=
+        'Launches a distributed job on the current HPC cluster or cloud.')
     common_args.setup_arguments(parser)
 
     # Grab the rest of the command line to launch
-    parser.add_argument('command',
-			help='Command to be executed')
-    parser.add_argument('args', nargs=argparse.REMAINDER,
-			help='Arguments to the command that should be executed')
+    parser.add_argument('command', help='Command to be executed')
+    parser.add_argument(
+        'args',
+        nargs=argparse.REMAINDER,
+        help='Arguments to the command that should be executed')
 
     args = parser.parse_args()
 
-    print('Verbose:', args.verbose)
+    if args.verbose:
+        # Another option: format='%(levelname)-7s: %(message)s',
+        logging.basicConfig(level=logging.INFO,
+                            format='\033[2mhpc-launcher\033[0m: %(message)s')
+    else:
+        logging.basicConfig(level=logging.WARNING,
+                            format='\033[2mhpc-launcher\033[0m: %(message)s')
+
+    logger.info(f'Verbose: {args.verbose}')
+
     system = autodetect.autodetect_current_system()
-    print('Detected system:', system.system_name, f'[{type(system).__name__}-class]')
+    logger.info(
+        f'Detected system: {system.system_name} [{type(system).__name__}-class]'
+    )
     system_params = system.system_parameters(args.queue)
 
     # If the user requested a specific number of process per node, honor that
@@ -55,18 +70,35 @@ def main():
                 procs_per_node = num_gpus
 
     common_args.validate_arguments(args)
-    scheduler=system.preferred_scheduler(args.nodes, procs_per_node, partition=args.queue)
+    # Pick batch scheduler
+    if args.local:
+        scheduler_class = LocalScheduler
+    elif args.scheduler:
+        scheduler_class = get_schedulers()[args.scheduler]
+    else:
+        scheduler_class = system.preferred_scheduler
+    logger.info(f'Using {scheduler_class.__name__}')
+
+    scheduler = scheduler_class(args.nodes,
+                                procs_per_node,
+                                partition=args.queue)
 
     if args.out:
         scheduler.out_log_file = f'{args.out}'
     if args.err:
         scheduler.err_log_file = f'{args.err}'
 
-    print('Launch command:', scheduler.launch_command(False))
-    print(f'system parameters: node={scheduler.nodes} ppn={scheduler.procs_per_node}')
-    print('CMD:', args.command, args.args)
+    logger.info(
+        f'system parameters: node={scheduler.nodes} ppn={scheduler.procs_per_node}'
+    )
 
-    scheduler.launch(system, args.command, args.args)
+    jobid = scheduler.launch(system, args.command, args.args, not args.bg,
+                             args.output_script, args.setup_only,
+                             args.color_stderr)
+
+    if jobid:
+        logger.info(f'Job ID: {jobid}')
+
 
 if __name__ == '__main__':
     main()

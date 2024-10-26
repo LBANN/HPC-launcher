@@ -12,12 +12,15 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 from dataclasses import dataclass
+import logging
 from hpc_launcher.schedulers.scheduler import Scheduler
-import warnings
+
+logger = logging.getLogger(__name__)
 
 # ==============================================
 # Set system parameters
 # ==============================================
+
 
 @dataclass
 class SystemParams:
@@ -39,7 +42,9 @@ class SystemParams:
     numa_domains: int
 
     def print_params(self):
-        print(f'c={self.cores_per_node} g={self.gpus_per_node} s={self.scheduler} arch={self.gpu_arch} numa={self.numa_domains}')
+        logger.info(
+            f'c={self.cores_per_node} g={self.gpus_per_node} s={self.scheduler} arch={self.gpu_arch} numa={self.numa_domains}'
+        )
 
     def has_gpu(self):
         """Whether LC system has GPUs."""
@@ -54,35 +59,27 @@ class SystemParams:
             return self.numa_domains
 
 
-# Supported LC systems
-# _system_params = {
-#     'corona':   SystemParams(48, 8, 'flux'),
-#     'lassen':   SystemParams(44, 4, 'lsf'),
-#     'pascal':   SystemParams(36, 2, 'slurm'),
-#     'rzansel':  SystemParams(44, 4, 'lsf'),
-#     'rzvernal': SystemParams(64, 8, 'flux'),
-#     'sierra':   SystemParams(44, 4, 'lsf'),
-#     'tioga':    SystemParams(64, 8, 'flux'),
-# }
-
 class System:
     """
     Represents a system (specific supercomputer, HPC cluster, or
     cloud service provider) that can be used to launch distributed
     jobs.
     """
-    def __init__(self, system_name, known_systems = None):
+
+    def __init__(self, system_name, known_systems=None):
         self.system_name = system_name
         self.default_queue = None
         self.system_params = None
         self.known_systems = known_systems
         if self.known_systems:
             if system_name in self.known_systems.keys():
-                (self.default_queue, self.system_params) = self.known_systems[system_name]
+                (self.default_queue,
+                 self.system_params) = self.known_systems[system_name]
             else:
-                warnings.warn('Could not auto-detect current system parameters')
+                logger.warning(
+                    'Could not auto-detect current system parameters')
         else:
-            warnings.warn('No list of known systems')
+            logger.warning('No list of known systems')
 
     def environment_variables(self) -> list[tuple[str, str]]:
         """
@@ -108,20 +105,21 @@ class System:
         """
         return
 
-    def system_parameters(self, requested_queue = None) -> SystemParams:
+    def system_parameters(self, requested_queue=None) -> SystemParams:
         queue = self.default_queue
         if requested_queue:
             queue = requested_queue
         if self.system_params:
             if queue not in self.system_params:
-                warnings.warn(f'Unknown queue {queue} on system {self.system_name} using system parameters from default queue {self.default_queue}')
+                logger.warning(
+                    f'Unknown queue {queue} on system {self.system_name} using system parameters from default queue {self.default_queue}'
+                )
                 params = self.system_params[self.default_queue]
             else:
                 params = self.system_params[queue]
             return params
         else:
             return None
-
 
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
@@ -144,4 +142,6 @@ class GenericSystem(System):
 
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
-        raise NotImplementedError  # TODO: Use SLURM?
+        # SLURM is a relatively safe bet for a scheduler
+        from hpc_launcher.schedulers.slurm import SlurmScheduler
+        return SlurmScheduler

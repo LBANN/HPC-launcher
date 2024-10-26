@@ -32,8 +32,7 @@ async def replicate_output(input_stream,
             out2.write(line)
 
 
-async def _run_process(command: str,
-                       args: tuple[str],
+async def _run_process(command: list[str],
                        out_file: Optional[io.FileIO] = None,
                        err_file: Optional[io.FileIO] = None,
                        color_stderr: bool = False,
@@ -42,8 +41,7 @@ async def _run_process(command: str,
     Runs a process asynchronously and pipes its stdout and stderr to up to two
     streams.
 
-    :param command: The command to run.
-    :param args: The arguments to run.
+    :param command: The command to run and its arguments.
     :param out_file: An optional handle to a file to pipe ``stdout`` to. Note
                      that the file must be opened in binary mode.
     :param err_file: An optional handle to a file to pipe ``stderr`` to. Note
@@ -53,7 +51,8 @@ async def _run_process(command: str,
     :return: The command's exit code.
     """
     # Create the subprocess
-    process = await asyncio.create_subprocess_exec(command,
+    args = [] if len(command) == 1 else command[1:]
+    process = await asyncio.create_subprocess_exec(command[0],
                                                    *args,
                                                    stdout=subprocess.PIPE,
                                                    stderr=subprocess.PIPE)
@@ -79,21 +78,19 @@ async def _run_process(command: str,
     return rc
 
 
-def run_process_without_files(command: str, args: tuple[str]) -> int:
+def run_process_without_files(command: list[str]) -> int:
     """
     Runs a process "clasically" (i.e., without redirecting output and error
     streams).
 
-    :param command: The command to run.
-    :param args: The arguments to run.
+    :param command: The command to run and its arguments.
     :return: The command's exit code.
     """
-    result = subprocess.run([command] + list(args))
+    result = subprocess.run(' '.join(command), shell=True)
     return result.returncode
 
 
-def run_process_with_live_output(command: str,
-                                 args: tuple[str],
+def run_process_with_live_output(command: list[str],
                                  out_file: Optional[io.FileIO] = None,
                                  err_file: Optional[io.FileIO] = None,
                                  color_stderr: bool = False,
@@ -102,8 +99,7 @@ def run_process_with_live_output(command: str,
     Runs a process asynchronously and pipes its stdout and stderr to up to two
     streams.
 
-    :param command: The command to run.
-    :param args: The arguments to run.
+    :param command: The command to run and its arguments.
     :param out_file: An optional handle to a file to pipe ``stdout`` to. Note
                      that the file must be opened in binary mode.
     :param err_file: An optional handle to a file to pipe ``stderr`` to. Note
@@ -112,15 +108,15 @@ def run_process_with_live_output(command: str,
     :param buffer_size: Output buffer size in characters.
     :return: The command's exit code.
     """
+    if not command:
+        return 0
     if out_file is not None or err_file is not None or color_stderr:
         return asyncio.run(
-            _run_process(command, args, out_file, err_file, color_stderr,
+            _run_process(command, out_file, err_file, color_stderr,
                          buffer_size))
-    return run_process_without_files(command, args)
+    return run_process_without_files(command)
 
 
 if __name__ == '__main__':
-    code = run_process_with_live_output(sys.argv[1],
-                                        sys.argv[2:],
-                                        color_stderr=True)
+    code = run_process_with_live_output(sys.argv[1:], color_stderr=True)
     print('Process finished with exit code', code)

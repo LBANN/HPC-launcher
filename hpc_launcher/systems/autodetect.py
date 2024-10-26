@@ -11,21 +11,22 @@
 # https://github.com/LBANN and https://github.com/LLNL/LBANN.
 #
 # SPDX-License-Identifier: (Apache-2.0)
-import warnings
 from hpc_launcher.systems.system import System, GenericSystem
 from hpc_launcher.systems.lc.el_capitan_family import ElCapitan
 from hpc_launcher.systems.lc.cts2 import CTS2
-
-"""Default settings for LC systems."""
+import logging
 import socket
 import re
 
-# Detect system
-_system = re.sub(r'\d+', '', socket.gethostname())
+logger = logging.getLogger(__name__)
+
+# Detect system lazily
+_system = None
 
 # ==============================================
 # Access functions
 # ==============================================
+
 
 def system():
     """Name of system.
@@ -33,9 +34,13 @@ def system():
     Hostname with trailing digits removed.
 
     """
+    global _system
+    if _system is None:
+        _system = re.sub(r'\d+', '', socket.gethostname())
     return _system
 
-def autodetect_current_system() -> System:
+
+def autodetect_current_system(quiet: bool = False) -> System:
     """
     Tries to detect the current system based on information such
     as the hostname and HPC center.
@@ -48,7 +53,10 @@ def autodetect_current_system() -> System:
     if sys == 'ipa':
         return CTS2(sys)
 
-    # TODO: Try to find current system
-    warnings.warn('Could not auto-detect current system, defaulting '
-                  'to generic system')
-    return GenericSystem()
+    # TODO: Try to find current system via other means
+
+    if not quiet:
+        logger.warning('Could not auto-detect current system, defaulting '
+                       'to generic system')
+
+    return GenericSystem('generic')
