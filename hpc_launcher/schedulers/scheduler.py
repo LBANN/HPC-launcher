@@ -72,7 +72,7 @@ class Scheduler:
         :param system: The system to use.
         :return: A shell script as a string.
         """
-        return ('','')
+        return ('', [])
 
     def launch_command(self, system: 'System', blocking: bool = True) -> list[str]:
         """

@@ -23,7 +23,7 @@ from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.systems import autodetect
 
 def select_interactive_or_batch(tmp: str,
-                                header: StringIO(),
+                                header: StringIO,
                                 cmd_args: list[str],
                                 blocking: bool = True) -> (str, list[str]):
     if blocking:
