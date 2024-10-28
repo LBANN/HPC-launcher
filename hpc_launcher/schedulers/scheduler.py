@@ -70,7 +70,7 @@ class Scheduler:
         This script usually performs node/resource allocation and manages I/O.
 
         :param system: The system to use.
-        :return: A shell script as a string.
+        :return: A tuple of (shell script as a string, list of command-line arguments).
         """
         return ('', [])
 
