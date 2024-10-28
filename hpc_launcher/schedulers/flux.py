@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from hpc_launcher.systems import System
 
 from hpc_launcher.schedulers.scheduler import Scheduler
-from hpc_launcher.systems import autodetect
+#from hpc_launcher.systems import autodetect
 
 def select_interactive_or_batch(tmp: str,
                                 header: StringIO,
@@ -55,17 +55,20 @@ class FluxScheduler(Scheduler):
         # Unbuffered output
         tmp = '-u'
         cmd_args += [tmp]
-        header.write(f'# FLUX: {tmp}\n')
+        if not blocking:
+            header.write(f'# FLUX: {tmp}\n')
 
         # Number of Nodes
         tmp = f'-N{self.nodes}'
         cmd_args += [tmp]
-        header.write(f'# FLUX: {tmp}\n')
+        if not blocking:
+            header.write(f'# FLUX: {tmp}\n')
 
         # Total number of Tasks / Processes
         tmp = f'-n{self.nodes * self.procs_per_node}'
         cmd_args += [tmp]
-        header.write(f'# FLUX: {tmp}\n')
+        if not blocking:
+            header.write(f'# FLUX: {tmp}\n')
 
         if self.work_dir:
             tmp = f'--setattr=system.cwd={self.work_dir}'

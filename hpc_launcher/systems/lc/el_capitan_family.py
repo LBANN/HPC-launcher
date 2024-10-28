@@ -68,15 +68,21 @@ class ElCapitan(System):
         env_list.append(('OMP_PLACES', 'threads'))
         env_list.append(('OMP_PROC_BIND', 'spread'))
 
+        # Performance tuning for HPE Slingshot Cassini NIC
+        env_list.append(('FI_CXI_RDZV_PROTO', 'alt_read'))
+
         # add -fastload
 
         return env_list
 
     def customize_scheduler(self, Scheduler):
         use_this_rccl=os.getenv('LBANN_USE_THIS_RCCL')
-        Scheduler.launcher_flags = ['--exclusive']
+        Scheduler.launcher_flags = ['--exclusive',
+                                    # Performance tuning for HPE Slingshot Cassini NIC
+                                    '--setattr=rdzv_get_en=0']
         if use_this_rccl is not None:
             Scheduler.ld_preloads = [f'{use_this_rccl}']
+
         return
 
     @property
