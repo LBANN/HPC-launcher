@@ -30,7 +30,7 @@ def select_interactive_or_batch(tmp: str,
         cmd_args += [tmp]
     else:
         header.write(f'# FLUX: {tmp}\n')
-    return(header, cmd_args)
+    return
 
 @dataclass
 class FluxScheduler(Scheduler):
@@ -69,34 +69,34 @@ class FluxScheduler(Scheduler):
 
         if self.work_dir:
             tmp = f'--setattr=system.cwd={self.work_dir}'
-            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         tmp = '-o nosetpgrp'
-        (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+        select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.ld_preloads:
             tmp = f'--env=LD_PRELOAD={",".join(self.ld_preloads)}'
-            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.time_limit is not None:
             tmp = f'--time={self.time_limit}m'
-            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.job_name:
             tmp = f'--job-name={self.job_name}'
-            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.partition:
             tmp = f'--queue={self.partition}'
-            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:
             tmp = f'--account={self.account}'
-            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.launcher_flags:
             tmp = f'{" ".join(self.launcher_flags)}'
-            (header, cmd_args) = select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         for k, v in env_vars:
             header.write(f'export {k}={v}\n')
