@@ -33,7 +33,20 @@ def _time_string(minutes):
 @dataclass
 class SlurmScheduler(Scheduler):
 
-    def launch_command(self, blocking: bool = True) -> list[str]:
+    def build_command_string_and_batch_script(self,
+                                              system: 'System') -> (str, str):
+
+        env_vars = system.environment_variables()
+        passthrough_env_vars = system.passthrough_environment_variables()
+        # Enable the system to apply some customization to the scheduler instance
+        system.customize_scheduler(self)
+
+        header_lines = '#!/bin/sh\n'
+        cmd_string = ''
+
+        return (header_lines, cmd_string)
+
+    def launch_command(self, system: 'System', blocking: bool = True) -> list[str]:
         if not blocking:
             return ['sbatch']
 
