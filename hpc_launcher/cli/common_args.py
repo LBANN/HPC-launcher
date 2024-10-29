@@ -153,6 +153,12 @@ def setup_arguments(parser: argparse.ArgumentParser):
         help='Specify the account (or bank) to use fo the job'
     )
 
+    group.add_argument(
+        '--reservation',
+        default=None,
+        help='Add a reservation arguement to scheduler.  '
+        'Typically used for Dedecated Application Time runs (DATs)')
+
 
 def validate_arguments(args: argparse.Namespace):
     """

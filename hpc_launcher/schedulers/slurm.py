@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 
 from hpc_launcher.schedulers.scheduler import Scheduler
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 def _time_string(minutes):
     """Time D-hh:mm:ss format."""
@@ -111,6 +114,10 @@ class SlurmScheduler(Scheduler):
 
         if self.account:
             tmp = f'--account={self.account}'
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        if self.reservation:
+            tmp = f'--reservation={self.reservation}'
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.launcher_flags:

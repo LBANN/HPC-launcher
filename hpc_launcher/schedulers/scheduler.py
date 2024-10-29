@@ -55,6 +55,8 @@ class Scheduler:
     queue: Optional[str] = None
     # The account to use for the scheduler
     account: Optional[str] = None
+    # The reservation to use for the scheduler
+    reservation: Optional[str] = None
     # Additional launcher flags
     launcher_flags: Optional[str] = None
     # Hijack preload commands into a scheduler

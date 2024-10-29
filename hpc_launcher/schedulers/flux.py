@@ -20,7 +20,10 @@ if TYPE_CHECKING:
     from hpc_launcher.systems import System
 
 from hpc_launcher.schedulers.scheduler import Scheduler
-#from hpc_launcher.systems import autodetect
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 def select_interactive_or_batch(tmp: str,
                                 header: StringIO,
@@ -96,6 +99,9 @@ class FluxScheduler(Scheduler):
         if self.account:
             tmp = f'--account={self.account}'
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        if self.reservation:
+            logger.warning(f'WARNING: Unsupported option requested: --reservation={self.reservation}')
 
         if self.launcher_flags:
             tmp = f'{" ".join(self.launcher_flags)}'
