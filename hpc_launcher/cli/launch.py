@@ -82,8 +82,6 @@ def main():
     logger.info(f'Using {scheduler_class.__name__}')
 
     scheduler_args = common_args.create_scheduler_arguments(**vars(args))
-    for k in scheduler_args:
-        print(f'BVE found packed args {k}={scheduler_args[k]}')
     scheduler = scheduler_class(**scheduler_args)
 
     logger.info(
