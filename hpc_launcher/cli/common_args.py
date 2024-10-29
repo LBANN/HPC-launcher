@@ -129,6 +129,12 @@ def setup_arguments(parser: argparse.ArgumentParser):
         help='If set, the launcher will only write the job setup script file, '
         'without scheduling it.')
 
+    group.add_argument(
+        '--work-dir',
+        default=None,
+        help='Working directory used to run the command.  If not given run from the cwd'
+    )
+
 
 def validate_arguments(args: argparse.Namespace):
     """

@@ -81,7 +81,8 @@ def main():
 
     scheduler = scheduler_class(args.nodes,
                                 procs_per_node,
-                                partition=args.queue)
+                                partition=args.queue,
+                                work_dir=args.work_dir) #BVE add all of the other flags
 
     if args.out:
         scheduler.out_log_file = f'{args.out}'
