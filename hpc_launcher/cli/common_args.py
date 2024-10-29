@@ -195,6 +195,3 @@ def validate_arguments(args: argparse.Namespace):
     if args.local and args.scheduler:
         raise ValueError('The --local and --scheduler flags are mutually '
                          'exclusive')
-    if args.setup_only and not args.output_script:
-        raise ValueError('Cannot use "--setup-only" without an output script '
-                         'file. Use -o to save the script to a file.')

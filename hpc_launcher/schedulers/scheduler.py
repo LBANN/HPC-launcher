@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Optional
 import os
 import sys
 import tempfile
+import time
 import subprocess
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
 
@@ -149,21 +150,25 @@ class Scheduler:
         :param color_stderr: If True, colors stderr terminal outputs in red.
         :return: The queued job ID as a string.
         """
+        # Create a folder for the output and error logs
+        # Timestamp is of the format YYYY-MM-DD-HH-MM-SS
+        folder_name = f'launch-{self.job_name or command}-{time.strftime("%Y-%m-%d-%H-%M-%S")}'
+        os.makedirs(folder_name, exist_ok=True)
+
         # Create a temporary file or a script file, if given
         if script_file is not None:
             if os.path.dirname(script_file):
                 os.makedirs(os.path.dirname(script_file), exist_ok=True)
 
-            # TODO: Should we warn if this file exists or fail without "-f"?
+            # Warn if this file exists
+            if os.path.exists(script_file):
+                logger.warning(f'Overwriting existing file {script_file}')
+
             file = open(script_file, 'w')
             filename = os.path.abspath(script_file)
         else:
-            file = tempfile.NamedTemporaryFile('w',
-                                               prefix='launch-',
-                                               suffix='.sh',
-                                               dir='.',
-                                               delete=False)
-            filename = file.name
+            file = open(os.path.join(folder_name, 'launch.sh'), 'w')
+            filename = os.path.abspath(os.path.join(folder_name, 'launch.sh'))
 
         cmd = self.launch_command(system, blocking)
         full_cmdline = cmd + [filename]
@@ -171,31 +176,31 @@ class Scheduler:
         logger.info(f'Script filename: {filename}')
         with file as fp:
             fp.write(self.launcher_script(system, command, args, blocking))
-            fp.write(f'# Launch command: ' + ' '.join(full_cmdline))
+            fp.write(f'\n# Launch command: ' + ' '.join(full_cmdline) + '\n')
         os.chmod(filename, 0o700)
 
         if setup_only:
-            logger.warning(f'To launch: {" ".join(full_cmdline)}')
+            logger.warning(f'To launch, run: {" ".join(full_cmdline)}')
             return ''
 
         logger.info(f'Launching {" ".join(full_cmdline)}')
 
-        try:
-            if blocking:  # Launch job and trace outputs live
-                run_process_with_live_output(full_cmdline,
-                                             color_stderr=color_stderr)
-                # In this mode, there is no job ID
+        if blocking:  # Launch job and trace outputs live
+            with open(os.path.join(folder_name, 'out.log'), 'wb') as out_file:
+                with open(os.path.join(folder_name, 'err.log'), 'wb') as err_file:
+                    run_process_with_live_output(full_cmdline,
+                                                out_file=out_file,
+                                                err_file=err_file,
+                                                color_stderr=color_stderr)
+            # In this mode, there is no job ID
+            return None
+        else:
+            # Run batch script and get job ID
+            process = subprocess.run(full_cmdline, capture_output=True)
+            if process.returncode or process.stderr:
+                logging.error(
+                    f'Batch scheduler exited with error code {process.returncode}'
+                )
+                sys.stderr.buffer.write(process.stderr)
                 return None
-            else:
-                # Run batch script and get job ID
-                process = subprocess.run(full_cmdline, capture_output=True)
-                if process.returncode or process.stderr:
-                    logging.error(
-                        f'Batch scheduler exited with error code {process.returncode}'
-                    )
-                    sys.stderr.buffer.write(process.stderr)
-                    return None
-                return self.get_job_id(process.stdout.decode())
-        finally:
-            if script_file is None:  # Erase temporary file
-                os.unlink(filename)
+            return self.get_job_id(process.stdout.decode())

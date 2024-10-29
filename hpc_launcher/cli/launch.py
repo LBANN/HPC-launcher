@@ -46,7 +46,7 @@ def main():
         logging.basicConfig(level=logging.WARNING,
                             format='\033[2mhpc-launcher\033[0m: %(message)s')
 
-    logger.info(f'Verbose: {args.verbose}')
+    logger.info(f'Verbose mode enabled')
 
     system = autodetect.autodetect_current_system()
     logger.info(
