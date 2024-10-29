@@ -13,6 +13,7 @@
 # SPDX-License-Identifier: (Apache-2.0)
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
+from io import StringIO
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -30,120 +31,132 @@ def _time_string(minutes):
     return f'{days}-{hours:02}:{minutes:02}:{seconds:02}'
 
 
+def select_interactive_or_batch(tmp: str,
+                                header: StringIO,
+                                cmd_args: list[str],
+                                blocking: bool = True) -> (str, list[str]):
+    if blocking:
+        cmd_args += [tmp]
+    else:
+        header.write(f'#SBATCH {tmp}\n')
+    return
+
 @dataclass
 class SlurmScheduler(Scheduler):
 
     def build_command_string_and_batch_script(self,
-                                              system: 'System') -> (str, str):
+                                              system: 'System',
+                                              blocking: bool = True) -> (str, list[str]):
 
         env_vars = system.environment_variables()
         passthrough_env_vars = system.passthrough_environment_variables()
         # Enable the system to apply some customization to the scheduler instance
         system.customize_scheduler(self)
 
-        header_lines = '#!/bin/sh\n'
-        cmd_string = ''
+        header = StringIO()
+        header.write('#!/bin/sh\n')
+        cmd_args = []
 
-        return (header_lines, cmd_string)
+        cmd_args = []
+        if self.out_log_file:
+            header += f'#SBATCH --output={self.out_log_file}\n'
+        if self.err_log_file:
+            header += f'#SBATCH --error={self.err_log_file}\n'
+
+        # Unbuffered output - Only pass to srun
+        if blocking:
+            tmp = '-u'
+            cmd_args += [tmp]
+
+        # Number of Nodes
+        tmp = f'--nodes={self.nodes}'
+        cmd_args += [tmp]
+        if not blocking:
+            header.write(f'#SBATCH {tmp}\n')
+
+        # Total number of Tasks / Processes
+        tmp = f'--ntasks={self.nodes * self.procs_per_node}'
+        cmd_args += [tmp]
+        if not blocking:
+            header.write(f'#SBATCH {tmp}\n')
+
+        # Number of Tasks per node
+        tmp = f'--ntasks-per-node={self.nodes * self.procs_per_node}'
+        cmd_args += [tmp]
+        if not blocking:
+            header.write(f'#SBATCH {tmp}\n')
+
+        if self.work_dir:
+            tmp = f'--chdir={self.work_dir}'
+            if not blocking:
+                header.write(f'#SBATCH {tmp}\n')
+            # It seems that --chdir on interactive launch fails
+            # select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        if self.ld_preloads:
+            tmp = f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}'
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        if self.time_limit is not None:
+            tmp = f'--time={_time_string(self.time_limit)}'
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        if self.job_name:
+            tmp = f'--job-name={self.job_name}'
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        if self.partition:
+            tmp = f'--partition={self.partition}'
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        if self.account:
+            tmp = f'--account={self.account}'
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        if self.launcher_flags:
+            tmp = f'{" ".join(self.launcher_flags)}'
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+
+        for k, v in env_vars:
+            header.write(f'export {k}={v}\n')
+
+        for k, v in passthrough_env_vars:
+            if not blocking:
+                cmd_args += [f' --env={k}={v}']
+            else:
+                header += f'export {k}={v}\n'
+
+        if self.work_dir and blocking:
+            header.write(f'cd {self.work_dir}\n')
+
+        return (header.getvalue(), cmd_args)
 
     def launch_command(self, system: 'System', blocking: bool = True) -> list[str]:
+        # Launch command only use the cmd_args to construct the shell script to be launched
+        (header_lines, cmd_args) = self.build_command_string_and_batch_script(system, blocking)
+
         if not blocking:
-            return ['sbatch']
+            return ['sbatch'] + cmd_args
 
-        cmd_string = ['srun']
-        if self.launcher_flags:
-            cmd_string.extend(self.launcher_flags)
-        cmd_string += ['-u']  # Unbuffered
-        cmd_string += [f'--nodes={self.nodes}']
-        cmd_string += [f'--ntasks={self.nodes * self.procs_per_node}']
-        cmd_string += [f'--ntasks-per-node={self.procs_per_node}']
-        if self.ld_preloads:
-            cmd_string += [
-                f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}'
-            ]
-        if self.time_limit:
-            cmd_string += [f'--time={self.time_limit}m']
-        if self.job_name:
-            cmd_string += [f'--job-name={self.job_name}']
-        if self.partition:
-            cmd_string += [f'--partition={self.partition}']
-        if self.account:
-            cmd_string += [f'--account={self.account}']
-
-        return cmd_string
+        return ['srun'] + cmd_args
 
     def launcher_script(self,
                         system: 'System',
                         command: str,
                         args: Optional[list[str]] = None,
                         blocking: bool = True) -> str:
-        env_vars = system.environment_variables()
-        passthrough_env_vars = system.passthrough_environment_variables()
-        # Enable the system to apply some customization to the scheduler instance
-        system.customize_scheduler(self)
 
         script = ''
-        header_lines = '#!/bin/sh\n'
-        cmd_string = ''
-        if self.out_log_file:
-            header_lines += f'#SBATCH --output={self.out_log_file}\n'
-        if self.err_log_file:
-            header_lines += f'#SBATCH --error={self.err_log_file}\n'
-
-        if self.launcher_flags:
-            cmd_string += f' {" ".join(self.launcher_flags)}'
-
-        cmd_string += ' -u'  # Unbuffered
-
-        cmd_string += f' --nodes={self.nodes}'
-        header_lines += f'#SBATCH --nodes={self.nodes}\n'
-
-        cmd_string += f' --ntasks={self.nodes * self.procs_per_node}'
-        header_lines += f'#SBATCH --ntasks={self.nodes * self.procs_per_node}\n'
-
-        cmd_string += f' --ntasks-per-node={self.procs_per_node}'
-        header_lines += f'#SBATCH --ntasks-per-node={self.procs_per_node}\n'
-
-        #cmd_string += ' -o nosetpgrp'
-
-        if self.work_dir:
-            if not blocking:
-                cmd_string += f'--chdir={self.work_dir}'
-            else:
-                header_lines += f'cd {self.work_dir}\n'
-            header_lines += f'#SBATCH --chdir={self.work_dir}\n'
-
-        if self.ld_preloads:
-            cmd_string += f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}'
-
-        for k, v in passthrough_env_vars:
-            if not blocking:
-                cmd_string += f' --env={k}={v}'
-            else:
-                header_lines += f'export {k}={v}\n'
-
-        if self.time_limit:
-            cmd_string += f' --time={self.time_limit}m'
-            header_lines += f'#SBATCH --time={_time_string(self.time_limit)}\n'
-
-        if self.job_name:
-            cmd_string += f' --job-name={self.job_name}'
-            header_lines += f'#SBATCH --job-name={self.job_name}\n'
-        if self.partition:
-            cmd_string += f' --partition={self.partition}'
-            header_lines += f'#SBATCH --partition={self.partition}\n'
-        if self.account:
-            cmd_string += f' --account={self.account}'
-            header_lines += f'#SBATCH --account={self.account}\n'
+        # Launch command only use the cmd_args to construct the shell script to be launched
+        (header_lines, cmd_args) = self.build_command_string_and_batch_script(system, blocking)
 
         # Configure header and command line with Slurm job options
         script += header_lines
-        for k, v in env_vars:
-            script += f'export {k}={v}\n'
+        script += '\n'
 
         if not blocking:
-            script += ' '.join(self.launch_command(True))
-            script += cmd_string
+            script += 'srun -u '
+            script += ' '.join(cmd_args)
             script += ' '
 
         script += f'{command}'
