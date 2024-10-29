@@ -70,6 +70,8 @@ def main():
                 procs_per_node = num_gpus
 
     common_args.validate_arguments(args)
+    # Once the validation is complete set the args.procs_per_node for downstream use
+    args.procs_per_node = procs_per_node
     # Pick batch scheduler
     if args.local:
         scheduler_class = LocalScheduler
@@ -79,15 +81,10 @@ def main():
         scheduler_class = system.preferred_scheduler
     logger.info(f'Using {scheduler_class.__name__}')
 
-    scheduler = scheduler_class(args.nodes,
-                                procs_per_node,
-                                partition=args.queue,
-                                work_dir=args.work_dir) #BVE add all of the other flags
-
-    if args.out:
-        scheduler.out_log_file = f'{args.out}'
-    if args.err:
-        scheduler.err_log_file = f'{args.err}'
+    scheduler_args = common_args.create_scheduler_arguments(**vars(args))
+    for k in scheduler_args:
+        print(f'BVE found packed args {k}={scheduler_args[k]}')
+    scheduler = scheduler_class(**scheduler_args)
 
     logger.info(
         f'system parameters: node={scheduler.nodes} ppn={scheduler.procs_per_node}'

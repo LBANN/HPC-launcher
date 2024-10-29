@@ -89,8 +89,8 @@ class FluxScheduler(Scheduler):
             tmp = f'--job-name={self.job_name}'
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
-        if self.partition:
-            tmp = f'--queue={self.partition}'
+        if self.queue:
+            tmp = f'--queue={self.queue}'
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:

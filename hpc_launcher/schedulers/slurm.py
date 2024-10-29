@@ -59,9 +59,9 @@ class SlurmScheduler(Scheduler):
 
         cmd_args = []
         if self.out_log_file:
-            header += f'#SBATCH --output={self.out_log_file}\n'
+            header.write(f'#SBATCH --output={self.out_log_file}\n')
         if self.err_log_file:
-            header += f'#SBATCH --error={self.err_log_file}\n'
+            header.write(f'#SBATCH --error={self.err_log_file}\n')
 
         # Unbuffered output - Only pass to srun
         if blocking:
@@ -105,8 +105,8 @@ class SlurmScheduler(Scheduler):
             tmp = f'--job-name={self.job_name}'
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
-        if self.partition:
-            tmp = f'--partition={self.partition}'
+        if self.queue:
+            tmp = f'--partition={self.queue}'
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:

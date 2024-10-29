@@ -52,7 +52,7 @@ class Scheduler:
     # Time limit (in minutes), default is no limit
     time_limit: Optional[int] = None
     # The partition or queue to use with the scheduler
-    partition: Optional[str] = None
+    queue: Optional[str] = None
     # The account to use for the scheduler
     account: Optional[str] = None
     # Additional launcher flags
