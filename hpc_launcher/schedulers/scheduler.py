@@ -173,6 +173,7 @@ class Scheduler:
         os.chmod(filename, 0o700)
 
         if setup_only:
+            logger.warning(f'To launch: {" ".join(full_cmdline)}')
             return ''
 
         logger.info(f'Launching {" ".join(full_cmdline)}')
