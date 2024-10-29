@@ -16,7 +16,18 @@ Common arguments for CLI utilities.
 """
 import argparse
 from hpc_launcher.schedulers import get_schedulers
+from hpc_launcher.schedulers.scheduler import Scheduler
 
+from dataclasses import fields
+
+def create_scheduler_arguments(**kwargs) -> dict[str,str]:
+    cmdline_args = {}
+    for field in fields(Scheduler):
+        if field.name in kwargs:
+            if kwargs[field.name] is not None:
+                cmdline_args[field.name] = kwargs[field.name]
+
+    return cmdline_args
 
 def setup_arguments(parser: argparse.ArgumentParser):
     """
@@ -98,11 +109,13 @@ def setup_arguments(parser: argparse.ArgumentParser):
     group.add_argument(
         '--out',
         default=None,
+        dest='out_log_file',
         help='Capture standard output to a log file. If not given, only prints '
         'out logs to the console')
     group.add_argument(
         '--err',
         default=None,
+        dest='err_log_file',
         help='Capture standard error to a log file. If not given, only prints '
         'out logs to the console')
     group.add_argument(
@@ -134,6 +147,17 @@ def setup_arguments(parser: argparse.ArgumentParser):
         default=None,
         help='Working directory used to run the command.  If not given run from the cwd'
     )
+    group.add_argument(
+        '--account',
+        default=None,
+        help='Specify the account (or bank) to use fo the job'
+    )
+
+    group.add_argument(
+        '--reservation',
+        default=None,
+        help='Add a reservation arguement to scheduler.  '
+        'Typically used for Dedecated Application Time runs (DATs)')
 
 
 def validate_arguments(args: argparse.Namespace):
