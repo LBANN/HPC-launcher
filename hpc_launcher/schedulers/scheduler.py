@@ -151,8 +151,8 @@ class Scheduler:
         :return: The queued job ID as a string.
         """
         # Create a folder for the output and error logs
-        # Timestamp is of the format YYYY-MM-DD-HH-MM-SS
-        folder_name = f'launch-{self.job_name or command}-{time.strftime("%Y-%m-%d-%H-%M-%S")}'
+        # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
+        folder_name = f'launch-{self.job_name or command}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
         os.makedirs(folder_name, exist_ok=True)
 
         # Create a temporary file or a script file, if given
