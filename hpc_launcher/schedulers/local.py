@@ -2,6 +2,7 @@ from hpc_launcher.schedulers.scheduler import Scheduler
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
+import os
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,13 +19,14 @@ class LocalScheduler(Scheduler):
     in ``--local`` jobs.
     """
 
-    def launch_command(self, blocking: bool = True) -> list[str]:
+    def launch_command(self, system: 'System', blocking: bool = True) -> list[str]:
         return []
 
     def launcher_script(self,
                         system: 'System',
                         command: str,
-                        args: Optional[list[str]] = None) -> str:
+                        args: Optional[list[str]] = None,
+                        blocking: bool = True) -> str:
         envvars = [
             f'export {k}={v}' for k, v in system.environment_variables()
         ]
@@ -32,10 +34,14 @@ class LocalScheduler(Scheduler):
             f'export {k}={v}'
             for k, v in system.passthrough_environment_variables()
         ]
-        envvars = '\n'.join(envvars)
+        header = '\n'.join(envvars)
+
+        if self.work_dir:
+            header += f'\ncd {os.path.abspath(self.work_dir)}\n'
+
         return f'''#!/bin/sh
 # Setup
-{envvars}
+{header}
 
 # Run
 {command} {" ".join(args)}

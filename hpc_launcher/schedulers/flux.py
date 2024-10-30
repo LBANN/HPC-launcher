@@ -14,6 +14,7 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
+import os
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -50,9 +51,9 @@ class FluxScheduler(Scheduler):
         header = StringIO()
         header.write('#!/bin/sh\n')
         cmd_args = []
-        if self.out_log_file:
+        if self.out_log_file and not blocking:
             header += f'# FLUX: --output={self.out_log_file}\n'
-        if self.err_log_file:
+        if self.err_log_file and not blocking:
             header += f'# FLUX: --error={self.err_log_file}\n'
 
         # Unbuffered output
@@ -74,7 +75,7 @@ class FluxScheduler(Scheduler):
             header.write(f'# FLUX: {tmp}\n')
 
         if self.work_dir:
-            tmp = f'--setattr=system.cwd={self.work_dir}'
+            tmp = f'--setattr=system.cwd={os.path.abspath(self.work_dir)}'
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         tmp = '-o nosetpgrp'
