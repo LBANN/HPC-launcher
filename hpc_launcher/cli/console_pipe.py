@@ -28,8 +28,10 @@ async def replicate_output(input_stream,
         if not line:  # EOF
             break
         out1.write(prefix + line + suffix)
+        out1.flush()
         if out2 is not None:
             out2.write(line)
+            out2.flush()
 
 
 async def _run_process(command: list[str],

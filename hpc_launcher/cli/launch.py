@@ -90,7 +90,7 @@ def main():
 
     jobid = scheduler.launch(system, args.command, args.args, not args.bg,
                              args.output_script, args.setup_only,
-                             args.color_stderr)
+                             args.color_stderr, args.run_from_dir)
 
     if jobid:
         logger.info(f'Job ID: {jobid}')
