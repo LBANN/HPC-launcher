@@ -153,7 +153,8 @@ class Scheduler:
         :param run_from_dir: If True, runs the command from the launch directory.
         :return: The queued job ID as a string.
         """
-        command_as_folder_name = os.path.basename(command).replace(' ', '_')
+        # Remove spaces and semi-colons from the command sequence
+        command_as_folder_name = os.path.basename(command).replace(' ', '_').replace(';','-')
         # Create a folder for the output and error logs
         # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
         folder_name = f'launch-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
@@ -190,6 +191,9 @@ class Scheduler:
         if run_from_dir:
             if os.path.isfile(command):
                 command = os.path.abspath(command)
+            # Change the working directory to the launch folder
+            if not self.work_dir:
+                self.work_dir = os.path.abspath(folder_name)
             # There is no need to use the following at the moment:
             # elif shutil.which(command):
             #     command = os.path.abspath(shutil.which(command))
@@ -213,9 +217,6 @@ class Scheduler:
             with open(os.path.join(folder_name, 'out.log'), 'wb') as out_file:
                 with open(os.path.join(folder_name, 'err.log'),
                           'wb') as err_file:
-                    if run_from_dir:
-                        # Change the working directory to the launch folder
-                        os.chdir(folder_name)
 
                     run_process_with_live_output(full_cmdline,
                                                  out_file=out_file,
@@ -224,10 +225,6 @@ class Scheduler:
             # In this mode, there is no job ID
             return None
         else:
-            if run_from_dir and should_make_folder:
-                # Change the working directory to the launch folder
-                os.chdir(folder_name)
-
             # Run batch script and get job ID
             process = subprocess.run(full_cmdline, capture_output=True)
             if process.returncode or process.stderr:

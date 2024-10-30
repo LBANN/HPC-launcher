@@ -203,3 +203,6 @@ def validate_arguments(args: argparse.Namespace):
     if args.local and args.scheduler:
         raise ValueError('The --local and --scheduler flags are mutually '
                          'exclusive')
+    if args.work_dir and args.run_from_dir:
+        raise ValueError('The --work-dir and --run-from-dir flags are mutually '
+                         'exclusive')
