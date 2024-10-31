@@ -14,6 +14,7 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
+import os
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -61,9 +62,9 @@ class SlurmScheduler(Scheduler):
         cmd_args = []
 
         cmd_args = []
-        if self.out_log_file:
+        if self.out_log_file and not blocking:
             header.write(f'#SBATCH --output={self.out_log_file}\n')
-        if self.err_log_file:
+        if self.err_log_file and not blocking:
             header.write(f'#SBATCH --error={self.err_log_file}\n')
 
         # Unbuffered output - Only pass to srun
@@ -90,11 +91,8 @@ class SlurmScheduler(Scheduler):
             header.write(f'#SBATCH {tmp}\n')
 
         if self.work_dir:
-            tmp = f'--chdir={self.work_dir}'
-            if not blocking:
-                header.write(f'#SBATCH {tmp}\n')
-            # It seems that --chdir on interactive launch fails
-            # select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            tmp = f'--chdir={os.path.abspath(self.work_dir)}'
+            select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.ld_preloads:
             tmp = f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}'
@@ -132,9 +130,6 @@ class SlurmScheduler(Scheduler):
                 cmd_args += [f' --env={k}={v}']
             else:
                 header += f'export {k}={v}\n'
-
-        if self.work_dir and blocking:
-            header.write(f'cd {self.work_dir}\n')
 
         return (header.getvalue(), cmd_args)
 

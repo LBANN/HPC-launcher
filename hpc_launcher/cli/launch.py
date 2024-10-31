@@ -46,7 +46,7 @@ def main():
         logging.basicConfig(level=logging.WARNING,
                             format='\033[2mhpc-launcher\033[0m: %(message)s')
 
-    logger.info(f'Verbose: {args.verbose}')
+    logger.info(f'Verbose mode enabled')
 
     system = autodetect.autodetect_current_system()
     logger.info(
@@ -90,7 +90,7 @@ def main():
 
     jobid = scheduler.launch(system, args.command, args.args, not args.bg,
                              args.output_script, args.setup_only,
-                             args.color_stderr)
+                             args.color_stderr, args.run_from_dir)
 
     if jobid:
         logger.info(f'Job ID: {jobid}')

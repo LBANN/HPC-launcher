@@ -15,7 +15,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 import os
 import sys
-import tempfile
+import shutil
+import time
 import subprocess
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
 
@@ -62,9 +63,8 @@ class Scheduler:
     # Hijack preload commands into a scheduler
     ld_preloads: Optional[list[str]] = None
 
-    def build_command_string_and_batch_script(self,
-                                              system: 'System') -> (str, list[str]):
-
+    def build_command_string_and_batch_script(
+            self, system: 'System') -> (str, list[str]):
         """
         Returns the strings used for a launch command as well as a batch script
         full launcher script, which can be saved as a batch
@@ -76,7 +76,9 @@ class Scheduler:
         """
         return ('', [])
 
-    def launch_command(self, system: 'System', blocking: bool = True) -> list[str]:
+    def launch_command(self,
+                       system: 'System',
+                       blocking: bool = True) -> list[str]:
         """
         Returns the launch command for this scheduler. Returns the
         command prefix before the program to run.
@@ -134,7 +136,8 @@ class Scheduler:
                blocking: bool = True,
                script_file: Optional[str] = None,
                setup_only: bool = False,
-               color_stderr: bool = False) -> str:
+               color_stderr: bool = False,
+               run_from_dir: bool = False) -> str:
         """
         Launches the given command and arguments uaing this launcher.
 
@@ -147,55 +150,87 @@ class Scheduler:
         :param verbose: If True, prints more information about the job details.
         :param setup_only: If True, only sets up the job and does not launch it.
         :param color_stderr: If True, colors stderr terminal outputs in red.
+        :param run_from_dir: If True, runs the command from the launch directory.
         :return: The queued job ID as a string.
         """
+        # Remove spaces and semi-colons from the command sequence
+        command_as_folder_name = os.path.basename(command).replace(' ', '_').replace(';','-')
+        # Create a folder for the output and error logs
+        # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
+        folder_name = f'launch-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
+        should_make_folder = blocking or run_from_dir
+
         # Create a temporary file or a script file, if given
         if script_file is not None:
             if os.path.dirname(script_file):
                 os.makedirs(os.path.dirname(script_file), exist_ok=True)
 
-            # TODO: Should we warn if this file exists or fail without "-f"?
-            file = open(script_file, 'w')
+            # Warn if this file exists
+            if os.path.exists(script_file):
+                logger.warning(f'Overwriting existing file {script_file}')
+
             filename = os.path.abspath(script_file)
         else:
-            file = tempfile.NamedTemporaryFile('w',
-                                               prefix='launch-',
-                                               suffix='.sh',
-                                               dir='.',
-                                               delete=False)
-            filename = file.name
+            should_make_folder = True
+            filename = os.path.abspath(os.path.join(folder_name, 'launch.sh'))
+
+        if self.out_log_file is None:
+            self.out_log_file = os.path.abspath(
+                os.path.join(folder_name, 'out.log'))
+            should_make_folder = True
+        if self.err_log_file is None:
+            self.err_log_file = os.path.abspath(
+                os.path.join(folder_name, 'err.log'))
+            should_make_folder = True
+
+        if should_make_folder:
+            os.makedirs(folder_name, exist_ok=True)
+
+        # If the command is run from a directory, and the command exists as a
+        # file, use its absolute path
+        if run_from_dir:
+            if os.path.isfile(command):
+                command = os.path.abspath(command)
+            # Change the working directory to the launch folder
+            if not self.work_dir:
+                self.work_dir = os.path.abspath(folder_name)
+            # There is no need to use the following at the moment:
+            # elif shutil.which(command):
+            #     command = os.path.abspath(shutil.which(command))
 
         cmd = self.launch_command(system, blocking)
         full_cmdline = cmd + [filename]
 
         logger.info(f'Script filename: {filename}')
-        with file as fp:
+        with open(filename, 'w') as fp:
             fp.write(self.launcher_script(system, command, args, blocking))
-            fp.write(f'# Launch command: ' + ' '.join(full_cmdline))
+            fp.write(f'\n# Launch command: ' + ' '.join(full_cmdline) + '\n')
         os.chmod(filename, 0o700)
 
         if setup_only:
-            logger.warning(f'To launch: {" ".join(full_cmdline)}')
+            logger.warning(f'To launch, run: {" ".join(full_cmdline)}')
             return ''
 
         logger.info(f'Launching {" ".join(full_cmdline)}')
 
-        try:
-            if blocking:  # Launch job and trace outputs live
-                run_process_with_live_output(full_cmdline,
-                                             color_stderr=color_stderr)
-                # In this mode, there is no job ID
+        if blocking:  # Launch job and trace outputs live
+            with open(os.path.join(folder_name, 'out.log'), 'wb') as out_file:
+                with open(os.path.join(folder_name, 'err.log'),
+                          'wb') as err_file:
+
+                    run_process_with_live_output(full_cmdline,
+                                                 out_file=out_file,
+                                                 err_file=err_file,
+                                                 color_stderr=color_stderr)
+            # In this mode, there is no job ID
+            return None
+        else:
+            # Run batch script and get job ID
+            process = subprocess.run(full_cmdline, capture_output=True)
+            if process.returncode or process.stderr:
+                logging.error(
+                    f'Batch scheduler exited with error code {process.returncode}'
+                )
+                sys.stderr.buffer.write(process.stderr)
                 return None
-            else:
-                # Run batch script and get job ID
-                process = subprocess.run(full_cmdline, capture_output=True)
-                if process.returncode or process.stderr:
-                    logging.error(
-                        f'Batch scheduler exited with error code {process.returncode}'
-                    )
-                    sys.stderr.buffer.write(process.stderr)
-                    return None
-                return self.get_job_id(process.stdout.decode())
-        finally:
-            if script_file is None:  # Erase temporary file
-                os.unlink(filename)
+            return self.get_job_id(process.stdout.decode())
