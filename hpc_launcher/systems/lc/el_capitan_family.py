@@ -48,6 +48,7 @@ class ElCapitan(System):
 
         env_list = []
         env_list.append(('NCCL_NET_GDR_LEVEL', '3')) # From HPE to avoid hangs
+        env_list.append(('NCCL_MIN_NCHANNELS', '24')) # From AMD to improve collective performance
         env_list.append(('MIOPEN_DEBUG_DISABLE_FIND_DB', '0'))
         env_list.append(('MIOPEN_DISABLE_CACHE', '0'))
         tmpdir = os.environ.get('TMPDIR')
