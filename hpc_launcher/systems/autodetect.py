@@ -14,6 +14,7 @@
 from hpc_launcher.systems.system import System, GenericSystem
 from hpc_launcher.systems.lc.el_capitan_family import ElCapitan
 from hpc_launcher.systems.lc.cts2 import CTS2
+from hpc_launcher.systems.lc.sierra_family import Sierra
 import logging
 import socket
 import re
@@ -60,6 +61,9 @@ def autodetect_current_system(quiet: bool = False) -> System:
 
     if sys == 'ipa':
         return CTS2(sys)
+
+    if sys == 'lassen' or sys == 'sierra' or sys == 'rzadams':
+        return Sierra(sys)
 
     # TODO(later): Try to find current system via other means
 
