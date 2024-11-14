@@ -52,9 +52,9 @@ class FluxScheduler(Scheduler):
         header.write('#!/bin/sh\n')
         cmd_args = []
         if self.out_log_file and not blocking:
-            header += f'# FLUX: --output={self.out_log_file}\n'
+            header.write(f'# FLUX: --output={self.out_log_file}\n')
         if self.err_log_file and not blocking:
-            header += f'# FLUX: --error={self.err_log_file}\n'
+            header.write(f'# FLUX: --error={self.err_log_file}\n')
 
         # Unbuffered output
         tmp = '-u'
