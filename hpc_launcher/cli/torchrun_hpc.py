@@ -1,7 +1,25 @@
+# Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
+# Produced at the Lawrence Livermore National Laboratory.
+# Written by the LBANN Research Team (B. Van Essen, et al.) listed in
+# the CONTRIBUTORS file. See the top-level LICENSE file for details.
+#
+# LLNL-CODE-697807.
+# All rights reserved.
+#
+# This file is part of LBANN: Livermore Big Artificial Neural Network
+# Toolkit. For details, see http://software.llnl.gov/LBANN or
+# https://github.com/LBANN and https://github.com/LLNL/LBANN.
+#
+# SPDX-License-Identifier: (Apache-2.0)
 from hpc_launcher.cli import common_args
 import argparse
 
+import logging
 
+logger = logging.getLogger(__name__)
+
+
+# torchrun-hpc -N2 -n8 main.py --pp 2 --debug --io-threads 4 --compile
 def main():
     parser = argparse.ArgumentParser(
         description=
@@ -10,24 +28,40 @@ def main():
     common_args.setup_arguments(parser)
 
     # Grab the rest of the command line to launch
-    parser.add_argument('script', help='Python script to be executed')
-    parser.add_argument('args',
-                        nargs=argparse.REMAINDER,
-                        help='Arguments to the Python script')
+    parser.add_argument('command', help='Command to be executed')
+    parser.add_argument(
+        'args',
+        nargs=argparse.REMAINDER,
+        help='Arguments to the command that should be executed')
 
     args = parser.parse_args()
-    common_args.validate_arguments(args)
 
-    try:
-        import torch
-    except (ModuleNotFoundError, ImportError):
-        print(
-            'PyTorch is not installed on this system, but is required for torchrun-hpc.'
-        )
-        exit(1)
+    common_args.setup_logging(logger, args.verbose)
 
-    print('Verbose:', args.verbose)
+    launch_helpers.setup_logging(logger, args.verbose)
 
+    # Process special arguments that can autoselect the number of ranks / GPUs
+    system = common_args.process_arguments(args, logger)
+
+    # Pick batch scheduler
+    scheduler = launch_helpers.select_scheduler(args, logger, system)
+
+
+    # try:
+    #     import torch
+    # except (ModuleNotFoundError, ImportError):
+    #     print(
+    #         'PyTorch is not installed on this system, but is required for torchrun-hpc.'
+    #     )
+    #     exit(1)
+
+    # print('Verbose:', args.verbose)
+
+
+# Call 
+# dist.init_process_group("nccl")
+# run script user cmd 
+#atexit(dist.destroy_process_group())
 
 if __name__ == '__main__':
     main()

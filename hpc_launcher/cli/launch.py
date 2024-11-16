@@ -12,8 +12,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 import argparse
-from hpc_launcher.cli import common_args
-from hpc_launcher.systems import configure
+from hpc_launcher.cli import common_args, launch_helpers
 from hpc_launcher.schedulers import get_schedulers
 from hpc_launcher.schedulers.local import LocalScheduler
 from hpc_launcher.utils import ceildiv
@@ -38,38 +37,13 @@ def main():
 
     args = parser.parse_args()
 
-    if args.verbose:
-        # Another option: format='%(levelname)-7s: %(message)s',
-        logging.basicConfig(level=logging.INFO,
-                            format='\033[2mhpc-launcher\033[0m: %(message)s')
-    else:
-        logging.basicConfig(level=logging.WARNING,
-                            format='\033[2mhpc-launcher\033[0m: %(message)s')
+    launch_helpers.setup_logging(logger, args.verbose)
 
-    logger.info(f'Verbose mode enabled')
-
-    common_args.validate_arguments(args)
-
-    # Set system and launch configuration based on arguments
-    system, args.nodes, args.procs_per_node = configure.configure_launch(
-        args.queue, args.nodes, args.procs_per_node, args.gpus_at_least,
-        args.gpumem_at_least)
+    # Process special arguments that can autoselect the number of ranks / GPUs
+    system = common_args.process_arguments(args, logger)
 
     # Pick batch scheduler
-    if args.local:
-        scheduler_class = LocalScheduler
-    elif args.scheduler:
-        scheduler_class = get_schedulers()[args.scheduler]
-    else:
-        scheduler_class = system.preferred_scheduler
-    logger.info(f'Using {scheduler_class.__name__}')
-
-    scheduler_args = common_args.create_scheduler_arguments(**vars(args))
-    scheduler = scheduler_class(**scheduler_args)
-
-    logger.info(
-        f'system parameters: node={scheduler.nodes} ppn={scheduler.procs_per_node}'
-    )
+    scheduler = launch_helpers.select_scheduler(args, logger, system)
 
     jobid = scheduler.launch(system, args.command, args.args, not args.bg,
                              args.output_script, args.setup_only,
