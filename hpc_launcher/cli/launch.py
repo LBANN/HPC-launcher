@@ -15,7 +15,6 @@ import argparse
 from hpc_launcher.cli import common_args, launch_helpers
 from hpc_launcher.schedulers import get_schedulers
 from hpc_launcher.schedulers.local import LocalScheduler
-from hpc_launcher.utils import ceildiv
 
 import logging
 

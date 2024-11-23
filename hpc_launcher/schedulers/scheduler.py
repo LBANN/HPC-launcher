@@ -18,6 +18,7 @@ import sys
 import shutil
 import time
 import subprocess
+import pkg_resources
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
 
 import logging
@@ -137,7 +138,8 @@ class Scheduler:
                script_file: Optional[str] = None,
                setup_only: bool = False,
                color_stderr: bool = False,
-               run_from_dir: bool = False) -> str:
+               run_from_dir: bool = False,
+               torchrun_hpc: bool = False) -> str:
         """
         Launches the given command and arguments uaing this launcher.
 
@@ -183,8 +185,14 @@ class Scheduler:
                 os.path.join(folder_name, 'err.log'))
             should_make_folder = True
 
+        stub_file = ''
         if should_make_folder:
             os.makedirs(folder_name, exist_ok=True)
+            if torchrun_hpc:
+                stub_file = 'torchrun_hpc_' + command_as_folder_name
+                copied_stub_file = folder_name + '/' +  stub_file
+                package_path = pkg_resources.resource_filename('hpc_launcher', '')
+                shutil.copy(package_path + '/cli//torchrun_hpc_stub.py', copied_stub_file)
 
         # If the command is run from a directory, and the command exists as a
         # file, use its absolute path
@@ -203,6 +211,9 @@ class Scheduler:
 
         logger.info(f'Script filename: {filename}')
         with open(filename, 'w') as fp:
+            if torchrun_hpc:
+                command = f'python3 -u {os.path.abspath(folder_name)}/{stub_file} ' + os.path.abspath(command)
+
             fp.write(self.launcher_script(system, command, args, blocking))
             fp.write(f'\n# Launch command: ' + ' '.join(full_cmdline) + '\n')
         os.chmod(filename, 0o700)

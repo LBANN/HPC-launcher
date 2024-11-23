@@ -43,6 +43,12 @@ class ElCapitan(System):
         super().__init__(system_name, _system_params)
 
 
+    _aux_env_list = []
+
+    def extend_environment_variables(self, env_list: list[tuple[str, str]]):
+        for i in env_list:
+            self._aux_env_list.append(i)
+
     def environment_variables(self) -> list[tuple[str, str]]:
 #flux run --exclusive -N2 -n8 -c21 -g1 ...
 
@@ -71,6 +77,9 @@ class ElCapitan(System):
 
         # Performance tuning for HPE Slingshot Cassini NIC
         env_list.append(('FI_CXI_RDZV_PROTO', 'alt_read'))
+
+        for i in self._aux_env_list:
+            env_list.append(i)
 
         # add -fastload
 

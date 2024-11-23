@@ -11,8 +11,10 @@
 # https://github.com/LBANN and https://github.com/LLNL/LBANN.
 #
 # SPDX-License-Identifier: (Apache-2.0)
-from hpc_launcher.cli import common_args
 import argparse
+from hpc_launcher.cli import common_args, launch_helpers
+from hpc_launcher.schedulers import get_schedulers
+from hpc_launcher.schedulers.local import LocalScheduler
 
 import logging
 
@@ -36,16 +38,26 @@ def main():
 
     args = parser.parse_args()
 
-    common_args.setup_logging(logger, args.verbose)
-
     launch_helpers.setup_logging(logger, args.verbose)
+
 
     # Process special arguments that can autoselect the number of ranks / GPUs
     system = common_args.process_arguments(args, logger)
 
+    env_list = []
+    env_list.append(('MASTER_ADDR', '$(flux hostlist local | /bin/hostlist -n 1)'))
+    env_list.append(('MASTER_PORT', '23456'))
+    env_list.append(('RANK', '$FLUX_TASK_RANK'))
+    env_list.append(('WORLD_SIZE', '$FLUX_JOB_SIZE'))
+    env_list.append(('LOCAL_RANK', '$FLUX_TASK_LOCAL_ID'))
+    env_list.append(('LOCAL_WORLD_SIZE', '$(($FLUX_JOB_SIZE / $FLUX_JOB_NNODES))'))
+    env_list.append(('TOKENIZERS_PARALLELISM', 'false'))
+    env_list.append(('TORCH_NCCL_ENABLE_MONITORING', '0'))
+
+    system.extend_environment_variables(env_list)
+
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
-
 
     # try:
     #     import torch
@@ -57,10 +69,19 @@ def main():
 
     # print('Verbose:', args.verbose)
 
+    jobid = scheduler.launch(system, args.command, args.args, not args.bg,
+                             args.output_script, args.setup_only,
+                             args.color_stderr, args.run_from_dir, True)
 
-# Call 
+    if jobid:
+        logger.info(f'Job ID: {jobid}')
+
+
+
+
+# Call
 # dist.init_process_group("nccl")
-# run script user cmd 
+# run script user cmd
 #atexit(dist.destroy_process_group())
 
 if __name__ == '__main__':

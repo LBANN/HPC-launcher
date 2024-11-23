@@ -58,7 +58,7 @@ class LSFScheduler(Scheduler):
 
         cmd_args += ['--shared-launch']
 
-# BVE These are all jsrun options
+        # jsrun options
         parallel_run_args += ['--rs_per_host 1']
         parallel_run_args += [f'--tasks_per_rs={self.procs_per_node}']
         parallel_run_args += ['--launch_distribution packed']
@@ -95,8 +95,8 @@ class LSFScheduler(Scheduler):
             header.write(f'#BSUB -cwd {self.work_dir}\n')
 
         if self.launcher_flags:
-            tmp = f'{" ".join(self.launcher_flags)}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            for flag in self.launcher_flags:
+                cmd_args += [f'{flag}']
 
         for k, v in env_vars:
             header.write(f'export {k}={v}\n')
