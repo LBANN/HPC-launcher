@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from hpc_launcher.systems import System
 
 from hpc_launcher.schedulers.scheduler import Scheduler
-#from hpc_launcher.systems import autodetect
 
 def select_interactive_or_batch(tmp: str,
                                 header: StringIO,
@@ -78,15 +77,12 @@ class LSFScheduler(Scheduler):
         if self.job_name:
             tmp = f'-J {self.job_name}'
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
-            # header.write(f'#BSUB -J {self.job_name}\n')
         if self.queue:
             tmp = f'-q {self.queue}'
-            # header.write(f'#BSUB -q {self.queue}\n')
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
         if self.account:
             tmp = f'-G {self.account}'
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
-            # header.write(f'#BSUB -G {self.account}\n')
         if self.reservation:
             header.write(f'#BSUB -U {self.reservation}\n')
 
@@ -197,7 +193,6 @@ class LSFScheduler(Scheduler):
         #     script += f' {arg}'
 
         if not blocking or blocking:
-            # Use the --parent flag to run under the existing allocation
             script += 'jsrun '
             script += ' '.join(parallel_run_args)
             script += ' '

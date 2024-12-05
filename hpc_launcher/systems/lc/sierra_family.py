@@ -33,7 +33,6 @@ class Sierra(System):
         super().__init__(system_name, _system_params)
 
     def environment_variables(self) -> list[tuple[str, str]]:
-#flux run --exclusive -N2 -n8 -c21 -g1 ...
 
         env_list = []
 
@@ -60,7 +59,7 @@ class Sierra(System):
 
         return env_list
 
-    def customize_scheduler(self, Scheduler):
+    def customize_scheduler(self, scheduler: LSFScheduler):
         cores_per_socket = 16
         procs_per_node = 2
         procs_per_socket = (procs_per_node + 1) // 2

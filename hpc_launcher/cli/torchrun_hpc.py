@@ -79,10 +79,6 @@ def main():
 
 
 
-# Call
-# dist.init_process_group("nccl")
-# run script user cmd
-#atexit(dist.destroy_process_group())
 
 if __name__ == '__main__':
     main()

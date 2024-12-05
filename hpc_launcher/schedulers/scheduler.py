@@ -192,7 +192,7 @@ class Scheduler:
                 stub_file = 'torchrun_hpc_' + command_as_folder_name
                 copied_stub_file = folder_name + '/' +  stub_file
                 package_path = pkg_resources.resource_filename('hpc_launcher', '')
-                shutil.copy(package_path + '/cli//torchrun_hpc_stub.py', copied_stub_file)
+                shutil.copy(package_path + '/cli/torchrun_hpc_stub.py', copied_stub_file)
 
         # If the command is run from a directory, and the command exists as a
         # file, use its absolute path
