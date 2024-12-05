@@ -22,10 +22,13 @@ def main():
     # args = get_args()
     args = sys.argv[1:]
 
+    # Fix how we handle CUDA visible devices and MPI bind
     device = torch.device("cuda:0")
+    # Do we need to pass env
     dist.init_process_group("nccl")
 
-    atexit.register(dist.destroy_process_group)
+    # Needs to figure out how to handle exceptions
+    # atexit.register(dist.destroy_process_group)
     # runfile
     script = sys.argv[0]
     run_path = os.path.dirname(script)
@@ -37,7 +40,8 @@ def main():
     # print(f'BVE NOW Here are the new args {sys.argv}')
     runpy.run_path(sys.argv[0], run_name="__main__")
 
-
+    # Deal with destroying the process group here
+    dist.destroy_process_group()
 
 
 if __name__ == "__main__":

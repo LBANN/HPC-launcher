@@ -159,7 +159,10 @@ class Scheduler:
         command_as_folder_name = os.path.basename(command).replace(' ', '_').replace(';','-')
         # Create a folder for the output and error logs
         # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
-        folder_name = f'launch-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
+        folder_prefix = 'launch'
+        if torchrun_hpc:
+            folder_prefix = 'torchrun_hpc'
+        folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
         should_make_folder = blocking or run_from_dir
 
         # Create a temporary file or a script file, if given
