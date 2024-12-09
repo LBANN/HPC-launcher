@@ -29,4 +29,11 @@ setup(
             'torchrun-hpc = hpc_launcher.cli.torchrun_hpc:main',
             'launch = hpc_launcher.cli.launch:main',
         ],
-    })
+    },
+    install_requires=["pytest"],
+)
+
+EXTRAS_REQUIRE = {
+    "torch": ["torch"],
+    "mpi": ["mpi4py>=3.1.4"],
+}
