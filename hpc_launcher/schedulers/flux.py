@@ -140,6 +140,9 @@ class FluxScheduler(Scheduler):
         (header_lines, cmd_string) = self.build_command_string_and_batch_script(system, blocking)
         script += header_lines
         script += '\n'
+        script += 'export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n'
+#        script += 'echo ${HPC_LAUNCHER_HOSTLIST} > hpc_launcher_hostlist.txt\n'
+        script += 'echo "BVE $(hostname) HERE IS THE HOSTLIST ${HPC_LAUNCHER_HOSTLIST}"\n'
 
         if not blocking:
             # Use the --parent flag to run under the existing allocation

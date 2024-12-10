@@ -17,7 +17,8 @@ import hpc_launcher
 
 # import torch
 import subprocess
-
+import os
+import re
 
 #@pytest.fixture(scope="module")
 def test_launcher():
@@ -37,6 +38,20 @@ def test_launcher():
     print(proc.stdout)
     print('Here is stderr')
     print(proc.stderr)
+    m = re.search('^.*Script filename: (\S+)$', proc.stderr, re.MULTILINE | re.DOTALL)
+    if m:
+        script = m.group(1)
+        exp_dir = os.path.dirname(script)
+        print(f'I found match >>>{script}<<\n and dir >>> {exp_dir}<<<')
+        hostlist = exp_dir + "/hpc_launcher_hostlist.txt"
+        print(f'I am going to read {hostlist}')
+        with open(hostlist) as f:
+            s = f.read()
+            print(f'I am reading the file list {s}')
+    else:
+        print(f'I was not able to find this.')
+    if os.getenv('HPC_LAUNCHER_HOSTLIST'):
+        print('HEre is the hostlist ' . os.getenv('HPC_LAUNCHER_HOSTLIST'))
     assert(proc.returncode == 0)
     #return True
 
