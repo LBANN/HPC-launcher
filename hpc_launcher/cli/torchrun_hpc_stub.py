@@ -11,12 +11,22 @@
 # https://github.com/LBANN and https://github.com/LLNL/LBANN.
 #
 # SPDX-License-Identifier: (Apache-2.0)
+from psutil import Process
+
+# Save affinity before importing torch.distributed
+affinity = Process().cpu_affinity()
+
 import torch
 import torch.distributed as dist
 import runpy
 import atexit
 import sys
 import os
+
+# Restore affinity after importing torch.distributed
+Process().cpu_affinity(affinity)
+import sys
+
 
 def main():
     # args = get_args()

@@ -21,8 +21,24 @@ import subprocess
 
 #@pytest.fixture(scope="module")
 def test_launcher():
-    subprocess.run(["ls", "-l"]) 
-    return True
+#     proc = subprocess.run(["ls", "-l"],
+# #                          capture_output=True,
+#                           stdout = subprocess.PIPE)
+# torchrun-hpc -v -N2 -n1  hpc_launcher/cli/test_main.py --pp 2 --debug --io-threads 4 --compile
+    cmd = ["torchrun-hpc", "-v",  "-N2", "-n1",  "torch_dist_test.py", "--pp 2", "--debug", "--io-threads 4", "--compile"]
+#    cmd = ["torchrun-hpc", "-v",  "-N2", "-n1",  "../hpc_launcher/cli/test_main.py", "--pp 2", "--debug", "--io-threads 4", "--compile"]
+    proc = subprocess.run(cmd,
+                          universal_newlines = True,
+                          capture_output=True)
+    # proc = subprocess.run(["ls", "-l"],
+    #                       universal_newlines = True,
+    #                       capture_output=True)
+    print('Here is stdout')
+    print(proc.stdout)
+    print('Here is stderr')
+    print(proc.stderr)
+    assert(proc.returncode == 0)
+    #return True
 
 
 # torchrun-hpc -v -N2 -n1 hpc_launcher/cli/test_main.py --pp 2 --debug --io-threads 4 --compile 

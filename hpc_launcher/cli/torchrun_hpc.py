@@ -75,6 +75,7 @@ def main():
 
     if jobid:
         logger.info(f'Job ID: {jobid}')
+    logger.info(f'BVE Job ID: {jobid}')
 
 
 
