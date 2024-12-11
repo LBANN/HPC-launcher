@@ -13,6 +13,7 @@
 # SPDX-License-Identifier: (Apache-2.0)
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
+from io import StringIO
 import os
 import sys
 import shutil
@@ -63,6 +64,24 @@ class Scheduler:
     launcher_flags: Optional[list[str]] = None
     # Hijack preload commands into a scheduler
     ld_preloads: Optional[list[str]] = None
+
+    def select_interactive_or_batch(self,
+                                    tmp: str,
+                                    header: StringIO,
+                                    cmd_args: list[str],
+                                    blocking: bool = True) -> (str, list[str]):
+        """
+        Given a specific string "tmp" write it either in a command line argument
+        or a batch shell argument.
+
+        :param tmp: String to package up
+        :param header: StringIO that will be prepended to the final script
+        :param cmd_args: Mutable list of strings that will be added to the command line
+        :param blocking: Flag to indicate if the temporary string is being wrapped for
+                         a batch or interactive command.
+        :return: None
+        """
+        return
 
     def build_command_string_and_batch_script(
             self, system: 'System') -> (str, list[str]):

@@ -35,18 +35,19 @@ def _time_string(minutes):
     return f'{days}-{hours:02}:{minutes:02}:{seconds:02}'
 
 
-def select_interactive_or_batch(tmp: str,
-                                header: StringIO,
-                                cmd_args: list[str],
-                                blocking: bool = True) -> (str, list[str]):
-    if blocking:
-        cmd_args += [tmp]
-    else:
-        header.write(f'#SBATCH {tmp}\n')
-    return
-
 @dataclass
 class SlurmScheduler(Scheduler):
+
+    def select_interactive_or_batch(self,
+                                    tmp: str,
+                                    header: StringIO,
+                                    cmd_args: list[str],
+                                    blocking: bool = True) -> (str, list[str]):
+        if blocking:
+            cmd_args += [tmp]
+        else:
+            header.write(f'#SBATCH {tmp}\n')
+        return
 
     def build_command_string_and_batch_script(self,
                                               system: 'System',

@@ -21,19 +21,20 @@ if TYPE_CHECKING:
 
 from hpc_launcher.schedulers.scheduler import Scheduler
 
-def select_interactive_or_batch(tmp: str,
-                                header: StringIO,
-                                cmd_args: list[str],
-                                blocking: bool = True) -> (str, list[str]):
-    if blocking:
-        cmd_args += [tmp]
-    else:
-        header.write(f'#BSUB {tmp}\n')
-    return
-
-
 @dataclass
 class LSFScheduler(Scheduler):
+
+    def select_interactive_or_batch(self,
+                                    tmp: str,
+                                    header: StringIO,
+                                    cmd_args: list[str],
+                                    blocking: bool = True) -> (str, list[str]):
+        if blocking:
+            cmd_args += [tmp]
+        else:
+            header.write(f'#BSUB {tmp}\n')
+        return
+
     def build_command_string_and_batch_script(self,
                                               system: 'System',
                                               blocking: bool = True) -> (str, list[str], list[str]):

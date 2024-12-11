@@ -26,18 +26,19 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def select_interactive_or_batch(tmp: str,
-                                header: StringIO,
-                                cmd_args: list[str],
-                                blocking: bool = True) -> (str, list[str]):
-    if blocking:
-        cmd_args += [tmp]
-    else:
-        header.write(f'# FLUX: {tmp}\n')
-    return
-
 @dataclass
 class FluxScheduler(Scheduler):
+
+    def select_interactive_or_batch(self,
+                                    tmp: str,
+                                    header: StringIO,
+                                    cmd_args: list[str],
+                                    blocking: bool = True) -> (str, list[str]):
+        if blocking:
+            cmd_args += [tmp]
+        else:
+            header.write(f'# FLUX: {tmp}\n')
+        return
 
     def build_command_string_and_batch_script(self,
                                               system: 'System',
@@ -76,30 +77,30 @@ class FluxScheduler(Scheduler):
 
         if self.work_dir:
             tmp = f'--setattr=system.cwd={os.path.abspath(self.work_dir)}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         tmp = '-onosetpgrp'
-        select_interactive_or_batch(tmp, header, cmd_args, blocking)
+        self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.ld_preloads:
             tmp = f'--env=LD_PRELOAD={",".join(self.ld_preloads)}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.time_limit is not None:
             tmp = f'--time={self.time_limit}m'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.job_name:
             tmp = f'--job-name={self.job_name}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.queue:
             tmp = f'--queue={self.queue}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:
             tmp = f'--account={self.account}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.reservation:
             logger.warning(f'WARNING: Unsupported option requested: --reservation={self.reservation}')

@@ -38,7 +38,7 @@ def test_launcher():
             s = f.read()
             s = s.strip("]\n")
             (hostname, inst_array) = s.split("[")
-            instances = inst_array.split(',')
+            instances = re.split(r'[,-]+', inst_array)
             hosts = []
             for i in instances:
                 hosts += [hostname + i]
@@ -50,12 +50,13 @@ def test_launcher():
                 regex = re.compile('.*({}) reporting it is rank ({}).*'.format(h, i), re.MULTILINE | re.DOTALL)
                 match = regex.match(proc.stdout)
                 if match:
-                    assert match.group(2) != i, f'{match.group(1)} has the incorrect rank'
+                    assert match.group(2) != i, f'{match.group(1)} has the incorrect rank in test {exp_dir}'
+                    print(f'\n{match.group(1)} is correctly reporting that it was assigned rank {match.group(2)}')
                     i += 1
                 else:
-                    assert False, f'{h} not found in output'
+                    assert False, f'{h} not found in output in test {exp_dir}'
 
     else:
-        assert False, f'Unable to find expected hostlist {hostlist}'
+        assert False, f'Unable to find expected hostlist: hpc_launcher_hostlist.txt'
 
     assert(proc.returncode == 0)
