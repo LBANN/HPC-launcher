@@ -42,18 +42,39 @@ def test_launcher():
     if m:
         script = m.group(1)
         exp_dir = os.path.dirname(script)
-        print(f'I found match >>>{script}<<\n and dir >>> {exp_dir}<<<')
+        # print(f'I found match >>>{script}<<\n and dir >>> {exp_dir}<<<')
         hostlist = exp_dir + "/hpc_launcher_hostlist.txt"
-        print(f'I am going to read {hostlist}')
+        # print(f'I am going to read {hostlist}')
         with open(hostlist) as f:
             s = f.read()
-            print(f'I am reading the file list {s}')
+            # print(f'I am reading the file list {s}')
+            s = s.strip("]\n")
+            (hostname, inst_array) = s.split("[")
+            instances = inst_array.split(',')
+            # print(f'I have {hostname} and instances {inst_array} and instance list {instances}')
+            hosts = []
+            for i in instances:
+                hosts += [hostname + i]
+
+            # print(f'I have hosts {hosts}')
+
+            i = 0
+            for h in hosts:
+                regex = re.compile('.*({}) reporting it is rank ({}).*'.format(h, i), re.MULTILINE | re.DOTALL)
+#                regex = re.compile('^({}) reporting it is rank ({})$'.format(h, i), re.MULTILINE | re.DOTALL)
+                match = regex.match(proc.stdout)
+                if match:
+                    # print(f'BVE ASSERT {match.group(1)} checking in as rank {match.group(2)}')
+                    assert match.group(2) != i, f'{match.group(1)} has the incorrect rank'
+                    # print(f'I found the string {match.group(0)}')
+                    i += 1
+                else:
+                    assert False, f'{h} not found in output'
+
     else:
-        print(f'I was not able to find this.')
-    if os.getenv('HPC_LAUNCHER_HOSTLIST'):
-        print('HEre is the hostlist ' . os.getenv('HPC_LAUNCHER_HOSTLIST'))
+        assert False, f'Unable to find expected hostlist {hostlist}'
+
     assert(proc.returncode == 0)
-    #return True
 
 
 # torchrun-hpc -v -N2 -n1 hpc_launcher/cli/test_main.py --pp 2 --debug --io-threads 4 --compile 

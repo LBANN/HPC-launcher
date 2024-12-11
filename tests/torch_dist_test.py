@@ -13,38 +13,22 @@
 # SPDX-License-Identifier: (Apache-2.0)
 # from psutil import Process
 
-# # Save affinity
-# affinity = Process().cpu_affinity()
-
 import torch
 import torch.distributed as dist
 
-# # Restore affinity
-# process().cpu_affinity(affinity)
 import sys
+import socket
 
 def main():
     args = sys.argv[1:]
-#    args = get_args()
-
-    # device = torch.device("cuda:0")
-    # dist.init_process_group("nccl")
-    # device_mesh = LlamaDeviceMesh(
-    #     tensor_parallel=dist.get_world_size() // args.pp, pipeline_parallel=args.pp
-    # )
-    # if args.debug:
     print(
         f"Device mesh: rank={dist.get_rank()},",
             # f"TP={device_mesh.tp_rank()}/{device_mesh.tp_size()},",
             # f"PP={device_mesh.pp_rank()}/{device_mesh.pp_size()}",
     )
 
-    # Choose the number of I/O threads automatically
-    # io_threads = args.io_threads if args.io_threads > 0 else device_mesh.tp_size()
+    print(f'{socket.gethostname()} reporting it is rank {dist.get_rank()}')
 
-    print(f'BVE I think that I am rank {dist.get_rank()}')
-
-    # dist.destroy_process_group()
 
 
 if __name__ == "__main__":

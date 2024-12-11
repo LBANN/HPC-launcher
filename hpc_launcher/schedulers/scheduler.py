@@ -218,8 +218,9 @@ class Scheduler:
                 command = f'python3 -u {os.path.abspath(folder_name)}/{stub_file} ' + os.path.abspath(command)
 
             fp.write(self.launcher_script(system, command, args, blocking))
-            fp.write('\necho ${HPC_LAUNCHER_HOSTLIST} > ' + os.path.dirname(filename) + f'/hpc_launcher_hostlist.txt\n')
-            fp.write('\necho ${HPC_LAUNCHER_HOSTLIST} > ' + os.path.dirname(filename) + f'/hpc_launcher_hostlist_$(hostname).txt\n')
+            fp.write('\nif [[ ${RANK} -eq 0 ]]; then')
+            fp.write('\n    echo ${HPC_LAUNCHER_HOSTLIST} > ' + os.path.dirname(filename) + f'/hpc_launcher_hostlist.txt\n')
+            fp.write('fi\n')
             fp.write(f'\n# Launch command: ' + ' '.join(full_cmdline) + '\n')
         os.chmod(filename, 0o700)
 

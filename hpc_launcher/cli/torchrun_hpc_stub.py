@@ -42,12 +42,10 @@ def main():
     # runfile
     script = sys.argv[0]
     run_path = os.path.dirname(script)
-    # print(f'BVE I have the args {args} and an old argv[0] {sys.argv[0]} and run_path = {run_path}')
     # Strip off the name of this script and pass the rest to runpy
     # sys.argv[1] = run_path + "/" + sys.argv[1]
     # sys.argv[0] = run_path + sys.argv[1]
     sys.argv = sys.argv[1:]
-    # print(f'BVE NOW Here are the new args {sys.argv}')
     runpy.run_path(sys.argv[0], run_name="__main__")
 
     # Deal with destroying the process group here
