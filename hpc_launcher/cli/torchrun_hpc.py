@@ -21,7 +21,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# torchrun-hpc -N2 -n8 main.py --pp 2 --debug --io-threads 4 --compile
 def main():
     parser = argparse.ArgumentParser(
         description=
