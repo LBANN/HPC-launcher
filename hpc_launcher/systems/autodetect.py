@@ -62,7 +62,7 @@ def autodetect_current_system(quiet: bool = False) -> System:
     if sys == 'ipa':
         return CTS2(sys)
 
-    if sys == 'lassen' or sys == 'sierra' or sys == 'rzadams':
+    if sys in ('lassen', 'sierra', 'rzanzel'):
         return Sierra(sys)
 
     # TODO(later): Try to find current system via other means
