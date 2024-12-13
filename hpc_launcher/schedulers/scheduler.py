@@ -16,10 +16,8 @@ from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
 import sys
-import shutil
 import time
 import subprocess
-import pkg_resources
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
 
 import logging
@@ -149,39 +147,24 @@ class Scheduler:
         """
         return None
 
-    def launch(self,
-               system: 'System',
-               command: str,
-               args: Optional[list[str]] = None,
-               blocking: bool = True,
-               script_file: Optional[str] = None,
-               setup_only: bool = False,
-               color_stderr: bool = False,
-               run_from_dir: bool = False,
-               torchrun_hpc: bool = False) -> str:
-        """
-        Launches the given command and arguments uaing this launcher.
-
-        :param system: The system to use for launching the job.
-        :param command: The command line to run.
-        :param args: The arguments to use for the command.
-        :param blocking: If True, blocks until the job is complete
-                         and redirects/duplicates outputs to the terminal.
-        :param script_file: If given, saves the output script to this file.
-        :param verbose: If True, prints more information about the job details.
-        :param setup_only: If True, only sets up the job and does not launch it.
-        :param color_stderr: If True, colors stderr terminal outputs in red.
-        :param run_from_dir: If True, runs the command from the launch directory.
-        :return: The queued job ID as a string.
-        """
+    def create_launch_folder_name(self,
+                                  command: str,
+                                  folder_prefix: str = 'launch'
+                             ) -> (str, str):
         # Remove spaces and semi-colons from the command sequence
         command_as_folder_name = os.path.basename(command).replace(' ', '_').replace(';','-')
         # Create a folder for the output and error logs
         # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
-        folder_prefix = 'launch'
-        if torchrun_hpc:
-            folder_prefix = 'torchrun_hpc'
         folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
+        return (command_as_folder_name, folder_name)
+
+    def create_launch_folder(self,
+                             folder_name: str,
+                             blocking: bool = True,
+                             script_file: Optional[str] = None,
+                             run_from_dir: bool = False,
+                             ) -> (str, str):
+
         should_make_folder = blocking or run_from_dir
 
         # Create a temporary file or a script file, if given
@@ -210,11 +193,35 @@ class Scheduler:
         stub_file = ''
         if should_make_folder:
             os.makedirs(folder_name, exist_ok=True)
-            if torchrun_hpc:
-                stub_file = 'torchrun_hpc_' + command_as_folder_name
-                copied_stub_file = folder_name + '/' +  stub_file
-                package_path = pkg_resources.resource_filename('hpc_launcher', '')
-                shutil.copy(package_path + '/cli/torchrun_hpc_stub.py', copied_stub_file)
+
+        return filename
+
+    def launch(self,
+               system: 'System',
+               folder_name: str,
+               filename: str,
+               command: str,
+               args: Optional[list[str]] = None,
+               blocking: bool = True,
+               # script_file: Optional[str] = None,
+               setup_only: bool = False,
+               color_stderr: bool = False,
+               run_from_dir: bool = False) -> str:
+        """
+        Launches the given command and arguments uaing this launcher.
+
+        :param system: The system to use for launching the job.
+        :param command: The command line to run.
+        :param args: The arguments to use for the command.
+        :param blocking: If True, blocks until the job is complete
+                         and redirects/duplicates outputs to the terminal.
+        # :param script_file: If given, saves the output script to this file.
+        :param verbose: If True, prints more information about the job details.
+        :param setup_only: If True, only sets up the job and does not launch it.
+        :param color_stderr: If True, colors stderr terminal outputs in red.
+        :param run_from_dir: If True, runs the command from the launch directory.
+        :return: The queued job ID as a string.
+        """
 
         # If the command is run from a directory, and the command exists as a
         # file, use its absolute path
@@ -233,12 +240,10 @@ class Scheduler:
 
         logger.info(f'Script filename: {filename}')
         with open(filename, 'w') as fp:
-            if torchrun_hpc:
-                command = f'python3 -u {os.path.abspath(folder_name)}/{stub_file} ' + os.path.abspath(command)
-
             fp.write(self.launcher_script(system, command, args, blocking))
             fp.write('\nif [[ ${RANK} -eq 0 ]]; then')
-            fp.write('\n    echo ${HPC_LAUNCHER_HOSTLIST} > ' + os.path.dirname(filename) + f'/hpc_launcher_hostlist.txt\n')
+            fp.write('\n    echo ${HPC_LAUNCHER_HOSTLIST} > '
+                     + os.path.join(os.path.dirname(filename), f'hpc_launcher_hostlist.txt\n'))
             fp.write('fi\n')
             fp.write(f'\n# Launch command: ' + ' '.join(full_cmdline) + '\n')
         os.chmod(filename, 0o700)

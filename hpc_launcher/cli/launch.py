@@ -44,8 +44,16 @@ def main():
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
 
-    jobid = scheduler.launch(system, args.command, args.args, not args.bg,
-                             args.output_script, args.setup_only,
+    _, folder_name = scheduler.create_launch_folder_name(args.command, 'launch')
+
+    script_file = scheduler.create_launch_folder(folder_name,
+                                                 not args.bg,
+                                                 args.output_script,
+                                                 args.run_from_dir)
+
+    jobid = scheduler.launch(system, folder_name, script_file,
+                             args.command, args.args, not args.bg,
+                             args.setup_only,
                              args.color_stderr, args.run_from_dir)
 
     if jobid:

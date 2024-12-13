@@ -17,6 +17,8 @@ from hpc_launcher.schedulers import get_schedulers
 from hpc_launcher.schedulers.local import LocalScheduler
 
 import logging
+import os
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +69,28 @@ def main():
     #     exit(1)
 
     # print('Verbose:', args.verbose)
+    command_as_folder_name, folder_name = scheduler.create_launch_folder_name(args.command,
+                                                                                'torchrun_hpc',)
 
-    jobid = scheduler.launch(system, args.command, args.args, not args.bg,
-                             args.output_script, args.setup_only,
-                             args.color_stderr, args.run_from_dir, True)
+    script_file = scheduler.create_launch_folder(folder_name,
+                                                 not args.bg,
+                                                 args.output_script,
+                                                 args.run_from_dir)
+
+    stub_file = 'torchrun_hpc_' + command_as_folder_name
+
+    if os.path.exists(folder_name):
+        copied_stub_file = folder_name + '/' +  stub_file
+        package_path = os.path.dirname(os.path.abspath(__file__))
+        shutil.copy(os.path.join(package_path, 'torchrun_hpc_stub.py'), copied_stub_file)
+
+    command = f'python3 -u {os.path.abspath(folder_name)}/{stub_file} ' + os.path.abspath(args.command)
+
+    jobid = scheduler.launch(system, folder_name, script_file,
+                             command, args.args, not args.bg,
+                             # args.output_script,
+                             args.setup_only,
+                             args.color_stderr, args.run_from_dir)
 
     if jobid:
         logger.info(f'Job ID: {jobid}')
