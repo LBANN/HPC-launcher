@@ -79,11 +79,20 @@ class System:
                 logger.warning(
                     'Could not auto-detect current system parameters')
 
+    # def extend_environment_variables(self, env_list: list[tuple[str, str]]):
+    #     """
+    #     Enable a CLI to extend the environment variables list defined by the system
+    #     """
+    #     return
+
+    _aux_env_list = []
+
     def extend_environment_variables(self, env_list: list[tuple[str, str]]):
         """
         Enable a CLI to extend the environment variables list defined by the system
         """
-        return
+        for i in env_list:
+            self._aux_env_list.append(i)
 
     def environment_variables(self) -> list[tuple[str, str]]:
         """

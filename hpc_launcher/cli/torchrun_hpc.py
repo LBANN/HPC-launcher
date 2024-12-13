@@ -44,21 +44,12 @@ def main():
 
     # Process special arguments that can autoselect the number of ranks / GPUs
     system = common_args.process_arguments(args, logger)
-
-    env_list = []
-    env_list.append(('MASTER_ADDR', '$(flux hostlist local | /bin/hostlist -n 1)'))
-    env_list.append(('MASTER_PORT', '23456'))
-    env_list.append(('RANK', '$FLUX_TASK_RANK'))
-    env_list.append(('WORLD_SIZE', '$FLUX_JOB_SIZE'))
-    env_list.append(('LOCAL_RANK', '$FLUX_TASK_LOCAL_ID'))
-    env_list.append(('LOCAL_WORLD_SIZE', '$(($FLUX_JOB_SIZE / $FLUX_JOB_NNODES))'))
-    env_list.append(('TOKENIZERS_PARALLELISM', 'false'))
-    env_list.append(('TORCH_NCCL_ENABLE_MONITORING', '0'))
-
-    system.extend_environment_variables(env_list)
-
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
+
+    env_list = scheduler.setup_rendezvous_protocol('port')
+
+    system.extend_environment_variables(env_list)
 
     # try:
     #     import torch
@@ -68,7 +59,6 @@ def main():
     #     )
     #     exit(1)
 
-    # print('Verbose:', args.verbose)
     command_as_folder_name, folder_name = scheduler.create_launch_folder_name(args.command,
                                                                                 'torchrun_hpc',)
 

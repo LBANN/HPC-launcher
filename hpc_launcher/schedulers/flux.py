@@ -161,3 +161,15 @@ class FluxScheduler(Scheduler):
     def get_job_id(self, output: str) -> Optional[str]:
         # The job ID is the only printout when calling flux batch
         return output.strip()
+
+    def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
+        env_list = []
+        env_list.append(('MASTER_ADDR', '$(flux hostlist local | /bin/hostlist -n 1)'))
+        env_list.append(('MASTER_PORT', '23456'))
+        env_list.append(('RANK', '$FLUX_TASK_RANK'))
+        env_list.append(('WORLD_SIZE', '$FLUX_JOB_SIZE'))
+        env_list.append(('LOCAL_RANK', '$FLUX_TASK_LOCAL_ID'))
+        env_list.append(('LOCAL_WORLD_SIZE', '$(($FLUX_JOB_SIZE / $FLUX_JOB_NNODES))'))
+        env_list.append(('TOKENIZERS_PARALLELISM', 'false'))
+        env_list.append(('TORCH_NCCL_ENABLE_MONITORING', '0'))
+        return env_list

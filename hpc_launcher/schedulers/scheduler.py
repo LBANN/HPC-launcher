@@ -147,6 +147,16 @@ class Scheduler:
         """
         return None
 
+    def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
+        """
+        Setup a protocol for a tool like PyTorch to use to establish
+        distributed communication.
+
+        :param protocl: Field to select which protocl to use for the rendezvous
+        :return: A list of strings that are added to the torchrun-hpc launch environment.
+        """
+        return []
+
     def create_launch_folder_name(self,
                                   command: str,
                                   folder_prefix: str = 'launch'
