@@ -151,6 +151,13 @@ class Scheduler:
                                   command: str,
                                   folder_prefix: str = 'launch'
                              ) -> (str, str):
+        """
+        Create a folder name for the launcher based on the command.
+
+        :param command: The command line to run.
+        :param folder_prefix: Specializable prefix for the folder name
+        :return: A tuple of strings with the the command as a possible folder name, and the folder name.
+        """
         # Remove spaces and semi-colons from the command sequence
         command_as_folder_name = os.path.basename(command).replace(' ', '_').replace(';','-')
         # Create a folder for the output and error logs
@@ -164,6 +171,15 @@ class Scheduler:
                              script_file: Optional[str] = None,
                              run_from_dir: bool = False,
                              ) -> (str, str):
+        """
+        Create a folder and associated launch script if approrpiate.
+
+        :param folder_name: The name of the folder for containing all of the launch artifacts.
+        :param blocking: If True, the job should run from the launch folder.
+        :param script_file: If given, saves the output script to this file.
+        :param run_from_dir: If True, runs the command from the launch folder.
+        :return: The filename for the launch script as a string.
+        """
 
         should_make_folder = blocking or run_from_dir
 
@@ -203,7 +219,6 @@ class Scheduler:
                command: str,
                args: Optional[list[str]] = None,
                blocking: bool = True,
-               # script_file: Optional[str] = None,
                setup_only: bool = False,
                color_stderr: bool = False,
                run_from_dir: bool = False) -> str:
@@ -211,12 +226,12 @@ class Scheduler:
         Launches the given command and arguments uaing this launcher.
 
         :param system: The system to use for launching the job.
+        :param folder_name: The name of the folder for containing all of the launch artifacts.
+        :param filename: The filename for the launch script
         :param command: The command line to run.
         :param args: The arguments to use for the command.
         :param blocking: If True, blocks until the job is complete
                          and redirects/duplicates outputs to the terminal.
-        # :param script_file: If given, saves the output script to this file.
-        :param verbose: If True, prints more information about the job details.
         :param setup_only: If True, only sets up the job and does not launch it.
         :param color_stderr: If True, colors stderr terminal outputs in red.
         :param run_from_dir: If True, runs the command from the launch directory.
