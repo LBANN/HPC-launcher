@@ -29,7 +29,7 @@ import sys
 
 
 def main():
-    # args = get_args()
+    # Strip off the name of this script and pass the rest to runpy
     args = sys.argv[1:]
 
     # Fix how we handle CUDA visible devices and MPI bind
@@ -39,14 +39,7 @@ def main():
 
     # Needs to figure out how to handle exceptions
     # atexit.register(dist.destroy_process_group)
-    # runfile
-    script = sys.argv[0]
-    run_path = os.path.dirname(script)
-    # Strip off the name of this script and pass the rest to runpy
-    # sys.argv[1] = run_path + "/" + sys.argv[1]
-    # sys.argv[0] = run_path + sys.argv[1]
-    sys.argv = sys.argv[1:]
-    runpy.run_path(sys.argv[0], run_name="__main__")
+    runpy.run_path(args[0], run_name="__main__")
 
     # Deal with destroying the process group here
     dist.destroy_process_group()
