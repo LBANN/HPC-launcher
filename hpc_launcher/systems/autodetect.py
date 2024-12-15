@@ -40,6 +40,14 @@ def system():
     return _system
 
 
+def clear_autodetected_system():
+    """
+    Clears the autodetected system. Used for testing.
+    """
+    global _system
+    _system = None
+
+
 def autodetect_current_system(quiet: bool = False) -> System:
     """
     Tries to detect the current system based on information such
