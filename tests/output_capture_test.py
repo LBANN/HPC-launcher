@@ -1,5 +1,47 @@
+# Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
+# Produced at the Lawrence Livermore National Laboratory.
+# Written by the LBANN Research Team (B. Van Essen, et al.) listed in
+# the CONTRIBUTORS file. See the top-level LICENSE file for details.
+#
+# LLNL-CODE-697807.
+# All rights reserved.
+#
+# This file is part of LBANN: Livermore Big Artificial Neural Network
+# Toolkit. For details, see http://software.llnl.gov/LBANN or
+# https://github.com/LBANN and https://github.com/LLNL/LBANN.
+#
+# SPDX-License-Identifier: (Apache-2.0)
+import os
+import shutil
+from hpc_launcher.schedulers.local import LocalScheduler
+from hpc_launcher.systems import configure
 
 
-def test_output_capture():
-    
-    pass
+def test_output_capture_local():
+    # Configure scheduler
+    system, nodes, procs_per_node = configure.configure_launch(
+        None, 1, 1, None, None)
+    scheduler = LocalScheduler(nodes, procs_per_node)
+
+    files_before = os.listdir(os.getcwd())
+
+    jobid = scheduler.launch(
+        system, 'python',
+        [os.path.join(os.path.dirname(__file__), 'output_capture.py')])
+    assert jobid is None
+
+    files_after = os.listdir(os.getcwd())
+    new_files = set(files_after) - set(files_before)
+    assert len(new_files) == 1
+
+    launch_dir = os.path.join(os.getcwd(), new_files.pop())
+    assert os.path.isdir(launch_dir)
+    assert os.path.isfile(os.path.join(launch_dir, 'out.log'))
+    assert os.path.isfile(os.path.join(launch_dir, 'err.log'))
+    assert open(os.path.join(launch_dir, 'out.log'), 'r').read() == 'output\n'
+    assert open(os.path.join(launch_dir, 'err.log'), 'r').read() == 'error\n'
+    shutil.rmtree(launch_dir, ignore_errors=True)
+
+
+if __name__ == '__main__':
+    test_output_capture_local()
