@@ -47,16 +47,16 @@ def autodetect_current_system(quiet: bool = False) -> System:
     """
 
     sys = system()
-    if sys == 'tioga' or sys == 'tuolumne':
+    if sys in ('tioga', 'tuolumne', 'elcap'):
         return ElCapitan(sys)
 
     if sys == 'ipa':
         return CTS2(sys)
 
-    # TODO: Try to find current system via other means
+    # TODO(later): Try to find current system via other means
 
     if not quiet:
         logger.warning('Could not auto-detect current system, defaulting '
                        'to generic system')
 
-    return GenericSystem('generic')
+    return GenericSystem()

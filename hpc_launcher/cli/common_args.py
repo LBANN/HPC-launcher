@@ -174,16 +174,26 @@ def validate_arguments(args: argparse.Namespace):
 
     :param args: The parsed arguments.
     """
+    # There are four modes of operation:
+    # 1. The user specifies the number of nodes and processes per node
+    # 2. The user specifies the number of nodes (processes per node use the
+    #    current system's default)
+    # 3. The user specifies a minimum number of GPUs
+    # 4. The user specifies a minimum amount of GPU memory
+
     # TODO(later): Convert some mutual exclusive behavior to constraints on
     #              number of nodes/ranks
-    # if (args.nodes and not args.procs_per_node) or (not args.nodes
-    #                                                 and args.procs_per_node):
-    if (not args.nodes
-            and not args.gpus_at_least) or (not args.nodes
-                                            and not args.gpumem_at_least):
+    if not args.nodes and not args.gpus_at_least and not args.gpumem_at_least:
         raise ValueError(
             'One of the following flags has to be set: --nodes, --gpus-at-least, or --gpumem-at-least'
         )
+    if args.nodes and args.gpus_at_least:
+        raise ValueError('The --nodes and --gpus-at-least flags are mutually '
+                         'exclusive')
+    if args.nodes and args.gpumem_at_least:
+        raise ValueError(
+            'The --nodes and --gpumem-at-least flags are mutually '
+            'exclusive')
     if args.gpus_at_least and args.procs_per_node:
         raise ValueError('The --gpus-at-least and --procs-per-node flags '
                          'are mutually exclusive')
@@ -193,16 +203,12 @@ def validate_arguments(args: argparse.Namespace):
     if args.gpumem_at_least and args.gpus_at_least:
         raise ValueError('The --gpumem-at-least and --gpus-at-least flags '
                          'are mutually exclusive')
-    if (not args.procs_per_node and not args.gpumem_at_least
-            and not args.gpus_at_least and not args.local):
-        raise ValueError(
-            'Number of processes must be provided via --procs-per-node, '
-            '--gpus-at-least, or constraints such as --gpumem-at-least')
     if args.local and args.bg:
         raise ValueError('"--local" jobs cannot be run in the background')
     if args.local and args.scheduler:
         raise ValueError('The --local and --scheduler flags are mutually '
                          'exclusive')
     if args.work_dir and args.run_from_dir:
-        raise ValueError('The --work-dir and --run-from-dir flags are mutually '
-                         'exclusive')
+        raise ValueError(
+            'The --work-dir and --run-from-dir flags are mutually '
+            'exclusive')

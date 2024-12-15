@@ -36,7 +36,7 @@ class SystemParams:
     mem_per_gpu: int
     # Physical number of CPUs per node
     cpus_per_node: int
-    # String name of the Schedular class
+    # String name of the Scheduler class
     scheduler: str
     # Number of NUMA domains
     numa_domains: int
@@ -78,8 +78,6 @@ class System:
             else:
                 logger.warning(
                     'Could not auto-detect current system parameters')
-        else:
-            logger.warning('No list of known systems')
 
     def environment_variables(self) -> list[tuple[str, str]]:
         """
@@ -99,7 +97,7 @@ class System:
         """
         return []
 
-    def customize_scheduler(self, Scheduler):
+    def customize_scheduler(self, scheduler):
         """
         Add any system specific customizations to the scheduler.
         """
@@ -136,6 +134,9 @@ class GenericSystem(System):
     """
     A generic System type that does not specify any particular behavior.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, system_name='generic', **kwargs)
 
     def environment_variables(self) -> list[tuple[str, str]]:
         return []
