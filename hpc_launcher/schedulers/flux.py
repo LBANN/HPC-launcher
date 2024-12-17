@@ -78,7 +78,7 @@ class FluxScheduler(Scheduler):
             tmp = f'--setattr=system.cwd={os.path.abspath(self.work_dir)}'
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
-        tmp = '-o nosetpgrp'
+        tmp = '-onosetpgrp'
         select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.ld_preloads:
@@ -105,8 +105,8 @@ class FluxScheduler(Scheduler):
             logger.warning(f'WARNING: Unsupported option requested: --reservation={self.reservation}')
 
         if self.launcher_flags:
-            tmp = f'{" ".join(self.launcher_flags)}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            for f in self.launcher_flags:
+                select_interactive_or_batch(f, header, cmd_args, blocking)
 
         for k, v in env_vars:
             header.write(f'export {k}={v}\n')

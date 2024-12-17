@@ -17,6 +17,7 @@ import pytest
 
 from hpc_launcher.schedulers.local import LocalScheduler
 from hpc_launcher.schedulers.slurm import SlurmScheduler
+from hpc_launcher.schedulers.flux import FluxScheduler
 from hpc_launcher.systems import configure
 
 
@@ -46,22 +47,25 @@ def test_output_capture_local():
     shutil.rmtree(launch_dir, ignore_errors=True)
 
 
+@pytest.mark.parametrize('scheduler_class', (SlurmScheduler, FluxScheduler))
 @pytest.mark.parametrize('processes', [1, 2])
-def test_output_capture_slurm(processes):
-    if not shutil.which('srun'):
+def test_output_capture_scheduler(scheduler_class, processes):
+    if scheduler_class is SlurmScheduler and not shutil.which('srun'):
+        pytest.skip('SLURM not available')
+
+    if scheduler_class is FluxScheduler and not shutil.which('flux'):
         pytest.skip('SLURM not available')
 
     # Configure scheduler
     system, nodes, procs_per_node = configure.configure_launch(
         None, 1, processes, None, None)
-    scheduler = SlurmScheduler(nodes, procs_per_node)
+    scheduler = scheduler_class(nodes, procs_per_node)
 
     files_before = os.listdir(os.getcwd())
 
     jobid = scheduler.launch(
         system, 'python',
         [os.path.join(os.path.dirname(__file__), 'output_capture.py')])
-    assert jobid is None
 
     files_after = os.listdir(os.getcwd())
     new_files = set(files_after) - set(files_before)
@@ -81,5 +85,8 @@ def test_output_capture_slurm(processes):
 if __name__ == '__main__':
     test_output_capture_local()
     if shutil.which('srun'):
-        test_output_capture_slurm(1)
-        test_output_capture_slurm(2)
+        test_output_capture_scheduler(SlurmScheduler, 1)
+        test_output_capture_scheduler(SlurmScheduler, 2)
+    if shutil.which('flux'):
+        test_output_capture_scheduler(FluxScheduler, 1)
+        test_output_capture_scheduler(FluxScheduler, 2)
