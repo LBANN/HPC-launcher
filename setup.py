@@ -31,9 +31,9 @@ setup(
         ],
     },
     install_requires=["pytest"],
+    extras_require={
+        'torch': ['torch'],
+        'mpi': ['mpi4py>=3.1.4'],
+        'testing': ['pytest'],
+    },
 )
-
-EXTRAS_REQUIRE = {
-    "torch": ["torch"],
-    "mpi": ["mpi4py>=3.1.4"],
-}
