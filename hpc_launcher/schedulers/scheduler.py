@@ -59,7 +59,7 @@ class Scheduler:
     # The reservation to use for the scheduler
     reservation: Optional[str] = None
     # Additional launcher flags
-    launcher_flags: Optional[str] = None
+    launcher_flags: Optional[list[str]] = None
     # Hijack preload commands into a scheduler
     ld_preloads: Optional[list[str]] = None
 

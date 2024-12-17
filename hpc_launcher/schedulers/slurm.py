@@ -119,8 +119,8 @@ class SlurmScheduler(Scheduler):
             select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.launcher_flags:
-            tmp = f'{" ".join(self.launcher_flags)}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            for f in self.launcher_flags:
+                select_interactive_or_batch(f, header, cmd_args, blocking)
 
         for k, v in env_vars:
             header.write(f'export {k}={v}\n')

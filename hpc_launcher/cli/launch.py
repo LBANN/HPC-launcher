@@ -13,7 +13,7 @@
 # SPDX-License-Identifier: (Apache-2.0)
 import argparse
 from hpc_launcher.cli import common_args
-from hpc_launcher.systems import autodetect
+from hpc_launcher.systems import configure
 from hpc_launcher.schedulers import get_schedulers
 from hpc_launcher.schedulers.local import LocalScheduler
 from hpc_launcher.utils import ceildiv
@@ -48,30 +48,13 @@ def main():
 
     logger.info(f'Verbose mode enabled')
 
-    system = autodetect.autodetect_current_system()
-    logger.info(
-        f'Detected system: {system.system_name} [{type(system).__name__}-class]'
-    )
-    system_params = system.system_parameters(args.queue)
-
-    # If the user requested a specific number of process per node, honor that
-    procs_per_node = args.procs_per_node
-
-    # Otherwise ...
-    # If there is a valid set of system parameters, try to fill in the blanks provided by the user
-    if system_params is not None:
-        procs_per_node = system_params.procs_per_node()
-        if args.gpus_at_least > 0:
-            args.nodes = ceildiv(args.gpus_at_least, procs_per_node)
-        elif args.gpumem_at_least > 0:
-            num_gpus = ceildiv(args.gpumem_at_least, system_params.mem_per_gpu)
-            args.nodes = ceildiv(num_gpus, procs_per_node)
-            if args.nodes == 1:
-                procs_per_node = num_gpus
-
     common_args.validate_arguments(args)
-    # Once the validation is complete set the args.procs_per_node for downstream use
-    args.procs_per_node = procs_per_node
+
+    # Set system and launch configuration based on arguments
+    system, args.nodes, args.procs_per_node = configure.configure_launch(
+        args.queue, args.nodes, args.procs_per_node, args.gpus_at_least,
+        args.gpumem_at_least)
+
     # Pick batch scheduler
     if args.local:
         scheduler_class = LocalScheduler

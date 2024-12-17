@@ -27,9 +27,9 @@ _system_params = {
     'tuolumne':  ('pbatch',  {'pbatch' : _mi300a_node,
                               'pdebug' : _mi300a_node,
                               }),
-    'elcapitan':  ('pbatch',  {'pbatch' : _mi300a_node,
-                              'pdebug' : _mi300a_node,
-                              }),
+    'elcap':  ('pbatch',  {'pbatch' : _mi300a_node,
+                           'pdebug' : _mi300a_node,
+                           }),
     'rzadams':  ('pbatch',  {'pbatch' : _mi300a_node,
                               'pdebug' : _mi300a_node,
                               }),
@@ -77,9 +77,11 @@ class ElCapitan(System):
 
     def customize_scheduler(self, Scheduler):
         use_this_rccl=os.getenv('LBANN_USE_THIS_RCCL')
-        Scheduler.launcher_flags = ['--exclusive',
-                                    # Performance tuning for HPE Slingshot Cassini NIC
-                                    '--setattr=rdzv_get_en=0']
+        Scheduler.launcher_flags = ['--exclusive']
+        if Scheduler is FluxScheduler:
+            # Performance tuning for HPE Slingshot Cassini NIC
+            Scheduler.launcher_flags.append('--setattr=rdzv_get_en=0')
+
         if use_this_rccl is not None:
             Scheduler.ld_preloads = [f'{use_this_rccl}']
 
