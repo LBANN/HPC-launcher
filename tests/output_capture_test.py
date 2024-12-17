@@ -29,10 +29,16 @@ def test_output_capture_local():
 
     files_before = os.listdir(os.getcwd())
 
+    command = 'python'
+    script = 'output_capture.py'
+    _, folder_name = scheduler.create_launch_folder_name(command, 'launch')
+
+    script_file = scheduler.create_launch_folder(folder_name,
+                                                 True)
+
     jobid = scheduler.launch(
-        system, 'python',
+        system, folder_name, script_file, command,
         [os.path.join(os.path.dirname(__file__), 'output_capture.py')])
-    assert jobid is None
 
     files_after = os.listdir(os.getcwd())
     new_files = set(files_after) - set(files_before)
@@ -63,8 +69,14 @@ def test_output_capture_scheduler(scheduler_class, processes):
 
     files_before = os.listdir(os.getcwd())
 
+    command = 'python'
+    _, folder_name = scheduler.create_launch_folder_name(command, 'launch')
+
+    script_file = scheduler.create_launch_folder(folder_name,
+                                                 True)
+
     jobid = scheduler.launch(
-        system, 'python',
+        system, folder_name, script_file, command,
         [os.path.join(os.path.dirname(__file__), 'output_capture.py')])
 
     files_after = os.listdir(os.getcwd())

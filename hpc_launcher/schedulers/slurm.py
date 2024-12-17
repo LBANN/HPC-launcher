@@ -93,35 +93,35 @@ class SlurmScheduler(Scheduler):
 
         if self.work_dir:
             tmp = f'--chdir={os.path.abspath(self.work_dir)}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.ld_preloads:
             tmp = f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.time_limit is not None:
             tmp = f'--time={_time_string(self.time_limit)}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.job_name:
             tmp = f'--job-name={self.job_name}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.queue:
             tmp = f'--partition={self.queue}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:
             tmp = f'--account={self.account}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.reservation:
             tmp = f'--reservation={self.reservation}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.launcher_flags:
             for flag in self.launcher_flags:
-                select_interactive_or_batch(flag, header, cmd_args, blocking)
+                self.select_interactive_or_batch(flag, header, cmd_args, blocking)
                 cmd_args += [f'{flag}']
 
         for k, v in env_vars:

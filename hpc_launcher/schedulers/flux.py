@@ -107,7 +107,7 @@ class FluxScheduler(Scheduler):
 
         if self.launcher_flags:
             for flag in self.launcher_flags:
-                select_interactive_or_batch(flag, header, cmd_args, blocking)
+                self.select_interactive_or_batch(flag, header, cmd_args, blocking)
                 cmd_args += [f'{flag}']
 
         for k, v in env_vars:
