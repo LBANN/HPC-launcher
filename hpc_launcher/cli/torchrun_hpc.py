@@ -19,6 +19,7 @@ from hpc_launcher.schedulers.local import LocalScheduler
 import logging
 import os
 import shutil
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -74,10 +75,12 @@ def main():
         package_path = os.path.dirname(os.path.abspath(__file__))
         shutil.copy(os.path.join(package_path, 'torchrun_hpc_stub.py'), copied_stub_file)
 
-    command = f'python3 -u {os.path.abspath(folder_name)}/{stub_file} ' + os.path.abspath(args.command)
+    command = sys.executable
+    launch_args = ['-u', f'{os.path.abspath(folder_name)}/{stub_file}', os.path.abspath(args.command)]
+    launch_args += args.args
 
     jobid = scheduler.launch(system, folder_name, script_file,
-                             command, args.args, not args.bg,
+                             command, launch_args, not args.bg,
                              # args.output_script,
                              args.setup_only,
                              args.color_stderr, args.run_from_dir)
