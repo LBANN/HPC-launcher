@@ -112,7 +112,7 @@ class System:
         """
         return []
 
-    def customize_scheduler(self, scheduler):
+    def customize_scheduler(self, scheduler: Scheduler):
         """
         Add any system specific customizations to the scheduler.
         """

@@ -85,15 +85,15 @@ class ElCapitan(System):
 
         return env_list
 
-    def customize_scheduler(self, Scheduler):
+    def customize_scheduler(self, scheduler):
         use_this_rccl=os.getenv('LBANN_USE_THIS_RCCL')
-        Scheduler.launcher_flags = ['--exclusive']
-        if Scheduler is FluxScheduler:
+        scheduler.launcher_flags = ['--exclusive']
+        if type(scheduler) is FluxScheduler:
             # Performance tuning for HPE Slingshot Cassini NIC
-            Scheduler.launcher_flags.append('--setattr=rdzv_get_en=0')
+            scheduler.launcher_flags.append('--setattr=rdzv_get_en=0')
 
         if use_this_rccl is not None:
-            Scheduler.ld_preloads = [f'{use_this_rccl}']
+            scheduler.ld_preloads = [f'{use_this_rccl}']
 
         return
 

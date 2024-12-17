@@ -107,8 +107,8 @@ class FluxScheduler(Scheduler):
 
         if self.launcher_flags:
             for flag in self.launcher_flags:
-                self.select_interactive_or_batch(flag, header, cmd_args, blocking)
-                cmd_args += [f'{flag}']
+                # These flag should only be on the launcher commands not the batch commands
+                cmd_args += [flag]
 
         for k, v in env_vars:
             header.write(f'export {k}={v}\n')
