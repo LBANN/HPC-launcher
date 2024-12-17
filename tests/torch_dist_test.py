@@ -23,8 +23,6 @@ def main():
     args = sys.argv[1:]
     print(
         f"Device mesh: rank={dist.get_rank()},",
-            # f"TP={device_mesh.tp_rank()}/{device_mesh.tp_size()},",
-            # f"PP={device_mesh.pp_rank()}/{device_mesh.pp_size()}",
     )
 
     print(f'{socket.gethostname()} reporting it is rank {dist.get_rank()}')

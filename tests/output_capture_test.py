@@ -29,7 +29,7 @@ def test_output_capture_local():
 
     files_before = os.listdir(os.getcwd())
 
-    command = 'python'
+    command = sys.executable
     script = 'output_capture.py'
     _, folder_name = scheduler.create_launch_folder_name(command, 'launch')
 
@@ -69,7 +69,7 @@ def test_output_capture_scheduler(scheduler_class, processes):
 
     files_before = os.listdir(os.getcwd())
 
-    command = 'python'
+    command = sys.executable
     _, folder_name = scheduler.create_launch_folder_name(command, 'launch')
 
     script_file = scheduler.create_launch_folder(folder_name,

@@ -59,11 +59,11 @@ class LSFScheduler(Scheduler):
         cmd_args += ['--shared-launch']
 
         # jsrun options
-        parallel_run_args += ['--rs_per_host 1']
+        parallel_run_args += ['--rs_per_host', '1']
         parallel_run_args += [f'--tasks_per_rs={self.procs_per_node}']
-        parallel_run_args += ['--launch_distribution packed']
-        parallel_run_args += ['--cpu_per_rs ALL_CPUS']
-        parallel_run_args += ['--gpu_per_rs ALL_GPUS']
+        parallel_run_args += ['--launch_distribution', 'packed']
+        parallel_run_args += ['--cpu_per_rs', 'ALL_CPUS']
+        parallel_run_args += ['--gpu_per_rs', 'ALL_GPUS']
 
         if self.out_log_file and not blocking:
             header.write(f'#BSUB -o {self.out_log_file}\n')
@@ -77,13 +77,13 @@ class LSFScheduler(Scheduler):
             header.write(f'#BSUB -W {hours}:{minutes:02}\n')
         if self.job_name:
             tmp = f'-J {self.job_name}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
         if self.queue:
             tmp = f'-q {self.queue}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
         if self.account:
             tmp = f'-G {self.account}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
         if self.reservation:
             header.write(f'#BSUB -U {self.reservation}\n')
 
@@ -93,7 +93,7 @@ class LSFScheduler(Scheduler):
 
         if self.launcher_flags:
             for flag in self.launcher_flags:
-                cmd_args += [f'{flag}']
+                cmd_args.append(flag)
 
         for k, v in env_vars:
             header.write(f'export {k}={v}\n')

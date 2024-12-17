@@ -25,10 +25,6 @@ def test_launcher():
     proc = subprocess.run(cmd,
                           universal_newlines = True,
                           capture_output=True)
-    # print('Here is stdout')
-    # print(proc.stdout)
-    # print('Here is stderr')
-    # print(proc.stderr)
     m = re.search('^.*Script filename: (\S+)$', proc.stderr, re.MULTILINE | re.DOTALL)
     if m:
         script = m.group(1)
@@ -43,7 +39,6 @@ def test_launcher():
             for i in instances:
                 hosts += [hostname + i]
 
-            # print(f'I have hosts {hosts}')
 
             i = 0
             for h in hosts:

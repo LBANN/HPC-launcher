@@ -13,7 +13,7 @@
 # SPDX-License-Identifier: (Apache-2.0)
 from psutil import Process
 
-# Save affinity before importing torch.distributed
+# Save affinity before importing torch
 affinity = Process().cpu_affinity()
 
 import torch
@@ -23,7 +23,7 @@ import atexit
 import sys
 import os
 
-# Restore affinity after importing torch.distributed
+# Restore affinity after importing torch
 Process().cpu_affinity(affinity)
 import sys
 
@@ -32,13 +32,10 @@ def main():
     # Strip off the name of this script and pass the rest to runpy
     args = sys.argv[1:]
 
-    # Fix how we handle CUDA visible devices and MPI bind
-    device = torch.device("cuda:0")
-    # Do we need to pass env
+    # TODO(later): Fix how we handle CUDA visible devices and MPI bind
     dist.init_process_group("nccl")
 
-    # Needs to figure out how to handle exceptions
-    # atexit.register(dist.destroy_process_group)
+    # Run underlying script
     runpy.run_path(args[0], run_name="__main__")
 
     # Deal with destroying the process group here
