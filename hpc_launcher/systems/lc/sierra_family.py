@@ -64,8 +64,8 @@ class Sierra(System):
         procs_per_node = 2
         procs_per_socket = (procs_per_node + 1) // 2
         cores_per_proc = cores_per_socket // procs_per_socket
-        # Scheduler.launcher_flags = ['--bind packed:{}'.format(cores_per_proc), 
-        #                             '--smpiargs="-gpu"']
+        Scheduler.launcher_flags = ['--bind packed:{}'.format(cores_per_proc),
+                                    '--smpiargs="-gpu"']
         return
 
     @property

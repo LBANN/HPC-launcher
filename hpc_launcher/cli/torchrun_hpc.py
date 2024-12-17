@@ -51,13 +51,13 @@ def main():
 
     system.extend_environment_variables(env_list)
 
-    # try:
-    #     import torch
-    # except (ModuleNotFoundError, ImportError):
-    #     print(
-    #         'PyTorch is not installed on this system, but is required for torchrun-hpc.'
-    #     )
-    #     exit(1)
+    try:
+        import torch
+    except (ModuleNotFoundError, ImportError):
+        print(
+            'PyTorch is not installed on this system, but is required for torchrun-hpc.'
+        )
+        exit(1)
 
     command_as_folder_name, folder_name = scheduler.create_launch_folder_name(args.command,
                                                                                 'torchrun_hpc',)
