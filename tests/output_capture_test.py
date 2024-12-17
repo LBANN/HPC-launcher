@@ -14,6 +14,7 @@
 import os
 import shutil
 import pytest
+import sys
 
 from hpc_launcher.schedulers.local import LocalScheduler
 from hpc_launcher.schedulers.slurm import SlurmScheduler

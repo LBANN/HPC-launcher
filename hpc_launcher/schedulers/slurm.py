@@ -39,15 +39,15 @@ def _time_string(minutes):
 class SlurmScheduler(Scheduler):
 
     def select_interactive_or_batch(self,
-                                    tmp: str,
+                                    tmp: list[str],
                                     header: StringIO,
                                     cmd_args: list[str],
-                                    blocking: bool = True) -> (str, list[str]):
+                                    blocking: bool = True) -> type(None):
         if blocking:
-            cmd_args += [tmp]
+            cmd_args += tmp
         else:
-            header.write(f'#SBATCH {tmp}\n')
-        return
+            header.write(f'#SBATCH {" ".join(tmp)}\n')
+        return None
 
     def build_command_string_and_batch_script(self,
                                               system: 'System',
@@ -70,8 +70,7 @@ class SlurmScheduler(Scheduler):
 
         # Unbuffered output - Only pass to srun
         if blocking:
-            tmp = '-u'
-            cmd_args += [tmp]
+            cmd_args += ['-u']
 
         # Number of Nodes
         tmp = f'--nodes={self.nodes}'
@@ -92,31 +91,31 @@ class SlurmScheduler(Scheduler):
             header.write(f'#SBATCH {tmp}\n')
 
         if self.work_dir:
-            tmp = f'--chdir={os.path.abspath(self.work_dir)}'
+            tmp = [f'--chdir={os.path.abspath(self.work_dir)}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.ld_preloads:
-            tmp = f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}'
+            tmp = [f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.time_limit is not None:
-            tmp = f'--time={_time_string(self.time_limit)}'
+            tmp = [f'--time={_time_string(self.time_limit)}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.job_name:
-            tmp = f'--job-name={self.job_name}'
+            tmp = [f'--job-name={self.job_name}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.queue:
-            tmp = f'--partition={self.queue}'
+            tmp = [f'--partition={self.queue}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:
-            tmp = f'--account={self.account}'
+            tmp = [f'--account={self.account}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.reservation:
-            tmp = f'--reservation={self.reservation}'
+            tmp = [f'--reservation={self.reservation}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.launcher_flags:

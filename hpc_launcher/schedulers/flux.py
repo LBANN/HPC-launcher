@@ -30,15 +30,15 @@ logger = logging.getLogger(__name__)
 class FluxScheduler(Scheduler):
 
     def select_interactive_or_batch(self,
-                                    tmp: str,
+                                    tmp: list[str],
                                     header: StringIO,
                                     cmd_args: list[str],
-                                    blocking: bool = True) -> (str, list[str]):
+                                    blocking: bool = True) -> type(None):
         if blocking:
-            cmd_args += [tmp]
+            cmd_args += tmp
         else:
-            header.write(f'# FLUX: {tmp}\n')
-        return
+            header.write(f'# FLUX: {" ".join(tmp)}\n')
+        return None
 
     def build_command_string_and_batch_script(self,
                                               system: 'System',
@@ -76,30 +76,30 @@ class FluxScheduler(Scheduler):
             header.write(f'# FLUX: {tmp}\n')
 
         if self.work_dir:
-            tmp = f'--setattr=system.cwd={os.path.abspath(self.work_dir)}'
+            tmp = [f'--setattr=system.cwd={os.path.abspath(self.work_dir)}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
-        tmp = '-onosetpgrp'
+        tmp = ['-onosetpgrp']
         self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.ld_preloads:
-            tmp = f'--env=LD_PRELOAD={",".join(self.ld_preloads)}'
+            tmp = [f'--env=LD_PRELOAD={",".join(self.ld_preloads)}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.time_limit is not None:
-            tmp = f'--time={self.time_limit}m'
+            tmp = [f'--time={self.time_limit}m']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.job_name:
-            tmp = f'--job-name={self.job_name}'
+            tmp = [f'--job-name={self.job_name}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.queue:
-            tmp = f'--queue={self.queue}'
+            tmp = [f'--queue={self.queue}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:
-            tmp = f'--account={self.account}'
+            tmp = [f'--account={self.account}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.reservation:

@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class Scheduler:
-    """
+    """btor
     An instance of a batch job scheduler that can launch jobs on a given
     system. Produces command line arguments and scripts to support job
     launching, and provides functionality to interactively or asynchronously
@@ -64,10 +64,10 @@ class Scheduler:
     ld_preloads: Optional[list[str]] = None
 
     def select_interactive_or_batch(self,
-                                    tmp: str,
+                                    tmp: list[str],
                                     header: StringIO,
                                     cmd_args: list[str],
-                                    blocking: bool = True) -> (str, list[str]):
+                                    blocking: bool = True) -> type(None):
         """
         Given a specific string "tmp" write it either in a command line argument
         or a batch shell argument.
@@ -79,7 +79,7 @@ class Scheduler:
                          a batch or interactive command.
         :return: None
         """
-        return
+        return None
 
     def build_command_string_and_batch_script(
             self, system: 'System') -> (str, list[str]):

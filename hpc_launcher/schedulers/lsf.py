@@ -25,14 +25,14 @@ from hpc_launcher.schedulers.scheduler import Scheduler
 class LSFScheduler(Scheduler):
 
     def select_interactive_or_batch(self,
-                                    tmp: str,
+                                    tmp: list[str],
                                     header: StringIO,
                                     cmd_args: list[str],
-                                    blocking: bool = True) -> (str, list[str]):
+                                    blocking: bool = True) -> type(None):
         if blocking:
-            cmd_args += [tmp]
+            cmd_args += tmp
         else:
-            header.write(f'#BSUB {tmp}\n')
+            header.write(f'#BSUB {" ".join(tmp)}\n')
         return
 
     def build_command_string_and_batch_script(self,
@@ -76,13 +76,13 @@ class LSFScheduler(Scheduler):
             hours, minutes = divmod(minutes, 60)
             header.write(f'#BSUB -W {hours}:{minutes:02}\n')
         if self.job_name:
-            tmp = f'-J {self.job_name}'
+            tmp = ['-J', f'{self.job_name}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
         if self.queue:
-            tmp = f'-q {self.queue}'
+            tmp = ['-q', f'{self.queue}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
         if self.account:
-            tmp = f'-G {self.account}'
+            tmp = ['-G', f'{self.account}']
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
         if self.reservation:
             header.write(f'#BSUB -U {self.reservation}\n')

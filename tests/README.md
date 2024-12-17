@@ -1,8 +1,6 @@
-## Testing torchrun_hpc
+## Testing torchrun_hpc & launch
 
 ```
-python -m pytest -s test_torchrun_hpc.py 
+python -m pytest
 ```
-
-### Testing launcher
 
