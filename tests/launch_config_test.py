@@ -86,7 +86,7 @@ def test_launch_config(*args):
     assert nodes == 1
     assert procs_per_node == 2
 
-    # Just above the memory limit of a single node
+    # Just above the memory limit of a single node, this triggers a switch to all gpus per node
     system, nodes, procs_per_node = configure_launch(None, 0, 0, 0, 34)
     assert isinstance(system, MockSystem)
     assert nodes == 2
