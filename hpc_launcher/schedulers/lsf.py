@@ -141,3 +141,6 @@ class LSFScheduler(Scheduler):
         script += '\n'
 
         return script
+
+    def get_job_id(self, output: str) -> Optional[str]:
+        raise NotImplementedError
