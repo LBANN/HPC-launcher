@@ -48,6 +48,7 @@ class ElCapitan(System):
 
         env_list = []
         env_list.append(('NCCL_NET_GDR_LEVEL', '3')) # From HPE to avoid hangs
+        env_list.append(('NCCL_MIN_NCHANNELS', '24')) # From AMD to improve collective performance
         env_list.append(('MIOPEN_DEBUG_DISABLE_FIND_DB', '0'))
         env_list.append(('MIOPEN_DISABLE_CACHE', '0'))
         tmpdir = os.environ.get('TMPDIR')
@@ -71,19 +72,22 @@ class ElCapitan(System):
         # Performance tuning for HPE Slingshot Cassini NIC
         env_list.append(('FI_CXI_RDZV_PROTO', 'alt_read'))
 
+        for i in self._aux_env_list:
+            env_list.append(i)
+
         # add -fastload
 
         return env_list
 
-    def customize_scheduler(self, Scheduler):
+    def customize_scheduler(self, scheduler):
         use_this_rccl=os.getenv('LBANN_USE_THIS_RCCL')
-        Scheduler.launcher_flags = ['--exclusive']
-        if Scheduler is FluxScheduler:
+        scheduler.launcher_flags = ['--exclusive']
+        if type(scheduler) is FluxScheduler:
             # Performance tuning for HPE Slingshot Cassini NIC
-            Scheduler.launcher_flags.append('--setattr=rdzv_get_en=0')
+            scheduler.launcher_flags.append('--setattr=rdzv_get_en=0')
 
         if use_this_rccl is not None:
-            Scheduler.ld_preloads = [f'{use_this_rccl}']
+            scheduler.ld_preloads = [f'{use_this_rccl}']
 
         return
 

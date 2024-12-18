@@ -17,6 +17,9 @@ Common arguments for CLI utilities.
 import argparse
 from hpc_launcher.schedulers import get_schedulers
 from hpc_launcher.schedulers.scheduler import Scheduler
+from hpc_launcher.systems.system import System, GenericSystem
+from hpc_launcher.systems import autodetect, configure
+import logging
 
 from dataclasses import fields
 
@@ -212,3 +215,15 @@ def validate_arguments(args: argparse.Namespace):
         raise ValueError(
             'The --work-dir and --run-from-dir flags are mutually '
             'exclusive')
+
+# See if the system can be autodetected and then process some special arguments
+# that can autoselect the number of ranks / GPUs
+def process_arguments(args: argparse.Namespace, logger: logging.Logger) -> System:
+    validate_arguments(args)
+
+    # Set system and launch configuration based on arguments
+    system, args.nodes, args.procs_per_node = configure.configure_launch(
+        args.queue, args.nodes, args.procs_per_node, args.gpus_at_least,
+        args.gpumem_at_least)
+
+    return system

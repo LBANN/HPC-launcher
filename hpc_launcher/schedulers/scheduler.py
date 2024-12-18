@@ -13,9 +13,9 @@
 # SPDX-License-Identifier: (Apache-2.0)
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
+from io import StringIO
 import os
 import sys
-import shutil
 import time
 import subprocess
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
@@ -62,6 +62,24 @@ class Scheduler:
     launcher_flags: Optional[list[str]] = None
     # Hijack preload commands into a scheduler
     ld_preloads: Optional[list[str]] = None
+
+    def select_interactive_or_batch(self,
+                                    tmp: list[str],
+                                    header: StringIO,
+                                    cmd_args: list[str],
+                                    blocking: bool = True) -> type(None):
+        """
+        Given a specific string "tmp" write it either in a command line argument
+        or a batch shell argument.
+
+        :param tmp: String to package up
+        :param header: StringIO that will be prepended to the final script
+        :param cmd_args: Mutable list of strings that will be added to the command line
+        :param blocking: Flag to indicate if the temporary string is being wrapped for
+                         a batch or interactive command.
+        :return: None
+        """
+        return None
 
     def build_command_string_and_batch_script(
             self, system: 'System') -> (str, list[str]):
@@ -129,35 +147,50 @@ class Scheduler:
         """
         return None
 
-    def launch(self,
-               system: 'System',
-               command: str,
-               args: Optional[list[str]] = None,
-               blocking: bool = True,
-               script_file: Optional[str] = None,
-               setup_only: bool = False,
-               color_stderr: bool = False,
-               run_from_dir: bool = False) -> str:
+    def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
         """
-        Launches the given command and arguments uaing this launcher.
+        Setup a protocol for a tool like PyTorch to use to establish
+        distributed communication.
 
-        :param system: The system to use for launching the job.
+        :param protocol: Field to select which protocol to use for the rendezvous
+        :return: A list of strings that are added to the torchrun-hpc launch environment.
+        """
+        return []
+
+    def create_launch_folder_name(self,
+                                  command: str,
+                                  folder_prefix: str = 'launch'
+                             ) -> (str, str):
+        """
+        Create a folder name for the launcher based on the command.
+
         :param command: The command line to run.
-        :param args: The arguments to use for the command.
-        :param blocking: If True, blocks until the job is complete
-                         and redirects/duplicates outputs to the terminal.
-        :param script_file: If given, saves the output script to this file.
-        :param verbose: If True, prints more information about the job details.
-        :param setup_only: If True, only sets up the job and does not launch it.
-        :param color_stderr: If True, colors stderr terminal outputs in red.
-        :param run_from_dir: If True, runs the command from the launch directory.
-        :return: The queued job ID as a string.
+        :param folder_prefix: Specializable prefix for the folder name
+        :return: A tuple of strings with the the command as a possible folder name, and the folder name.
         """
         # Remove spaces and semi-colons from the command sequence
         command_as_folder_name = os.path.basename(command).replace(' ', '_').replace(';','-')
         # Create a folder for the output and error logs
         # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
-        folder_name = f'launch-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
+        folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
+        return (command_as_folder_name, folder_name)
+
+    def create_launch_folder(self,
+                             folder_name: str,
+                             blocking: bool = True,
+                             script_file: Optional[str] = None,
+                             run_from_dir: bool = False,
+                             ) -> (str, str):
+        """
+        Create a folder and associated launch script if approrpiate.
+
+        :param folder_name: The name of the folder for containing all of the launch artifacts.
+        :param blocking: If True, the job should run from the launch folder.
+        :param script_file: If given, saves the output script to this file.
+        :param run_from_dir: If True, runs the command from the launch folder.
+        :return: The filename for the launch script as a string.
+        """
+
         should_make_folder = blocking or run_from_dir
 
         # Create a temporary file or a script file, if given
@@ -183,8 +216,37 @@ class Scheduler:
                 os.path.join(folder_name, 'err.log'))
             should_make_folder = True
 
+        stub_file = ''
         if should_make_folder:
             os.makedirs(folder_name, exist_ok=True)
+
+        return filename
+
+    def launch(self,
+               system: 'System',
+               folder_name: str,
+               filename: str,
+               command: str,
+               args: Optional[list[str]] = None,
+               blocking: bool = True,
+               setup_only: bool = False,
+               color_stderr: bool = False,
+               run_from_dir: bool = False) -> str:
+        """
+        Launches the given command and arguments uaing this launcher.
+
+        :param system: The system to use for launching the job.
+        :param folder_name: The name of the folder for containing all of the launch artifacts.
+        :param filename: The filename for the launch script
+        :param command: The command line to run.
+        :param args: The arguments to use for the command.
+        :param blocking: If True, blocks until the job is complete
+                         and redirects/duplicates outputs to the terminal.
+        :param setup_only: If True, only sets up the job and does not launch it.
+        :param color_stderr: If True, colors stderr terminal outputs in red.
+        :param run_from_dir: If True, runs the command from the launch directory.
+        :return: The queued job ID as a string.
+        """
 
         # If the command is run from a directory, and the command exists as a
         # file, use its absolute path
@@ -204,6 +266,10 @@ class Scheduler:
         logger.info(f'Script filename: {filename}')
         with open(filename, 'w') as fp:
             fp.write(self.launcher_script(system, command, args, blocking))
+            fp.write('\nif [[ ${RANK} -eq 0 ]]; then')
+            fp.write('\n    echo ${HPC_LAUNCHER_HOSTLIST} > '
+                     + os.path.join(os.path.dirname(filename), f'hpc_launcher_hostlist.txt\n'))
+            fp.write('fi\n')
             fp.write(f'\n# Launch command: ' + ' '.join(full_cmdline) + '\n')
         os.chmod(filename, 0o700)
 

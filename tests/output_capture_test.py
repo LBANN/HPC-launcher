@@ -14,6 +14,7 @@
 import os
 import shutil
 import pytest
+import sys
 
 from hpc_launcher.schedulers.local import LocalScheduler
 from hpc_launcher.schedulers.slurm import SlurmScheduler
@@ -27,18 +28,18 @@ def test_output_capture_local():
         None, 1, 1, None, None)
     scheduler = LocalScheduler(nodes, procs_per_node)
 
-    files_before = os.listdir(os.getcwd())
+    command = sys.executable
+    script = 'output_capture.py'
+    _, launch_dir = scheduler.create_launch_folder_name(command, 'launch')
+
+    script_file = scheduler.create_launch_folder(launch_dir,
+                                                 True)
 
     jobid = scheduler.launch(
-        system, 'python',
+        system, launch_dir, script_file, command,
         [os.path.join(os.path.dirname(__file__), 'output_capture.py')])
-    assert jobid is None
 
-    files_after = os.listdir(os.getcwd())
-    new_files = set(files_after) - set(files_before)
-    assert len(new_files) == 1
-
-    launch_dir = os.path.join(os.getcwd(), new_files.pop())
+    assert os.path.exists(launch_dir)
     assert os.path.isdir(launch_dir)
     assert os.path.isfile(os.path.join(launch_dir, 'out.log'))
     assert os.path.isfile(os.path.join(launch_dir, 'err.log'))
@@ -61,17 +62,17 @@ def test_output_capture_scheduler(scheduler_class, processes):
         None, 1, processes, None, None)
     scheduler = scheduler_class(nodes, procs_per_node)
 
-    files_before = os.listdir(os.getcwd())
+    command = sys.executable
+    _, launch_dir = scheduler.create_launch_folder_name(command, 'launch')
+
+    script_file = scheduler.create_launch_folder(launch_dir,
+                                                 True)
 
     jobid = scheduler.launch(
-        system, 'python',
+        system, launch_dir, script_file, command,
         [os.path.join(os.path.dirname(__file__), 'output_capture.py')])
 
-    files_after = os.listdir(os.getcwd())
-    new_files = set(files_after) - set(files_before)
-    assert len(new_files) == 1
-
-    launch_dir = os.path.join(os.getcwd(), new_files.pop())
+    assert os.path.exists(launch_dir)
     assert os.path.isdir(launch_dir)
     assert os.path.isfile(os.path.join(launch_dir, 'out.log'))
     assert os.path.isfile(os.path.join(launch_dir, 'err.log'))

@@ -26,18 +26,19 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def select_interactive_or_batch(tmp: str,
-                                header: StringIO,
-                                cmd_args: list[str],
-                                blocking: bool = True) -> (str, list[str]):
-    if blocking:
-        cmd_args += [tmp]
-    else:
-        header.write(f'# FLUX: {tmp}\n')
-    return
-
 @dataclass
 class FluxScheduler(Scheduler):
+
+    def select_interactive_or_batch(self,
+                                    tmp: list[str],
+                                    header: StringIO,
+                                    cmd_args: list[str],
+                                    blocking: bool = True) ->None:
+        if blocking:
+            cmd_args += tmp
+        else:
+            header.write(f'# FLUX: {" ".join(tmp)}\n')
+        return
 
     def build_command_string_and_batch_script(self,
                                               system: 'System',
@@ -52,9 +53,9 @@ class FluxScheduler(Scheduler):
         header.write('#!/bin/sh\n')
         cmd_args = []
         if self.out_log_file and not blocking:
-            header += f'# FLUX: --output={self.out_log_file}\n'
+            header.write(f'# FLUX: --output={self.out_log_file}\n')
         if self.err_log_file and not blocking:
-            header += f'# FLUX: --error={self.err_log_file}\n'
+            header.write(f'# FLUX: --error={self.err_log_file}\n')
 
         # Unbuffered output
         tmp = '-u'
@@ -75,38 +76,39 @@ class FluxScheduler(Scheduler):
             header.write(f'# FLUX: {tmp}\n')
 
         if self.work_dir:
-            tmp = f'--setattr=system.cwd={os.path.abspath(self.work_dir)}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            tmp = [f'--setattr=system.cwd={os.path.abspath(self.work_dir)}']
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
-        tmp = '-onosetpgrp'
-        select_interactive_or_batch(tmp, header, cmd_args, blocking)
+        tmp = ['-onosetpgrp']
+        self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.ld_preloads:
-            tmp = f'--env=LD_PRELOAD={",".join(self.ld_preloads)}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            tmp = [f'--env=LD_PRELOAD={",".join(self.ld_preloads)}']
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.time_limit is not None:
-            tmp = f'--time={self.time_limit}m'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            tmp = [f'--time={self.time_limit}m']
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.job_name:
-            tmp = f'--job-name={self.job_name}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            tmp = [f'--job-name={self.job_name}']
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.queue:
-            tmp = f'--queue={self.queue}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            tmp = [f'--queue={self.queue}']
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:
-            tmp = f'--account={self.account}'
-            select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            tmp = [f'--account={self.account}']
+            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.reservation:
             logger.warning(f'WARNING: Unsupported option requested: --reservation={self.reservation}')
 
         if self.launcher_flags:
-            for f in self.launcher_flags:
-                select_interactive_or_batch(f, header, cmd_args, blocking)
+            for flag in self.launcher_flags:
+                # These flag should only be on the launcher commands not the batch commands
+                cmd_args += [flag]
 
         for k, v in env_vars:
             header.write(f'export {k}={v}\n')
@@ -139,6 +141,7 @@ class FluxScheduler(Scheduler):
         (header_lines, cmd_string) = self.build_command_string_and_batch_script(system, blocking)
         script += header_lines
         script += '\n'
+        script += 'export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n'
 
         if not blocking:
             # Use the --parent flag to run under the existing allocation
@@ -158,3 +161,14 @@ class FluxScheduler(Scheduler):
     def get_job_id(self, output: str) -> Optional[str]:
         # The job ID is the only printout when calling flux batch
         return output.strip()
+
+    def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
+        env_list = []
+        env_list.append(('MASTER_ADDR', '$(flux hostlist local | /bin/hostlist -n 1)'))
+        env_list.append(('MASTER_PORT', '23456'))
+        env_list.append(('RANK', '$FLUX_TASK_RANK'))
+        env_list.append(('WORLD_SIZE', '$FLUX_JOB_SIZE'))
+        env_list.append(('LOCAL_RANK', '$FLUX_TASK_LOCAL_ID'))
+        env_list.append(('LOCAL_WORLD_SIZE', '$(($FLUX_JOB_SIZE / $FLUX_JOB_NNODES))'))
+        env_list.append(('TOKENIZERS_PARALLELISM', 'false'))
+        return env_list

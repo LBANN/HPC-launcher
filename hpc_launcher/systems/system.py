@@ -79,6 +79,16 @@ class System:
                 logger.warning(
                     'Could not auto-detect current system parameters')
 
+
+    _aux_env_list = []
+
+    def extend_environment_variables(self, env_list: list[tuple[str, str]]):
+        """
+        Enable a CLI to extend the environment variables list defined by the system
+        """
+        for i in env_list:
+            self._aux_env_list.append(i)
+
     def environment_variables(self) -> list[tuple[str, str]]:
         """
         Returns a list of environment variables that configures the
@@ -97,7 +107,7 @@ class System:
         """
         return []
 
-    def customize_scheduler(self, scheduler):
+    def customize_scheduler(self, scheduler: Scheduler):
         """
         Add any system specific customizations to the scheduler.
         """
