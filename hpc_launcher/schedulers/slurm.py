@@ -42,12 +42,12 @@ class SlurmScheduler(Scheduler):
                                     tmp: list[str],
                                     header: StringIO,
                                     cmd_args: list[str],
-                                    blocking: bool = True) -> type(None):
+                                    blocking: bool = True) -> None:
         if blocking:
             cmd_args += tmp
         else:
             header.write(f'#SBATCH {" ".join(tmp)}\n')
-        return None
+        return
 
     def build_command_string_and_batch_script(self,
                                               system: 'System',

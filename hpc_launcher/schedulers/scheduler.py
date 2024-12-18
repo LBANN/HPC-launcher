@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class Scheduler:
-    """btor
+    """
     An instance of a batch job scheduler that can launch jobs on a given
     system. Produces command line arguments and scripts to support job
     launching, and provides functionality to interactively or asynchronously

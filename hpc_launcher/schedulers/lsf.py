@@ -28,7 +28,7 @@ class LSFScheduler(Scheduler):
                                     tmp: list[str],
                                     header: StringIO,
                                     cmd_args: list[str],
-                                    blocking: bool = True) -> type(None):
+                                    blocking: bool = True) -> None:
         if blocking:
             cmd_args += tmp
         else:
