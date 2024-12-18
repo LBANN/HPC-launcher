@@ -48,7 +48,7 @@ def main():
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
 
-    env_list = scheduler.setup_rendezvous_protocol('port')
+    env_list = scheduler.setup_rendezvous_protocol('TCP')
 
     system.extend_environment_variables(env_list)
 

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
+import subprocess
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -177,3 +178,41 @@ class SlurmScheduler(Scheduler):
         if last_line.startswith('Submitted batch job'):
             return last_line.split(' ')[-1]
         return None
+
+    @classmethod
+    def get_parallel_configuration(cls) -> (int, int, int, int):
+        # Interesting but unused variables SLURM_JOB_NUM_NODES, SLURM_NPROCS, SLURM_DISTRIBUTION
+        # Skipping 'SLURM_TASKS_PER_NODE' because this field has a weird format e.g. 2(x2)
+        env_vars = ['SLURM_NTASKS', 'SLURM_PROCID', 'SLURM_LOCALID', 'SLURM_NNODES']
+        env = {}
+        for e in env_vars:
+            if not os.getenv(e):
+                msg = f'Unable to launch torchrun_hpc on SLURM scheduler - {e} not defined'
+                raise Exception(msg)
+            else:
+                env[e] = int(os.getenv(e))
+
+        world_size = env['SLURM_NTASKS']
+        rank = env['SLURM_PROCID']
+        local_rank = env['SLURM_LOCALID']
+        nodes_per_job = env['SLURM_NNODES']
+        local_world_size = world_size // nodes_per_job
+        # local_world_size = env['SLURM_TASKS_PER_NODE']
+        return (world_size, rank, local_world_size, local_rank)
+
+    @classmethod
+    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
+        if protocol == 'TCP':
+            command = 'printenv SLURM_JOB_NODELIST | /bin/hostlist -n 1'
+            master_addr = subprocess.check_output(command, shell=True, text=True).rstrip()
+            master_port = '23456'
+            return f'tcp://{master_addr}:{master_port}'
+        else:
+            msg = f'Unsupported rendezvous protocol {protocol}'
+            raise Exception(msg)
+
+    def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
+        env_list = []
+        env_list.append(('TORCHRUN_HPC_SCHEDULER', type(self).__name__))
+        env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', 'TCP'))
+        return env_list

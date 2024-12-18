@@ -55,6 +55,9 @@ class Sierra(System):
         # Configure NVSHMEM to load Spectrum MPI
         env_list.append(('NVSHMEM_MPI_LIB_NAME', 'libmpi_ibm.so'))
 
+        for i in self._aux_env_list:
+            env_list.append(i)
+
         return env_list
 
     def customize_scheduler(self, scheduler: LSFScheduler):
