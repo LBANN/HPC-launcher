@@ -33,12 +33,12 @@ class FluxScheduler(Scheduler):
                                     tmp: list[str],
                                     header: StringIO,
                                     cmd_args: list[str],
-                                    blocking: bool = True) -> type(None):
+                                    blocking: bool = True) ->None:
         if blocking:
             cmd_args += tmp
         else:
             header.write(f'# FLUX: {" ".join(tmp)}\n')
-        return None
+        return
 
     def build_command_string_and_batch_script(self,
                                               system: 'System',
@@ -171,5 +171,4 @@ class FluxScheduler(Scheduler):
         env_list.append(('LOCAL_RANK', '$FLUX_TASK_LOCAL_ID'))
         env_list.append(('LOCAL_WORLD_SIZE', '$(($FLUX_JOB_SIZE / $FLUX_JOB_NNODES))'))
         env_list.append(('TOKENIZERS_PARALLELISM', 'false'))
-        env_list.append(('TORCH_NCCL_ENABLE_MONITORING', '0'))
         return env_list

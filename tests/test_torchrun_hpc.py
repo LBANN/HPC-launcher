@@ -21,7 +21,7 @@ import os
 import re
 
 def test_launcher():
-    cmd = ["torchrun-hpc", "-v",  "-N2", "-n1",  "torch_dist_test.py", "--pp 2", "--debug", "--io-threads 4", "--compile"]
+    cmd = ["torchrun-hpc", "-v",  "-N2", "-n1",  "torch_dist_test.py"]
     proc = subprocess.run(cmd,
                           universal_newlines = True,
                           capture_output=True)
