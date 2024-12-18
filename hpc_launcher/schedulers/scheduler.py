@@ -147,6 +147,30 @@ class Scheduler:
         """
         return None
 
+    @classmethod
+    def get_parallel_configuration(cls) -> (int, int, int, int):
+        """
+        Using scheduler environment variables report the parallel configuration
+        of the run.
+
+        :return: A tuple of integers in the format
+                 (world_size, rank, local_world_size, local_rank)
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
+        """
+        Configure the rendezvous protocol at runtime for a tool like PyTorch to establish
+        distributed communication.
+
+        :param protocol: Field to select which protocol to use for the rendezvous
+        :return: An init_method string that conforms to
+                 https://pytorch.org/docs/stable/distributed.html.
+        """
+        raise NotImplementedError
+
+    @property
     def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
         """
         Setup a protocol for a tool like PyTorch to use to establish

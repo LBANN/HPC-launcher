@@ -5,4 +5,5 @@ def get_schedulers():
     return {
         'local': LocalScheduler,
         'flux': FluxScheduler,
+        'FluxScheduler': FluxScheduler,
     }
