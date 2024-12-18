@@ -145,8 +145,7 @@ class FluxScheduler(Scheduler):
         script += 'export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n'
 
         if not blocking:
-            # Use the --parent flag to run under the existing allocation
-            script += 'flux --parent run '
+            script += 'flux run '
             script += ' '.join(cmd_string)
             script += ' '
 
