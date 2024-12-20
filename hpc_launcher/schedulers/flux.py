@@ -163,7 +163,7 @@ class FluxScheduler(Scheduler):
         return output.strip()
 
     @classmethod
-    def get_parallel_configuration(cls) -> (int, int, int, int):
+    def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
         env_vars = ['FLUX_JOB_SIZE', 'FLUX_TASK_RANK', 'FLUX_TASK_LOCAL_ID', 'FLUX_JOB_NNODES']
         env = {}
         for e in env_vars:
@@ -182,7 +182,7 @@ class FluxScheduler(Scheduler):
 
     @classmethod
     def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
-        if protocol == 'TCP':
+        if protocol.lower() == 'tcp':
             command = 'flux hostlist local | /bin/hostlist -n 1'
             master_addr = subprocess.check_output(command, shell=True, text=True).rstrip()
             master_port = '23456'

@@ -180,7 +180,7 @@ class SlurmScheduler(Scheduler):
         return None
 
     @classmethod
-    def get_parallel_configuration(cls) -> (int, int, int, int):
+    def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
         # Interesting but unused variables SLURM_JOB_NUM_NODES, SLURM_NPROCS, SLURM_DISTRIBUTION
         # Skipping 'SLURM_TASKS_PER_NODE' because this field has a weird format e.g. 2(x2)
         env_vars = ['SLURM_NTASKS', 'SLURM_PROCID', 'SLURM_LOCALID', 'SLURM_NNODES']
@@ -202,7 +202,7 @@ class SlurmScheduler(Scheduler):
 
     @classmethod
     def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
-        if protocol == 'TCP':
+        if protocol.lower() == 'tcp':
             command = 'printenv SLURM_JOB_NODELIST | /bin/hostlist -n 1'
             master_addr = subprocess.check_output(command, shell=True, text=True).rstrip()
             master_port = '23456'

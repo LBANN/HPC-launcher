@@ -148,7 +148,7 @@ class Scheduler:
         return None
 
     @classmethod
-    def get_parallel_configuration(cls) -> (int, int, int, int):
+    def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
         """
         Using scheduler environment variables report the parallel configuration
         of the run.
