@@ -27,13 +27,25 @@ import os
 Process().cpu_affinity(affinity)
 import sys
 
+from hpc_launcher.schedulers import get_schedulers
 
 def main():
     # Strip off the name of this script and pass the rest to runpy
     args = sys.argv[1:]
 
+    scheduler_type = os.getenv('TORCHRUN_HPC_SCHEDULER')
+    scheduler = get_schedulers()[scheduler_type]
+    (world_size, rank, local_world_size, local_rank) = scheduler.get_parallel_configuration()
+
+    rdv_protocol = os.getenv('TORCHRUN_HPC_RDV_PROTOCOL')
+    init_method = scheduler.dynamically_configure_rendezvous_protocol(rdv_protocol)
+
+    if dist.is_initialized():
+        raise Exception('PyTorch Distributed is already initialized')
+
     # TODO(later): Fix how we handle CUDA visible devices and MPI bind
-    dist.init_process_group("nccl")
+    dist.init_process_group("nccl", init_method=init_method,
+                            world_size=world_size, rank=rank)
 
     # Run underlying script
     runpy.run_path(args[0], run_name="__main__")

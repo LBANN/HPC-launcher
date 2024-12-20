@@ -40,6 +40,9 @@ class CTS2(System):
         env_list.append(('OMP_PLACES', 'threads'))
         env_list.append(('OMP_PROC_BIND', 'spread'))
 
+        for i in self._aux_env_list:
+            env_list.append(i)
+
         return env_list
 
 

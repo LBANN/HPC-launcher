@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
+import subprocess
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -144,8 +145,7 @@ class FluxScheduler(Scheduler):
         script += 'export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n'
 
         if not blocking:
-            # Use the --parent flag to run under the existing allocation
-            script += 'flux --parent run '
+            script += 'flux run '
             script += ' '.join(cmd_string)
             script += ' '
 
@@ -162,13 +162,37 @@ class FluxScheduler(Scheduler):
         # The job ID is the only printout when calling flux batch
         return output.strip()
 
+    @classmethod
+    def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
+        env_vars = ['FLUX_JOB_SIZE', 'FLUX_TASK_RANK', 'FLUX_TASK_LOCAL_ID', 'FLUX_JOB_NNODES']
+        env = {}
+        for e in env_vars:
+            if not os.getenv(e):
+                msg = f'Unable to launch torchrun_hpc on FLUX scheduler - {e} not defined'
+                raise Exception(msg)
+            else:
+                env[e] = int(os.getenv(e))
+
+        world_size = env['FLUX_JOB_SIZE']
+        rank = env['FLUX_TASK_RANK']
+        local_rank = env['FLUX_TASK_LOCAL_ID']
+        nodes_per_job = env['FLUX_JOB_NNODES']
+        local_world_size = world_size // nodes_per_job
+        return (world_size, rank, local_world_size, local_rank)
+
+    @classmethod
+    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
+        if protocol.lower() == 'tcp':
+            command = 'flux hostlist local | /bin/hostlist -n 1'
+            master_addr = subprocess.check_output(command, shell=True, text=True).rstrip()
+            master_port = '23456'
+            return f'tcp://{master_addr}:{master_port}'
+        else:
+            msg = f'Unsupported rendezvous protocol {protocol}'
+            raise Exception(msg)
+
     def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
-        env_list.append(('MASTER_ADDR', '$(flux hostlist local | /bin/hostlist -n 1)'))
-        env_list.append(('MASTER_PORT', '23456'))
-        env_list.append(('RANK', '$FLUX_TASK_RANK'))
-        env_list.append(('WORLD_SIZE', '$FLUX_JOB_SIZE'))
-        env_list.append(('LOCAL_RANK', '$FLUX_TASK_LOCAL_ID'))
-        env_list.append(('LOCAL_WORLD_SIZE', '$(($FLUX_JOB_SIZE / $FLUX_JOB_NNODES))'))
-        env_list.append(('TOKENIZERS_PARALLELISM', 'false'))
+        env_list.append(('TORCHRUN_HPC_SCHEDULER', type(self).__name__))
+        env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', 'TCP'))
         return env_list

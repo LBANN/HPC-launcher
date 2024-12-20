@@ -30,9 +30,9 @@ setup(
             'launch = hpc_launcher.cli.launch:main',
         ],
     },
-    install_requires=["pytest"],
+    install_requires=["psutil"],
     extras_require={
-        'torch': ['torch'],
+        'torch': ['torch', 'numpy'],
         'mpi': ['mpi4py>=3.1.4'],
         'testing': ['pytest'],
     },
