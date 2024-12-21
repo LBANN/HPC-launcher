@@ -14,7 +14,14 @@
 import argparse
 from hpc_launcher.cli import common_args, launch_helpers
 from hpc_launcher.schedulers import get_schedulers
+from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.schedulers.local import LocalScheduler
+
+try:
+    import mpi4py
+    mpi = True
+except (ImportError, ModuleNotFoundError):
+    mpi = None
 
 import logging
 import os
@@ -30,6 +37,11 @@ def main():
         'A wrapper script that launches and runs distributed PyTorch on HPC systems.'
     )
     common_args.setup_arguments(parser)
+    parser.add_argument('-r',
+                       '--rdv',
+                       default=None,
+                       help='Specifies rendezvous protocol to use: mpi | tcp')
+
 
     # Grab the rest of the command line to launch
     parser.add_argument('command', help='Command to be executed')
@@ -48,7 +60,21 @@ def main():
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
 
-    env_list = scheduler.setup_rendezvous_protocol('TCP')
+    if args.rdv is None:
+        if mpi:
+            env_list = scheduler.setup_rendezvous_protocol('mpi')
+        else:
+            env_list = scheduler.setup_rendezvous_protocol('tcp')
+    else:
+        if args.rdv == 'mpi':
+            if not mpi:
+                raise Exception('MPI rendezvous requested but not available')
+            else:
+                env_list = scheduler.setup_rendezvous_protocol('mpi')
+        elif args.rdv == 'tcp':
+            env_list = scheduler.setup_rendezvous_protocol('tcp')
+        else:
+            raise Exception(f'Unknown rendezvous {args.rdv} requested.')
 
     system.extend_environment_variables(env_list)
 
@@ -78,6 +104,8 @@ def main():
     command = sys.executable
     launch_args = ['-u', f'{os.path.abspath(folder_name)}/{stub_file}', os.path.abspath(args.command)]
     launch_args += args.args
+
+    logger.info(f'Running job in directory: {folder_name}')
 
     jobid = scheduler.launch(system, folder_name, script_file,
                              command, launch_args, not args.bg,

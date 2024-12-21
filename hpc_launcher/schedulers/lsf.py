@@ -14,6 +14,7 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
+import os
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -48,6 +49,9 @@ class LSFScheduler(Scheduler):
         header.write('#!/bin/sh\n')
         cmd_args = []
         parallel_run_args = []
+
+        if blocking and os.getenv('LSB_HOSTS'):
+            header.write('\n# WARNING this script is constructed to run inside of a bsub -Is\n\n')
 
         # Number of Nodes
         parallel_run_args += [f'--nrs={self.nodes}']
@@ -93,7 +97,8 @@ class LSFScheduler(Scheduler):
 
         if self.launcher_flags:
             for flag in self.launcher_flags:
-                cmd_args.append(flag)
+                # Append these to the actual parallel run command
+                parallel_run_args.append(flag)
 
         for k, v in env_vars:
             header.write(f'export {k}={v}\n')
@@ -112,8 +117,11 @@ class LSFScheduler(Scheduler):
 
         if not blocking:
             return ['bsub'] + cmd_args
-
-        return ['bsub', '-Is'] + cmd_args
+        else:
+            if os.getenv('LSB_HOSTS'):
+                return ['jsrun'] + parallel_run_args
+            else:
+                return ['bsub', '-Is'] + cmd_args
 
     def launcher_script(self,
                         system: 'System',
@@ -126,9 +134,9 @@ class LSFScheduler(Scheduler):
         (header_lines, cmd_string, parallel_run_args) = self.build_command_string_and_batch_script(system, blocking)
         script += header_lines
         script += '\n'
+        script += "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n\n"
 
-
-        if not blocking or blocking:
+        if not blocking or (blocking and not os.getenv('LSB_HOSTS')):
             script += 'jsrun '
             script += ' '.join(parallel_run_args)
             script += ' '
@@ -144,3 +152,34 @@ class LSFScheduler(Scheduler):
 
     def get_job_id(self, output: str) -> Optional[str]:
         raise NotImplementedError
+
+    @classmethod
+    def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
+        env_vars = ['OMPI_COMM_WORLD_SIZE', 'OMPI_COMM_WORLD_RANK', 'OMPI_COMM_WORLD_LOCAL_RANK', 'OMPI_COMM_WORLD_LOCAL_SIZE']
+        env = {}
+        for e in env_vars:
+            if not os.getenv(e):
+                msg = f'Unable to launch torchrun_hpc on LSF scheduler - {e} not defined'
+                raise Exception(msg)
+            else:
+                env[e] = int(os.getenv(e))
+
+        world_size = env['OMPI_COMM_WORLD_SIZE']
+        rank = env['OMPI_COMM_WORLD_RANK']
+        local_rank = env['OMPI_COMM_WORLD_LOCAL_RANK']
+        local_world_size = env['OMPI_COMM_WORLD_LOCAL_SIZE']
+        return (world_size, rank, local_world_size, local_rank)
+
+    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> list[str]:
+        env_list = []
+        if protocol.lower() == 'tcp':
+            env_list.append(('TORCHRUN_HPC_MASTER_ADDR', '`jsrun --nrs 1 -r 1 /bin/hostname`'))
+            env_list.append(('TORCHRUN_HPC_MASTER_PORT', '23456'))
+            return env_list
+        elif protocol.lower() == 'mpi':
+            # To use MPI, pass `init_method="mpi://"` - no special work here.
+            return env_list
+        else:
+            msg = f'Unsupported rendezvous protocol {protocol}'
+            raise Exception(msg)
+

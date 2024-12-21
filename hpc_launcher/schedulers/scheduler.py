@@ -158,8 +158,7 @@ class Scheduler:
         """
         raise NotImplementedError
 
-    @classmethod
-    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
+    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> list[str]:
         """
         Configure the rendezvous protocol at runtime for a tool like PyTorch to establish
         distributed communication.
@@ -178,7 +177,17 @@ class Scheduler:
         :param protocol: Field to select which protocol to use for the rendezvous
         :return: A list of strings that are added to the torchrun-hpc launch environment.
         """
-        return []
+        env_list = []
+        env_list.append(('TORCHRUN_HPC_SCHEDULER', type(self).__name__))
+        env_list.extend(self.dynamically_configure_rendezvous_protocol(protocol))
+        if protocol.lower() == 'tcp':
+            env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', '\"tcp://${TORCHRUN_HPC_MASTER_ADDR}:${TORCHRUN_HPC_MASTER_PORT}\"'))
+        elif protocol.lower() == 'mpi':
+            env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', 'mpi://'))
+        else:
+            msg = f'Unsupported rendezvous protocol {protocol}'
+            raise Exception(msg)
+        return env_list
 
     def create_launch_folder_name(self,
                                   command: str,

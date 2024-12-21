@@ -14,6 +14,7 @@
 import pytest
 
 import subprocess
+import shutil
 import os
 import re
 import sys
@@ -59,7 +60,7 @@ def test_launcher_one_node(local):
     assert proc.returncode == 0
 
 
-def test_launcher_twonodes():
+def launcher_test_framework(cmd, rdv):
     try:
         import torch
     except (ImportError, ModuleNotFoundError):
@@ -69,14 +70,15 @@ def test_launcher_twonodes():
         pytest.skip("No distributed launcher found")
 
     # Get full path to torch_dist_driver.py
-    driver_file = os.path.join(os.path.dirname(__file__),
-                               "torch_dist_driver.py")
+    # driver_file = os.path.join(os.path.dirname(__file__),
+    #                            "torch_dist_driver.py")
 
-    cmd = [
-        sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v", "-N2",
-        "-n1", driver_file
-    ]
+    # cmd = [
+    #     sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v", "-N2",
+    #     "-n1", driver_file
+    # ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
+    exp_dir = None
     m = re.search(r'^.*Script filename: (\S+)$', proc.stderr,
                   re.MULTILINE | re.DOTALL)
     if m:
@@ -112,4 +114,35 @@ def test_launcher_twonodes():
     else:
         assert False, f'Unable to find expected hostlist: hpc_launcher_hostlist.txt'
 
+    regex = re.compile('.*Initializing distributed PyTorch using protocol: ({})://.*'.format(rdv), re.MULTILINE | re.DOTALL)
+    match = regex.match(proc.stdout)
+    if match:
+        assert match.group(1) == rdv, f'{match.group(1)} is the incorrect rendezvous protocol: requested {rdv}'
+    else:
+        assert False, f'Unable to detect a valid rendezvous protocol for test {rdv}'
     assert proc.returncode == 0
+
+    if exp_dir:
+        shutil.rmtree(exp_dir, ignore_errors=True)
+
+def test_tcp_launcher():
+    # Get full path to torch_dist_driver.py
+    driver_file = os.path.join(os.path.dirname(__file__),
+                               "torch_dist_driver.py")
+
+    cmd = [
+        sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v", "-N2",
+        "-n1", "-rtcp", driver_file
+    ]
+    launcher_test_framework(cmd, 'tcp')
+
+def test_mpi_launcher():
+    # Get full path to torch_dist_driver.py
+    driver_file = os.path.join(os.path.dirname(__file__),
+                               "torch_dist_driver.py")
+
+    cmd = [
+        sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v", "-N2",
+        "-n1", "-rmpi", driver_file
+    ]
+    launcher_test_framework(cmd, 'mpi')

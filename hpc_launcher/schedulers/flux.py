@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
-import subprocess
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -192,21 +191,15 @@ class FluxScheduler(Scheduler):
         local_world_size = world_size // nodes_per_job
         return (world_size, rank, local_world_size, local_rank)
 
-    @classmethod
-    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
+    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> list[str]:
+        env_list = []
         if protocol.lower() == 'tcp':
-            command = 'flux hostlist local | /bin/hostlist -n 1'
-            master_addr = subprocess.check_output(command,
-                                                  shell=True,
-                                                  text=True).rstrip()
-            master_port = '23456'
-            return f'tcp://{master_addr}:{master_port}'
+            env_list.append(('TORCHRUN_HPC_MASTER_ADDR', '`flux hostlist local | /bin/hostlist -n 1`'))
+            env_list.append(('TORCHRUN_HPC_MASTER_PORT', '23456'))
+            return env_list
+        elif protocol.lower() == 'mpi':
+            # To use MPI, pass `init_method="mpi://"` - no special work here.
+            return env_list
         else:
             msg = f'Unsupported rendezvous protocol {protocol}'
             raise Exception(msg)
-
-    def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
-        env_list = []
-        env_list.append(('TORCHRUN_HPC_SCHEDULER', type(self).__name__))
-        env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', protocol))
-        return env_list

@@ -60,13 +60,14 @@ class Sierra(System):
 
         return env_list
 
-    def customize_scheduler(self, scheduler: LSFScheduler):
+    def customize_scheduler(self, scheduler):
         cores_per_socket = 16
         procs_per_node = 2
         procs_per_socket = (procs_per_node + 1) // 2
         cores_per_proc = cores_per_socket // procs_per_socket
-        scheduler.launcher_flags = ['--bind packed:{}'.format(cores_per_proc),
-                                    '--smpiargs="-gpu"']
+        if isinstance(scheduler, LSFScheduler):
+            scheduler.launcher_flags = ['--bind=packed:{}'.format(cores_per_proc),
+                                        '--smpiargs="-gpu"']
         return
 
     @property

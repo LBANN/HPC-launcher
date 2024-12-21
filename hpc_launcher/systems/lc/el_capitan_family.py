@@ -64,7 +64,11 @@ class ElCapitan(System):
         if different_ofi_plugin is not None:
             env_list.append(('LD_LIBRARY_PATH', different_ofi_plugin + ':${LD_LIBRARY_PATH}'))
 
-        env_list.append(('MPICH_OFI_NIC_POLICY', 'GPU'))
+        # Despite this being recommended by JohnG, currently disable it since it is causing
+        # crashes in mpi4py
+        # env_list.append(('MPICH_OFI_NIC_POLICY', 'GPU'))
+        # env_list.append(('MPICH_OFI_NIC_VERBOSE', '2'))
+        # env_list.append(('MPICH_GPU_SUPPORT_ENABLED', '1'))
         env_list.append(('OMP_NUM_THREADS', '21'))
         env_list.append(('OMP_PLACES', 'threads'))
         env_list.append(('OMP_PROC_BIND', 'spread'))
@@ -75,15 +79,15 @@ class ElCapitan(System):
         for i in self._aux_env_list:
             env_list.append(i)
 
-        # add -fastload
-
         return env_list
 
     def customize_scheduler(self, scheduler):
         use_this_rccl=os.getenv('LBANN_USE_THIS_RCCL')
         scheduler.launcher_flags = ['--exclusive']
+        # scheduler.launcher_flags = ['--exclusive', '-ofastload']
         if type(scheduler) is FluxScheduler:
             # Performance tuning for HPE Slingshot Cassini NIC
+            scheduler.launcher_flags.append('-ofastload')
             scheduler.launcher_flags.append('--setattr=rdzv_get_en=0')
 
         if use_this_rccl is not None:
