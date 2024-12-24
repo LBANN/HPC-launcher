@@ -13,15 +13,19 @@
 # SPDX-License-Identifier: (Apache-2.0)
 import pytest
 import hpc_launcher
-# import torch.distributed as dist
 
-# import torch
 import subprocess
 import os
 import re
+import sys
 
 def test_launcher():
-    cmd = ["torchrun-hpc", "-v",  "-N2", "-n1",  "torch_dist_test.py"]
+    try:
+        import torch
+    except (ImportError, ModuleNotFoundError):
+        pytest.skip("torch not found")
+
+    cmd = [sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v",  "-N1", "-n2",  "torch_dist_driver.py"]
     proc = subprocess.run(cmd,
                           universal_newlines = True,
                           capture_output=True)
