@@ -34,6 +34,6 @@ setup(
     extras_require={
         'torch': ['torch', 'numpy'],
         'mpi': ['mpi4py>=3.1.4'],
-        'testing': ['pytest'],
+        'testing': ['pytest', 'numpy'],
     },
 )
