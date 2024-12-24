@@ -36,7 +36,10 @@ class LocalScheduler(Scheduler):
             f'export {k}={v}'
             for k, v in system.passthrough_environment_variables()
         ]
-        envvars += ['export HPC_LAUNCHER_HOSTLIST=$(hostname)']
+        envvars += [
+            'export RANK=0',
+            'export HPC_LAUNCHER_HOSTLIST=$(hostname)',
+        ]
         header = '\n'.join(envvars)
 
         if self.work_dir:
