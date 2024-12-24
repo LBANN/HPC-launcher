@@ -19,7 +19,9 @@ class LocalScheduler(Scheduler):
     in ``--local`` jobs.
     """
 
-    def launch_command(self, system: 'System', blocking: bool = True) -> list[str]:
+    def launch_command(self,
+                       system: 'System',
+                       blocking: bool = True) -> list[str]:
         return []
 
     def launcher_script(self,
@@ -34,6 +36,7 @@ class LocalScheduler(Scheduler):
             f'export {k}={v}'
             for k, v in system.passthrough_environment_variables()
         ]
+        envvars += ['export HPC_LAUNCHER_HOSTLIST=$(hostname)']
         header = '\n'.join(envvars)
 
         if self.work_dir:
@@ -49,3 +52,16 @@ class LocalScheduler(Scheduler):
 
     def get_job_id(self, output: str) -> Optional[str]:
         return None
+
+    @classmethod
+    def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
+        return 1, 0, 1, 0
+
+    @classmethod
+    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
+        os.environ['MASTER_ADDR'] = 'localhost'
+        os.environ['MASTER_PORT'] = '23456'
+        os.environ['WORLD_SIZE'] = '1'
+        os.environ['RANK'] = '0'
+        os.environ['LOCAL_RANK'] = '0'
+        return 'env://'

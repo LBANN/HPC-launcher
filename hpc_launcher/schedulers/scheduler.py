@@ -170,7 +170,6 @@ class Scheduler:
         """
         raise NotImplementedError
 
-    @property
     def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
         """
         Setup a protocol for a tool like PyTorch to use to establish
