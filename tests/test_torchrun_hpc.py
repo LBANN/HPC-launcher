@@ -39,7 +39,7 @@ def test_launcher_one_node(local):
         "--local" if local else "-n1", "-N1", driver_file
     ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
-    m = re.search('^.*Script filename: (\S+)$', proc.stderr,
+    m = re.search(r'^.*Script filename: (\S+)$', proc.stderr,
                   re.MULTILINE | re.DOTALL)
     if m:
         script = m.group(1)
@@ -77,7 +77,7 @@ def test_launcher_twonodes():
         "-n1", driver_file
     ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
-    m = re.search('^.*Script filename: (\S+)$', proc.stderr,
+    m = re.search(r'^.*Script filename: (\S+)$', proc.stderr,
                   re.MULTILINE | re.DOTALL)
     if m:
         script = m.group(1)
