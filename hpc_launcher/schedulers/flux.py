@@ -27,6 +27,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class FluxScheduler(Scheduler):
 
@@ -34,7 +35,7 @@ class FluxScheduler(Scheduler):
                                     tmp: list[str],
                                     header: StringIO,
                                     cmd_args: list[str],
-                                    blocking: bool = True) ->None:
+                                    blocking: bool = True) -> None:
         if blocking:
             cmd_args += tmp
         else:
@@ -43,7 +44,8 @@ class FluxScheduler(Scheduler):
 
     def build_command_string_and_batch_script(self,
                                               system: 'System',
-                                              blocking: bool = True) -> (str, list[str]):
+                                              blocking: bool = True
+                                              ) -> (str, list[str]):
 
         env_vars = system.environment_variables()
         passthrough_env_vars = system.passthrough_environment_variables()
@@ -104,7 +106,9 @@ class FluxScheduler(Scheduler):
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.reservation:
-            logger.warning(f'WARNING: Unsupported option requested: --reservation={self.reservation}')
+            logger.warning(
+                f'WARNING: Unsupported option requested: --reservation={self.reservation}'
+            )
 
         if self.launcher_flags:
             for flag in self.launcher_flags:
@@ -122,9 +126,12 @@ class FluxScheduler(Scheduler):
 
         return (header.getvalue(), cmd_args)
 
-    def launch_command(self, system: 'System', blocking: bool = True) -> list[str]:
+    def launch_command(self,
+                       system: 'System',
+                       blocking: bool = True) -> list[str]:
         # Launch command only use the cmd_args to construct the shell script to be launched
-        (header_lines, cmd_args) = self.build_command_string_and_batch_script(system, blocking)
+        (header_lines, cmd_args) = self.build_command_string_and_batch_script(
+            system, blocking)
 
         if not blocking:
             return ['flux', 'batch'] + cmd_args
@@ -139,7 +146,9 @@ class FluxScheduler(Scheduler):
 
         script = ''
         # Launcher script only use the header_lines to construct the shell script to be launched
-        (header_lines, cmd_string) = self.build_command_string_and_batch_script(system, blocking)
+        (header_lines,
+         cmd_string) = self.build_command_string_and_batch_script(
+             system, blocking)
         script += header_lines
         script += '\n'
         script += 'export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n'
@@ -164,7 +173,10 @@ class FluxScheduler(Scheduler):
 
     @classmethod
     def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
-        env_vars = ['FLUX_JOB_SIZE', 'FLUX_TASK_RANK', 'FLUX_TASK_LOCAL_ID', 'FLUX_JOB_NNODES']
+        env_vars = [
+            'FLUX_JOB_SIZE', 'FLUX_TASK_RANK', 'FLUX_TASK_LOCAL_ID',
+            'FLUX_JOB_NNODES'
+        ]
         env = {}
         for e in env_vars:
             if not os.getenv(e):
@@ -184,7 +196,9 @@ class FluxScheduler(Scheduler):
     def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
         if protocol.lower() == 'tcp':
             command = 'flux hostlist local | /bin/hostlist -n 1'
-            master_addr = subprocess.check_output(command, shell=True, text=True).rstrip()
+            master_addr = subprocess.check_output(command,
+                                                  shell=True,
+                                                  text=True).rstrip()
             master_port = '23456'
             return f'tcp://{master_addr}:{master_port}'
         else:
@@ -194,5 +208,5 @@ class FluxScheduler(Scheduler):
     def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
         env_list.append(('TORCHRUN_HPC_SCHEDULER', type(self).__name__))
-        env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', 'TCP'))
+        env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', protocol))
         return env_list

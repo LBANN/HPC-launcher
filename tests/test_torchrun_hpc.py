@@ -12,24 +12,77 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 import pytest
-import hpc_launcher
-# import torch.distributed as dist
 
-# import torch
 import subprocess
 import os
 import re
+import sys
+import shutil
 
-def test_launcher():
-    cmd = ["torchrun-hpc", "-v",  "-N2", "-n1",  "torch_dist_test.py"]
-    proc = subprocess.run(cmd,
-                          universal_newlines = True,
-                          capture_output=True)
-    m = re.search('^.*Script filename: (\S+)$', proc.stderr, re.MULTILINE | re.DOTALL)
+
+@pytest.mark.parametrize("local", [True, False])
+def test_launcher_one_node(local):
+    try:
+        import torch
+    except (ImportError, ModuleNotFoundError):
+        pytest.skip("torch not found")
+    if (not local and not shutil.which("srun") and not shutil.which("flux")
+            and not shutil.which("jsrun")):
+        pytest.skip("No distributed launcher found")
+
+    # Get full path to torch_dist_driver.py
+    driver_file = os.path.join(os.path.dirname(__file__),
+                               "torch_dist_driver.py")
+
+    cmd = [
+        sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v",
+        "--local" if local else "-n1", "-N1", driver_file
+    ]
+    proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
+    m = re.search(r'^.*Script filename: (\S+)$', proc.stderr,
+                  re.MULTILINE | re.DOTALL)
     if m:
         script = m.group(1)
         exp_dir = os.path.dirname(script)
-        hostlist = exp_dir + "/hpc_launcher_hostlist.txt"
+        hostlist = os.path.join(exp_dir, "hpc_launcher_hostlist.txt")
+        with open(hostlist) as f:
+            s = f.read()
+            hostname = s.strip()
+            match = re.search(r'\s*(\S+)\s+reporting it is rank\s+(\S+)\s*',
+                              proc.stdout)
+            if match:
+                assert match.group(
+                    1) == hostname, f'Hostname mismatch in test {exp_dir}'
+    else:
+        assert False, f'Unable to find expected hostlist: hpc_launcher_hostlist.txt'
+
+    assert proc.returncode == 0
+
+
+def test_launcher_twonodes():
+    try:
+        import torch
+    except (ImportError, ModuleNotFoundError):
+        pytest.skip("torch not found")
+    if (not shutil.which("srun") and not shutil.which("flux")
+            and not shutil.which("jsrun")):
+        pytest.skip("No distributed launcher found")
+
+    # Get full path to torch_dist_driver.py
+    driver_file = os.path.join(os.path.dirname(__file__),
+                               "torch_dist_driver.py")
+
+    cmd = [
+        sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v", "-N2",
+        "-n1", driver_file
+    ]
+    proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
+    m = re.search(r'^.*Script filename: (\S+)$', proc.stderr,
+                  re.MULTILINE | re.DOTALL)
+    if m:
+        script = m.group(1)
+        exp_dir = os.path.dirname(script)
+        hostlist = os.path.join(exp_dir, "hpc_launcher_hostlist.txt")
         with open(hostlist) as f:
             s = f.read()
             s = s.strip("]\n")
@@ -39,14 +92,19 @@ def test_launcher():
             for i in instances:
                 hosts += [hostname + i]
 
-
             i = 0
             for h in hosts:
-                regex = re.compile('.*({}) reporting it is rank ({}).*'.format(h, i), re.MULTILINE | re.DOTALL)
+                regex = re.compile(
+                    '.*({}) reporting it is rank ({}).*'.format(h, i),
+                    re.MULTILINE | re.DOTALL)
                 match = regex.match(proc.stdout)
                 if match:
-                    assert match.group(2) != i, f'{match.group(1)} has the incorrect rank in test {exp_dir}'
-                    print(f'\n{match.group(1)} is correctly reporting that it was assigned rank {match.group(2)}')
+                    assert match.group(
+                        2
+                    ) != i, f'{match.group(1)} has the incorrect rank in test {exp_dir}'
+                    print(
+                        f'\n{match.group(1)} is correctly reporting that it was assigned rank {match.group(2)}'
+                    )
                     i += 1
                 else:
                     assert False, f'{h} not found in output in test {exp_dir}'
@@ -54,4 +112,4 @@ def test_launcher():
     else:
         assert False, f'Unable to find expected hostlist: hpc_launcher_hostlist.txt'
 
-    assert(proc.returncode == 0)
+    assert proc.returncode == 0

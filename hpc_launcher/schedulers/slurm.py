@@ -214,5 +214,5 @@ class SlurmScheduler(Scheduler):
     def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
         env_list.append(('TORCHRUN_HPC_SCHEDULER', type(self).__name__))
-        env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', 'TCP'))
+        env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', protocol))
         return env_list
