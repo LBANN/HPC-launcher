@@ -45,6 +45,9 @@ def test_launcher_one_node(local):
         script = m.group(1)
         exp_dir = os.path.dirname(script)
         hostlist = os.path.join(exp_dir, "hpc_launcher_hostlist.txt")
+        if not os.path.exists(hostlist):
+            print(".:", os.listdir("."))
+            print(exp_dir, ":", os.listdir(exp_dir))
         with open(hostlist) as f:
             s = f.read()
             hostname = s.strip()
