@@ -158,7 +158,7 @@ class Scheduler:
         """
         raise NotImplementedError
 
-    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> list[str]:
+    def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
         """
         Configure the rendezvous protocol at runtime for a tool like PyTorch to establish
         distributed communication.
@@ -298,7 +298,7 @@ class Scheduler:
         logger.info(f'Script filename: {filename}')
         with open(filename, 'w') as fp:
             fp.write(self.launcher_script(system, command, args, blocking))
-            fp.write('\nif [ "${RANK}" = "0" ]; then')
+            fp.write('\nif [[ ${RANK} -eq 0 ]]; then')
             fp.write('\n    echo ${HPC_LAUNCHER_HOSTLIST} > '
                      + os.path.join(os.path.dirname(filename), f'hpc_launcher_hostlist.txt\n'))
             fp.write('fi\n')

@@ -170,7 +170,7 @@ class LSFScheduler(Scheduler):
         local_world_size = env['OMPI_COMM_WORLD_LOCAL_SIZE']
         return (world_size, rank, local_world_size, local_rank)
 
-    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> list[str]:
+    def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
         if protocol.lower() == 'tcp':
             env_list.append(('TORCHRUN_HPC_MASTER_ADDR', '`jsrun --nrs 1 -r 1 /bin/hostname`'))
@@ -180,6 +180,6 @@ class LSFScheduler(Scheduler):
             # To use MPI, pass `init_method="mpi://"` - no special work here.
             return env_list
         else:
-            msg = f'Unsupported rendezvous protocol {protocol}'
+            msg = f'Unsupported rendezvous protocol {protocol} for scheduler {type(self).__name__}'
             raise Exception(msg)
 

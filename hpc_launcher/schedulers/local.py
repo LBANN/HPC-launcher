@@ -60,11 +60,12 @@ class LocalScheduler(Scheduler):
     def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
         return 1, 0, 1, 0
 
-    @classmethod
-    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '23456'
-        os.environ['WORLD_SIZE'] = '1'
-        os.environ['RANK'] = '0'
-        os.environ['LOCAL_RANK'] = '0'
-        return 'env://'
+    def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
+        env_list = []
+        if protocol.lower() == 'tcp':
+            env_list.append(('TORCHRUN_HPC_MASTER_ADDR', 'localhost'))
+            env_list.append(('TORCHRUN_HPC_MASTER_PORT', '23456'))
+            return env_list
+        else:
+            msg = f'Unsupported rendezvous protocol {protocol} for scheduler {type(self).__name__}'
+            raise Exception(msg)

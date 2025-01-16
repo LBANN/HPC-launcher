@@ -204,7 +204,7 @@ class SlurmScheduler(Scheduler):
         return (world_size, rank, local_world_size, local_rank)
 
     @classmethod
-    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
+    def dynamically_configure_rendezvous_protocol(self, protocol: str) -> str:
         env_list = []
         if protocol.lower() == 'tcp':
             env_list.append(('TORCHRUN_HPC_MASTER_ADDR', '`printenv SLURM_JOB_NODELIST | /bin/hostlist -n 1`'))
@@ -214,5 +214,5 @@ class SlurmScheduler(Scheduler):
             # To use MPI, pass `init_method="mpi://"` - no special work here.
             return env_list
         else:
-            msg = f'Unsupported rendezvous protocol {protocol}'
+            msg = f'Unsupported rendezvous protocol {protocol} for scheduler {type(self).__name__}'
             raise Exception(msg)
