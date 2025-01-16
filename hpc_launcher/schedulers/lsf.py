@@ -173,7 +173,11 @@ class LSFScheduler(Scheduler):
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
         if protocol.lower() == 'tcp':
-            env_list.append(('TORCHRUN_HPC_MASTER_ADDR', '`jsrun --nrs 1 -r 1 /bin/hostname`'))
+            if os.getenv('LSB_HOSTS'):
+                # When runing under an allocation use the current node as the coordinator
+                env_list.append(('TORCHRUN_HPC_MASTER_ADDR', os.getenv('HOSTNAME')))
+            else:
+                env_list.append(('TORCHRUN_HPC_MASTER_ADDR', '`jsrun --nrs 1 -r 1 /bin/hostname`'))
             env_list.append(('TORCHRUN_HPC_MASTER_PORT', '23456'))
             return env_list
         elif protocol.lower() == 'mpi':
