@@ -20,7 +20,7 @@ import torch
 try:
     import mpi4py
     # This will automatically register MPI for initialization.
-    import mpi_rndv
+    import mpi_rdv
     from mpi4py import MPI
     mpi = True
 except (ImportError, ModuleNotFoundError):

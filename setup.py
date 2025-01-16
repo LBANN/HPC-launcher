@@ -33,7 +33,7 @@ setup(
     install_requires=["psutil"],
     extras_require={
         'torch': ['torch', 'numpy'],
-        'mpi': ['mpi4py>=3.1.4', 'mpi_rndv'],
+        'mpi': ['mpi4py>=3.1.4', 'mpi_rdv'],
         'testing': ['pytest'],
     },
 )
