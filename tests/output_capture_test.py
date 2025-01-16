@@ -85,8 +85,8 @@ def test_output_capture_scheduler(scheduler_class, processes):
     outfile = open(os.path.join(launch_dir, 'out.log'), 'r').read()
     errfile = open(os.path.join(launch_dir, 'err.log'), 'r').read()
     assert outfile.count('output') == processes
-    if (scheduler_class is LSFScheduler or \
-        scheduler_class is SlurmScheduler and \
+    if ((scheduler_class is LSFScheduler or \
+        scheduler_class is SlurmScheduler) and \
         isinstance(autodetect.autodetect_current_system(), Sierra)) and \
         not os.getenv('LSB_HOSTS'):
         # bsub -Is has a bad behavior where the error stream is appended to the output stream
