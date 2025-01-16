@@ -84,7 +84,6 @@ class ElCapitan(System):
     def customize_scheduler(self, scheduler):
         use_this_rccl=os.getenv('LBANN_USE_THIS_RCCL')
         scheduler.launcher_flags = ['--exclusive']
-        # scheduler.launcher_flags = ['--exclusive', '-ofastload']
         if type(scheduler) is FluxScheduler:
             # Performance tuning for HPE Slingshot Cassini NIC
             scheduler.launcher_flags.append('-ofastload')
