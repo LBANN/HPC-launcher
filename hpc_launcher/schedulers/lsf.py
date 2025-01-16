@@ -172,6 +172,7 @@ class LSFScheduler(Scheduler):
 
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
+        env_list.append(('RANK', '${OMPI_COMM_WORLD_RANK}'))
         if protocol.lower() == 'tcp':
             if os.getenv('LSB_HOSTS'):
                 # When runing under an allocation use the current node as the coordinator

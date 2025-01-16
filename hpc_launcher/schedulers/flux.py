@@ -193,6 +193,7 @@ class FluxScheduler(Scheduler):
 
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
+        env_list.append(('RANK', '${FLUX_TASK_RANK}'))
         if protocol.lower() == 'tcp':
             env_list.append(('TORCHRUN_HPC_MASTER_ADDR', '`flux hostlist local | /bin/hostlist -n 1`'))
             env_list.append(('TORCHRUN_HPC_MASTER_PORT', '23456'))

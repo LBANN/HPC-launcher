@@ -206,6 +206,7 @@ class SlurmScheduler(Scheduler):
     @classmethod
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> str:
         env_list = []
+        env_list.append(('RANK', '${SLURM_PROCID}'))
         if protocol.lower() == 'tcp':
             env_list.append(('TORCHRUN_HPC_MASTER_ADDR', '`printenv SLURM_JOB_NODELIST | /bin/hostlist -n 1`'))
             env_list.append(('TORCHRUN_HPC_MASTER_PORT', '23456'))
