@@ -29,25 +29,20 @@ def check_hostlist_file(exp_dir: str, stdout_buffer, num_ranks):
         s = f.read()
         s = s.strip("]\n")
         cluster_list = re.split(r'[,\s]+', s)
-        print(f'I found cluster list {cluster_list}')
         hosts = []
         for cluster in cluster_list:
             if cluster == 'lassen710' and \
                ((isinstance(autodetect.autodetect_current_system(), Sierra)) or \
                 os.getenv('LSB_HOSTS')):
-                print(f'I am skippihng {cluster}')
                 continue
 
-            print(f'I am checking cluster {cluster}')
             if '[' in cluster:
                 (hostname, inst_array) = cluster.split("[")
-                print(f'I found hostname and inst {hostname}, {inst_array}')
                 # This only works up to two nodes
                 instances = re.split(r'[,-]+', inst_array)
                 for i in instances:
                     hosts.append(hostname + i)
             else:
-                print(f'I found cluster {cluster}')
                 hosts.append(cluster)
 
         i = 0
@@ -69,12 +64,10 @@ def check_hostlist_file(exp_dir: str, stdout_buffer, num_ranks):
                 matched.append(h)
                 i += 1
                 if i == num_ranks:
-                    print(f'Found {i} matches with matched hosts {matched}')
                     break
             else:
                 unmatched.append(h)
                 print(f'{h} not found in output in test {exp_dir} - only {i} found: {matched}')
-                # assert False, f'{h} not found in output in test {exp_dir} - only {i} found: {matched}'
 
         assert len(matched) == num_ranks, f'Incorrect number of ranks reported, required {num_ranks} -- matched: {matched} and unmatched: {unmatched}'
 
@@ -150,8 +143,3 @@ def test_launcher_multinode(num_nodes, procs_per_node, rdv):
 
     if exp_dir:
         shutil.rmtree(exp_dir, ignore_errors=True)
-
-    
-if __name__ == '__main__':
-    test_launcher_one_node(False)
-#    test_launcher_one_node(True)
