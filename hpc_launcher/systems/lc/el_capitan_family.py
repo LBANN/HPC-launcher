@@ -44,8 +44,6 @@ class ElCapitan(System):
 
 
     def environment_variables(self) -> list[tuple[str, str]]:
-#flux run --exclusive -N2 -n8 -c21 -g1 ...
-
         env_list = []
         env_list.append(('NCCL_NET_GDR_LEVEL', '3')) # From HPE to avoid hangs
         env_list.append(('NCCL_MIN_NCHANNELS', '24')) # From AMD to improve collective performance
@@ -64,11 +62,6 @@ class ElCapitan(System):
         if different_ofi_plugin is not None:
             env_list.append(('LD_LIBRARY_PATH', different_ofi_plugin + ':${LD_LIBRARY_PATH}'))
 
-        # Despite this being recommended by JohnG, currently disable it since it is causing
-        # crashes in mpi4py
-        # env_list.append(('MPICH_OFI_NIC_POLICY', 'GPU'))
-        # env_list.append(('MPICH_OFI_NIC_VERBOSE', '2'))
-        # env_list.append(('MPICH_GPU_SUPPORT_ENABLED', '1'))
         env_list.append(('OMP_NUM_THREADS', '21'))
         env_list.append(('OMP_PLACES', 'threads'))
         env_list.append(('OMP_PROC_BIND', 'spread'))
