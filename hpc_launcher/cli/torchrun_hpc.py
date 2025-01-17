@@ -42,6 +42,11 @@ def main():
                        default=None,
                        help='Specifies rendezvous protocol to use: mpi | tcp')
 
+    parser.add_argument('--fraction-max-gpu-mem',
+                       type=float,
+                       default=None,
+                       help='Use the torch.cuda.set_per_process_memory_fraction '
+                       'to limit how much GPU memory can be allocated.')
 
     # Grab the rest of the command line to launch
     parser.add_argument('command', help='Command to be executed')
@@ -75,6 +80,12 @@ def main():
             env_list = scheduler.setup_rendezvous_protocol('tcp')
         else:
             raise Exception(f'Unknown rendezvous {args.rdv} requested.')
+
+
+    if args.fraction_max_gpu_mem and args.fraction_max_gpu_mem != 1.0:
+        env_list.append(('TORCHRUN_HPC_MAX_GPU_MEM', args.fraction_max_gpu_mem))
+    else:
+        env_list.append(('TORCHRUN_HPC_MAX_GPU_MEM', system.active_system_params.fraction_max_gpu_mem))
 
     system.extend_environment_variables(env_list)
 

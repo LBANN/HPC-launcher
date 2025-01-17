@@ -19,7 +19,8 @@ import os
 
 # Known LC systems
 _mi250x_node =  SystemParams(64, 8, 'gfx90a', 64, 4, 4, 'flux')
-_mi300a_node =  SystemParams(96, 4, 'gfx942', 128, 4, 4, 'flux')
+# APUs can run into a snarl where they OOM if too much GPU memory is allocated
+_mi300a_node =  SystemParams(96, 4, 'gfx942', 128, 4, 4, 'flux', 0.8)
 _system_params = {
     'tioga':     ('pdebug',  {'pdebug' : _mi250x_node,
                               'mi300a' : _mi300a_node,
