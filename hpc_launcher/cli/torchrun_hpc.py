@@ -83,9 +83,9 @@ def main():
 
 
     if args.fraction_max_gpu_mem and args.fraction_max_gpu_mem != 1.0:
-        env_list.append(('FRACTION_MAX_GPU_MEM', args.fraction_max_gpu_mem))
+        env_list.append(('TORCHRUN_HPC_MAX_GPU_MEM', args.fraction_max_gpu_mem))
     else:
-        env_list.append(('FRACTION_MAX_GPU_MEM', system.active_system_params.fraction_max_gpu_mem))
+        env_list.append(('TORCHRUN_HPC_MAX_GPU_MEM', system.active_system_params.fraction_max_gpu_mem))
 
     system.extend_environment_variables(env_list)
 

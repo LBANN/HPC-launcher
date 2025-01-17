@@ -64,7 +64,7 @@ def main():
         print('MPI Implementation: {}'.format(MPI.Get_library_version()))
 
 
-    fraction_max_gpu_mem = float(os.getenv('FRACTION_MAX_GPU_MEM'))
+    fraction_max_gpu_mem = float(os.getenv('TORCHRUN_HPC_MAX_GPU_MEM'))
     if fraction_max_gpu_mem != 1.0:
         print(f'Setting the max GPU memory fraction to {fraction_max_gpu_mem}')
         torch.cuda.set_per_process_memory_fraction(fraction_max_gpu_mem)
