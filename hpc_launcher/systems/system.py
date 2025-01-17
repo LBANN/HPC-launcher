@@ -12,6 +12,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 from dataclasses import dataclass
+from typing import Optional
 import logging
 from hpc_launcher.schedulers.scheduler import Scheduler
 
@@ -36,10 +37,12 @@ class SystemParams:
     mem_per_gpu: int
     # Physical number of CPUs per node
     cpus_per_node: int
-    # String name of the Scheduler class
-    scheduler: str
     # Number of NUMA domains
     numa_domains: int
+    # String name of the Scheduler class
+    scheduler: str
+    # Optional system level guard to limit GPU/APU memory utilization
+    fraction_max_gpu_mem: Optional[float] = 1.0
 
     def print_params(self):
         logger.info(
@@ -70,6 +73,7 @@ class System:
         self.system_name = system_name
         self.default_queue = None
         self.system_params = None
+        self.active_system_params = None
         self.known_systems = known_systems
         if self.known_systems:
             if system_name in self.known_systems.keys():
@@ -125,6 +129,7 @@ class System:
                 params = self.system_params[self.default_queue]
             else:
                 params = self.system_params[queue]
+            self.active_system_params = params
             return params
         else:
             return None
