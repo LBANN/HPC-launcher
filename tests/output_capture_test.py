@@ -19,7 +19,9 @@ import sys
 from hpc_launcher.schedulers.local import LocalScheduler
 from hpc_launcher.schedulers.slurm import SlurmScheduler
 from hpc_launcher.schedulers.flux import FluxScheduler
-from hpc_launcher.systems import configure
+from hpc_launcher.schedulers.lsf import LSFScheduler
+from hpc_launcher.systems import autodetect, configure
+from hpc_launcher.systems.lc.sierra_family import Sierra
 
 
 def test_output_capture_local():
@@ -48,14 +50,18 @@ def test_output_capture_local():
     shutil.rmtree(launch_dir, ignore_errors=True)
 
 
-@pytest.mark.parametrize('scheduler_class', (SlurmScheduler, FluxScheduler))
+@pytest.mark.parametrize('scheduler_class', (SlurmScheduler, FluxScheduler, LSFScheduler))
 @pytest.mark.parametrize('processes', [1, 2])
 def test_output_capture_scheduler(scheduler_class, processes):
     if scheduler_class is SlurmScheduler and not shutil.which('srun'):
         pytest.skip('SLURM not available')
 
-    if scheduler_class is FluxScheduler and not shutil.which('flux'):
-        pytest.skip('SLURM not available')
+    if scheduler_class is FluxScheduler and (
+            not shutil.which('flux') or not os.path.exists('/run/flux/local')):
+        pytest.skip('FLUX not available')
+
+    if scheduler_class is LSFScheduler and not shutil.which('jsrun'):
+        pytest.skip('LSF not available')
 
     # Configure scheduler
     system, nodes, procs_per_node = configure.configure_launch(
@@ -79,7 +85,14 @@ def test_output_capture_scheduler(scheduler_class, processes):
     outfile = open(os.path.join(launch_dir, 'out.log'), 'r').read()
     errfile = open(os.path.join(launch_dir, 'err.log'), 'r').read()
     assert outfile.count('output') == processes
-    assert errfile.count('error') == processes
+    if ((scheduler_class is LSFScheduler or \
+        scheduler_class is SlurmScheduler) and \
+        isinstance(autodetect.autodetect_current_system(), Sierra)) and \
+        not os.getenv('LSB_HOSTS'):
+        # bsub -Is has a bad behavior where the error stream is appended to the output stream
+        assert outfile.count('error') == processes
+    else:
+        assert errfile.count('error') == processes
     shutil.rmtree(launch_dir, ignore_errors=True)
 
 
@@ -91,3 +104,6 @@ if __name__ == '__main__':
     if shutil.which('flux'):
         test_output_capture_scheduler(FluxScheduler, 1)
         test_output_capture_scheduler(FluxScheduler, 2)
+    if shutil.which('jsrun'):
+        test_output_capture_scheduler(LSFScheduler, 1)
+        test_output_capture_scheduler(LSFScheduler, 2)

@@ -13,6 +13,7 @@
 # SPDX-License-Identifier: (Apache-2.0)
 from unittest.mock import patch
 from hpc_launcher.systems.lc.el_capitan_family import ElCapitan
+from hpc_launcher.systems.lc.sierra_family import Sierra
 from hpc_launcher.systems.system import GenericSystem
 from hpc_launcher.systems.autodetect import (system, autodetect_current_system,
                                              clear_autodetected_system)
@@ -28,6 +29,11 @@ def test_system(mock_gethostname):
 def test_autodetect(mock_gethostname):
     clear_autodetected_system()
     assert isinstance(autodetect_current_system(), ElCapitan)
+
+@patch('socket.gethostname', return_value='lassen001')
+def test_autodetect(mock_gethostname):
+    clear_autodetected_system()
+    assert isinstance(autodetect_current_system(), Sierra)
 
 
 @patch('socket.gethostname', return_value='linux')

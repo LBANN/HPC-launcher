@@ -1,16 +1,10 @@
 from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.schedulers.lsf import LSFScheduler
 from hpc_launcher.systems.system import System, SystemParams
-#from hpc_launcher.systems.system import SystemParams
 import os
 
 
 # Supported LC systems
-# Note: There are actually 22 cores/socket, but it seems that
-# powers of 2 are better for performance.
-# cores_per_socket = 16
-# procs_per_socket = (procs_per_node + 1) // 2
-# cores_per_proc = cores_per_socket // procs_per_socket
 _sierra_node =  SystemParams(16, 4, 'sm_70', 16, 2, 2, 'lsf')
 _system_params = {
     'lassen':     ('pbatch',  {'pdebug' : _sierra_node,
@@ -60,13 +54,16 @@ class Sierra(System):
 
         return env_list
 
-    def customize_scheduler(self, scheduler: LSFScheduler):
+    def customize_scheduler(self, scheduler):
+        # Note: There are actually 22 cores/socket, but it seems that
+        # powers of 2 are better for performance.
         cores_per_socket = 16
         procs_per_node = 2
         procs_per_socket = (procs_per_node + 1) // 2
         cores_per_proc = cores_per_socket // procs_per_socket
-        scheduler.launcher_flags = ['--bind packed:{}'.format(cores_per_proc),
-                                    '--smpiargs="-gpu"']
+        if isinstance(scheduler, LSFScheduler):
+            scheduler.launcher_flags = ['--bind=packed:{}'.format(cores_per_proc),
+                                        '--smpiargs="-gpu"']
         return
 
     @property

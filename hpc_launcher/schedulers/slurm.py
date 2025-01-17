@@ -15,11 +15,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
-import subprocess
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
     from hpc_launcher.systems.system import System
+
+from hpc_launcher.systems.lc.sierra_family import Sierra
 
 from hpc_launcher.schedulers.scheduler import Scheduler
 
@@ -70,7 +71,8 @@ class SlurmScheduler(Scheduler):
             header.write(f'#SBATCH --error={self.err_log_file}\n')
 
         # Unbuffered output - Only pass to srun
-        if blocking:
+        if blocking and not isinstance(system, Sierra):
+            # On Sierra family systems srun is a proxy to lrun and lacks this flag
             cmd_args += ['-u']
 
         # Number of Nodes
@@ -157,6 +159,7 @@ class SlurmScheduler(Scheduler):
         # Configure header and command line with Slurm job options
         script += header_lines
         script += '\n'
+        script += 'export HPC_LAUNCHER_HOSTLIST=${SLURM_JOB_NODELIST}\n'
 
         if not blocking:
             script += 'srun -u '
@@ -201,18 +204,16 @@ class SlurmScheduler(Scheduler):
         return (world_size, rank, local_world_size, local_rank)
 
     @classmethod
-    def dynamically_configure_rendezvous_protocol(cls, protocol: str) -> str:
-        if protocol.lower() == 'tcp':
-            command = 'printenv SLURM_JOB_NODELIST | /bin/hostlist -n 1'
-            master_addr = subprocess.check_output(command, shell=True, text=True).rstrip()
-            master_port = '23456'
-            return f'tcp://{master_addr}:{master_port}'
-        else:
-            msg = f'Unsupported rendezvous protocol {protocol}'
-            raise Exception(msg)
-
-    def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
+    def dynamically_configure_rendezvous_protocol(self, protocol: str) -> str:
         env_list = []
-        env_list.append(('TORCHRUN_HPC_SCHEDULER', type(self).__name__))
-        env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', protocol))
-        return env_list
+        env_list.append(('RANK', '${SLURM_PROCID}'))
+        if protocol.lower() == 'tcp':
+            env_list.append(('TORCHRUN_HPC_MASTER_ADDR', '`printenv SLURM_JOB_NODELIST | /bin/hostlist -n 1`'))
+            env_list.append(('TORCHRUN_HPC_MASTER_PORT', '23456'))
+            return env_list
+        elif protocol.lower() == 'mpi':
+            # To use MPI, pass `init_method="mpi://"` - no special work here.
+            return env_list
+        else:
+            msg = f'Unsupported rendezvous protocol {protocol} for scheduler {type(self).__name__}'
+            raise Exception(msg)

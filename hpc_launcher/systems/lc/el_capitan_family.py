@@ -44,8 +44,6 @@ class ElCapitan(System):
 
 
     def environment_variables(self) -> list[tuple[str, str]]:
-#flux run --exclusive -N2 -n8 -c21 -g1 ...
-
         env_list = []
         env_list.append(('NCCL_NET_GDR_LEVEL', '3')) # From HPE to avoid hangs
         env_list.append(('NCCL_MIN_NCHANNELS', '24')) # From AMD to improve collective performance
@@ -64,7 +62,6 @@ class ElCapitan(System):
         if different_ofi_plugin is not None:
             env_list.append(('LD_LIBRARY_PATH', different_ofi_plugin + ':${LD_LIBRARY_PATH}'))
 
-        env_list.append(('MPICH_OFI_NIC_POLICY', 'GPU'))
         env_list.append(('OMP_NUM_THREADS', '21'))
         env_list.append(('OMP_PLACES', 'threads'))
         env_list.append(('OMP_PROC_BIND', 'spread'))
@@ -75,8 +72,6 @@ class ElCapitan(System):
         for i in self._aux_env_list:
             env_list.append(i)
 
-        # add -fastload
-
         return env_list
 
     def customize_scheduler(self, scheduler):
@@ -84,6 +79,7 @@ class ElCapitan(System):
         scheduler.launcher_flags = ['--exclusive']
         if type(scheduler) is FluxScheduler:
             # Performance tuning for HPE Slingshot Cassini NIC
+            scheduler.launcher_flags.append('-ofastload')
             scheduler.launcher_flags.append('--setattr=rdzv_get_en=0')
 
         if use_this_rccl is not None:
