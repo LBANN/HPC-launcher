@@ -22,6 +22,7 @@ from hpc_launcher.schedulers.local import LocalScheduler
 from hpc_launcher.systems.system import System, GenericSystem
 from hpc_launcher.systems import autodetect
 import logging
+import sys
 
 def setup_logging(logger: logging.Logger, verbose: bool):
     if verbose:
@@ -48,6 +49,7 @@ def select_scheduler(args: argparse.Namespace, logger: logging.Logger, system: S
 
     scheduler_args = common_args.create_scheduler_arguments(**vars(args))
     scheduler = scheduler_class(**scheduler_args)
+    scheduler.command_line = sys.argv
 
     logger.info(
         f'system parameters: node={scheduler.nodes} ppn={scheduler.procs_per_node}'

@@ -62,6 +62,8 @@ class Scheduler:
     launcher_flags: Optional[list[str]] = None
     # Hijack preload commands into a scheduler
     ld_preloads: Optional[list[str]] = None
+    # Capture the original command so that it can be added to the launch script
+    command_line: Optional[list[str]] = None
 
     def select_interactive_or_batch(self,
                                     tmp: list[str],
@@ -303,6 +305,7 @@ class Scheduler:
                      + os.path.join(os.path.dirname(filename), f'hpc_launcher_hostlist.txt\n'))
             fp.write('fi\n')
             fp.write(f'\n# Launch command: ' + ' '.join(full_cmdline) + '\n')
+            fp.write(f'# User command invoked: ' + ' '.join(self.command_line) + '\n')
         os.chmod(filename, 0o700)
 
         if setup_only:

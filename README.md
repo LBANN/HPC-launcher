@@ -11,6 +11,16 @@ SLURM, and LSF launchers.  Currently there are supported systems at:
 
 ## Example Usage
 
+Using the launch command to execute a command in parallel
+```
+launch -N1 -n1 hostname
+```
+
+Using the torchrun-hpc command to execute a PyTorch Python file in parallel
+```
+torchrun-hpc launch -N1 -n1 <file.py>
+```
+
 # LBANN: Livermore Big Artificial Neural Network Toolkit
 
 The Livermore Big Artificial Neural Network toolkit (LBANN) is an
