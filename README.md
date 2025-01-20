@@ -5,7 +5,7 @@ Python bindings for launching LBANN 2.0 (PyTorch-core) on multiple
 leadership-class HPC systems.  There are optimized routines for FLUX,
 SLURM, and LSF launchers.  Currently there are supported systems at:
  - LLNL Livermore Computing (LC)
- - LBL NERSC
+ - LBL NERSC (Pending)
  - ORNL OLCF (Pending)
  - RIKEN (Pending)
 
