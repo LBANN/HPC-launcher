@@ -16,9 +16,9 @@ Using the launch command to execute a command in parallel
 launch -N1 -n1 hostname
 ```
 
-Using the torchrun-hpc command to execute a PyTorch Python file in parallel
+Using the torchrun-hpc command to execute a PyTorch Python file in parallel on two nodes and four processes per node (8 in total):
 ```
-torchrun-hpc launch -N1 -n1 <file.py>
+torchrun-hpc -N2 -n4 file.py [arguments to Python file]
 ```
 
 # LBANN: Livermore Big Artificial Neural Network Toolkit
