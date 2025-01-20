@@ -21,6 +21,11 @@ Using the torchrun-hpc command to execute a PyTorch Python file in parallel on t
 torchrun-hpc -N2 -n4 file.py [arguments to Python file]
 ```
 
+Using HPC-Launcher within existing PyTorch code with explicity invoking it from the command line (CLI).  Within the top level Python file, import `hpc_launcher.torch` first to ensure that `torch` is configured per HPC-Launcher's specification.
+```
+import hpc_launcher.torch
+```
+
 # LBANN: Livermore Big Artificial Neural Network Toolkit
 
 The Livermore Big Artificial Neural Network toolkit (LBANN) is an
