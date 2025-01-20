@@ -97,8 +97,13 @@ class FluxScheduler(Scheduler):
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.queue:
-            tmp = [f'--queue={self.queue}']
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            if os.getenv('FLUX_URI'):
+                logger.warning(
+                    f'WARNING: Dropping unsupported option requested when running inside of an allocation: --queue={self.queue}'
+                )
+            else:
+                tmp = [f'--queue={self.queue}']
+                self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:
             tmp = [f'--account={self.account}']
