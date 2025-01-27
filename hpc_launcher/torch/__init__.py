@@ -13,13 +13,28 @@
 # SPDX-License-Identifier: (Apache-2.0)
 from psutil import Process
 
+affinity = None
+if (hasattr(Process, 'cpu_affinity') and inspect.isfunction(Process.cpu_affinity)):
+    print(f'BVE I think that I have a function here')
+    # Save affinity before importing torch
+    affinity = Process().cpu_affinity()
+else:
+    print(f'BVE I think that I do not have a function here')
+
+# if callable(getattr(Process,'cpu_affinity')):
+# if getattr(Process,'cpu_affinity'):
+#     print(f'BVE I think that I have a function here')
+# else:
+#     print(f'BVE I think that I do not have a function here')
+
 # Save affinity before importing torch
-affinity = Process().cpu_affinity()
+# affinity = Process().cpu_affinity()
 
 import torch
 
-# Restore affinity after importing torch
-Process().cpu_affinity(affinity)
+if affinity is not None:
+    # Restore affinity after importing torch
+    Process().cpu_affinity(affinity)
 import os
 
 if torch.cuda.is_available():
