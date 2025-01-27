@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
+import subprocess
+import re
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -180,6 +182,19 @@ class SlurmScheduler(Scheduler):
         last_line = output.strip().split('\n')[-1].strip()
         if last_line.startswith('Submitted batch job'):
             return last_line.split(' ')[-1]
+        return None
+
+    @classmethod
+    def num_nodes_in_allocation(cls) -> Optional[int]:
+        if os.getenv('FLUX_URI'):
+            cmd = ['flux', 'resource', 'info']
+            proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
+            m = re.search(r'^(\d*) Nodes, (\d*) Cores, (\d*) GPUs$', proc.stdout)
+            if m:
+                return int(m.group(1))
+        elif os.getenv('SLURM_STEP_NUM_NODES'):
+            return int(os.getenv('SLURM_STEP_NUM_NODES'))
+
         return None
 
     @classmethod

@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
+import subprocess
+import re
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -174,6 +176,17 @@ class FluxScheduler(Scheduler):
     def get_job_id(self, output: str) -> Optional[str]:
         # The job ID is the only printout when calling flux batch
         return output.strip()
+
+    @classmethod
+    def num_nodes_in_allocation(cls) -> Optional[int]:
+        if os.getenv('FLUX_URI'):
+            cmd = ['flux', 'resource', 'info']
+            proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
+            m = re.search(r'^(\d*) Nodes, (\d*) Cores, (\d*) GPUs$', proc.stdout)
+            if m:
+                return int(m.group(1))
+
+        return None
 
     @classmethod
     def get_parallel_configuration(cls) -> tuple[int, int, int, int]:

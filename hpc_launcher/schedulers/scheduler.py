@@ -150,6 +150,15 @@ class Scheduler:
         return None
 
     @classmethod
+    def num_nodes_in_allocation(cls) -> tuple[int]:
+        """
+        When running under an allocation, check how many nodes are available
+
+        :return: Number of nodes in an allocation
+        """
+        raise NotImplementedError
+
+    @classmethod
     def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
         """
         Using scheduler environment variables report the parallel configuration

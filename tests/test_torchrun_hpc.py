@@ -22,6 +22,7 @@ import shutil
 
 from hpc_launcher.systems import autodetect
 from hpc_launcher.systems.lc.sierra_family import Sierra
+from hpc_launcher.schedulers import get_schedulers
 
 def check_hostlist_file(exp_dir: str, stdout_buffer, num_ranks):
     hostlist = os.path.join(exp_dir, "hpc_launcher_hostlist.txt")
@@ -83,7 +84,7 @@ def test_launcher_one_node(local):
 
     # Get full path to torch_dist_driver.py
     driver_file = os.path.join(os.path.dirname(__file__),
-                               "torch_dist_driver.py")
+                               "torch_driver.py")
 
     cmd = [
         sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v",
@@ -105,14 +106,23 @@ def test_launcher_one_node(local):
 @pytest.mark.parametrize('num_nodes', [2])
 @pytest.mark.parametrize('procs_per_node', [1])
 @pytest.mark.parametrize('rdv', ('mpi', 'tcp'))
-def test_launcher_multinode(num_nodes, procs_per_node, rdv):
+@pytest.mark.parametrize('scheduler_type', ('flux', 'slurm', 'lsf'))
+def test_launcher_multinode(num_nodes, procs_per_node, rdv, scheduler_type):
+    if ((scheduler_type == 'slurm' and not shutil.which("srun")) or
+        (scheduler_type == 'flux' and (not shutil.which("flux") or
+                                       not os.path.exists('/run/flux/local'))) or
+        (scheduler_type == 'lsf' and not shutil.which("jsrun"))):
+        pytest.skip("No distributed launcher found")
+
+    scheduler = get_schedulers()[scheduler_type]
+    num_nodes_in_allocation = scheduler.num_nodes_in_allocation()
+    if not num_nodes_in_allocation is None and num_nodes_in_allocation == 1:
+        pytest.skip("Executed inside of an allocation with insufficient resources")
+
     try:
         import torch
     except (ImportError, ModuleNotFoundError):
         pytest.skip("torch not found")
-    if (not shutil.which("srun") and not shutil.which("flux")
-            and not shutil.which("jsrun")):
-        pytest.skip("No distributed launcher found")
 
     # Get full path to torch_dist_driver.py
     driver_file = os.path.join(os.path.dirname(__file__),
