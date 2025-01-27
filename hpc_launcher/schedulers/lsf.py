@@ -154,6 +154,14 @@ class LSFScheduler(Scheduler):
         raise NotImplementedError
 
     @classmethod
+    def num_nodes_in_allocation(cls) -> Optional[int]:
+        # LLNL_COMPUTE_NODES=lassen733
+        if os.getenv('LLNL_NUM_COMPUTE_NODES'):
+            return int(os.getenv('LLNL_NUM_COMPUTE_NODES'))
+
+        return None
+
+    @classmethod
     def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
         env_vars = ['OMPI_COMM_WORLD_SIZE', 'OMPI_COMM_WORLD_RANK', 'OMPI_COMM_WORLD_LOCAL_RANK', 'OMPI_COMM_WORLD_LOCAL_SIZE']
         env = {}
