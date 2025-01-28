@@ -314,7 +314,8 @@ class Scheduler:
                      + os.path.join(os.path.dirname(filename), f'hpc_launcher_hostlist.txt\n'))
             fp.write('fi\n')
             fp.write(f'\n# Launch command: ' + ' '.join(full_cmdline) + '\n')
-            fp.write(f'# User command invoked: ' + ' '.join(self.command_line) + '\n')
+            if self.command_line:
+                fp.write(f'# User command invoked: ' + ' '.join(self.command_line) + '\n')
         os.chmod(filename, 0o700)
 
         if setup_only:
