@@ -127,14 +127,16 @@ class LSFScheduler(Scheduler):
                         system: 'System',
                         command: str,
                         args: Optional[list[str]] = None,
-                        blocking: bool = True) -> str:
+                        blocking: bool = True,
+                        save_hostlist: bool = False) -> str:
 
         script = ''
         # Launcher script only use the header_lines to construct the shell script to be launched
         (header_lines, cmd_string, parallel_run_args) = self.build_command_string_and_batch_script(system, blocking)
         script += header_lines
         script += '\n'
-        script += "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n\n"
+        if save_hostlist:
+            script += "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n\n"
 
         if not blocking or (blocking and not os.getenv('LSB_HOSTS')):
             script += 'jsrun '
@@ -152,6 +154,13 @@ class LSFScheduler(Scheduler):
 
     def get_job_id(self, output: str) -> Optional[str]:
         raise NotImplementedError
+
+    @classmethod
+    def num_nodes_in_allocation(cls) -> Optional[int]:
+        if os.getenv('LLNL_NUM_COMPUTE_NODES'):
+            return int(os.getenv('LLNL_NUM_COMPUTE_NODES'))
+
+        return None
 
     @classmethod
     def get_parallel_configuration(cls) -> tuple[int, int, int, int]:

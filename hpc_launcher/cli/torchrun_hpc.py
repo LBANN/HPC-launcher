@@ -98,23 +98,24 @@ def main():
         )
         exit(1)
 
-    command_as_folder_name, folder_name = scheduler.create_launch_folder_name(args.command,
-                                                                                'torchrun_hpc',)
+    _, folder_name = scheduler.create_launch_folder_name(args.command,
+                                                         'torchrun_hpc',
+                                                         args.no_launch_dir)
 
     script_file = scheduler.create_launch_folder(folder_name,
                                                  not args.bg,
                                                  args.output_script,
-                                                 args.run_from_dir)
+                                                 args.run_from_launch_dir)
 
-    stub_file = 'torchrun_hpc_' + command_as_folder_name
+    trampoline_file = 'torchrun_hpc_trampoline.py'
 
     if os.path.exists(folder_name):
-        copied_stub_file = folder_name + '/' +  stub_file
+        copied_trampoline_file = folder_name + '/' +  trampoline_file
         package_path = os.path.dirname(os.path.abspath(__file__))
-        shutil.copy(os.path.join(package_path, 'torchrun_hpc_stub.py'), copied_stub_file)
+        shutil.copy(os.path.join(package_path, '..', 'torch', trampoline_file), copied_trampoline_file)
 
     command = sys.executable
-    launch_args = ['-u', f'{os.path.abspath(folder_name)}/{stub_file}', os.path.abspath(args.command)]
+    launch_args = ['-u', f'{os.path.abspath(folder_name)}/{trampoline_file}', os.path.abspath(args.command)]
     launch_args += args.args
 
     logger.info(f'Running job in directory: {folder_name}')
@@ -123,7 +124,8 @@ def main():
                              command, launch_args, not args.bg,
                              # args.output_script,
                              args.setup_only,
-                             args.color_stderr, args.run_from_dir)
+                             args.color_stderr, args.run_from_launch_dir,
+                             (args.save_hostlist or args.verbose))
 
     if jobid:
         logger.info(f'Job ID: {jobid}')

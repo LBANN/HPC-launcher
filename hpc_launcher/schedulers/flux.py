@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
+import subprocess
+import re
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -97,8 +99,13 @@ class FluxScheduler(Scheduler):
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.queue:
-            tmp = [f'--queue={self.queue}']
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            if os.getenv('FLUX_URI'):
+                logger.warning(
+                    f'WARNING: Dropping unsupported option requested when running inside of an allocation: --queue={self.queue}'
+                )
+            else:
+                tmp = [f'--queue={self.queue}']
+                self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:
             tmp = [f'--account={self.account}']
@@ -141,7 +148,8 @@ class FluxScheduler(Scheduler):
                         system: 'System',
                         command: str,
                         args: Optional[list[str]] = None,
-                        blocking: bool = True) -> str:
+                        blocking: bool = True,
+                        save_hostlist: bool = False) -> str:
 
         script = ''
         # Launcher script only use the header_lines to construct the shell script to be launched
@@ -150,7 +158,8 @@ class FluxScheduler(Scheduler):
              system, blocking)
         script += header_lines
         script += '\n'
-        script += 'export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n'
+        if save_hostlist:
+            script += 'export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n'
 
         if not blocking:
             script += 'flux run '
@@ -169,6 +178,17 @@ class FluxScheduler(Scheduler):
     def get_job_id(self, output: str) -> Optional[str]:
         # The job ID is the only printout when calling flux batch
         return output.strip()
+
+    @classmethod
+    def num_nodes_in_allocation(cls) -> Optional[int]:
+        if os.getenv('FLUX_URI'):
+            cmd = ['flux', 'resource', 'info']
+            proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
+            m = re.search(r'^(\d*) Nodes, (\d*) Cores, (\d*) GPUs$', proc.stdout)
+            if m:
+                return int(m.group(1))
+
+        return None
 
     @classmethod
     def get_parallel_configuration(cls) -> tuple[int, int, int, int]:

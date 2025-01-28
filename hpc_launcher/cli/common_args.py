@@ -44,7 +44,7 @@ def setup_arguments(parser: argparse.ArgumentParser):
                         '-v',
                         action='store_true',
                         default=False,
-                        help='Run in verbose mode')
+                        help='Run in verbose mode.  Also save the hostlist as if --save-hostlist is set')
 
     # Job size arguments
     group = parser.add_argument_group(
@@ -134,11 +134,19 @@ def setup_arguments(parser: argparse.ArgumentParser):
                                       'Batch scheduler script parameters')
 
     group.add_argument(
-        '--run-from-dir',
+        '--run-from-launch-dir',
         action='store_true',
         default=False,
         help='If set, the launcher will run the command from the timestamped '
         'launch directory')
+
+    group.add_argument(
+        '--no-launch-dir',
+        action='store_true',
+        default=False,
+        help='If set, the launcher will not create a timestamped launch directory. '
+        'Instead, it will create the launch file and logs in the current working '
+        'directory')
 
     group.add_argument(
         '-o',
@@ -170,6 +178,11 @@ def setup_arguments(parser: argparse.ArgumentParser):
         help='Add a reservation arguement to scheduler.  '
         'Typically used for Dedecated Application Time runs (DATs)')
 
+    group.add_argument(
+        '--save-hostlist',
+        action='store_true',
+        default=False,
+        help='Write the hostlist to a file: hpc_launcher_hostlist.txt.')
 
 def validate_arguments(args: argparse.Namespace):
     """
@@ -211,9 +224,9 @@ def validate_arguments(args: argparse.Namespace):
     if args.local and args.scheduler:
         raise ValueError('The --local and --scheduler flags are mutually '
                          'exclusive')
-    if args.work_dir and args.run_from_dir:
+    if args.work_dir and args.run_from_launch_dir:
         raise ValueError(
-            'The --work-dir and --run-from-dir flags are mutually '
+            'The --work-dir and --run-from-launch-dir flags are mutually '
             'exclusive')
 
 # See if the system can be autodetected and then process some special arguments

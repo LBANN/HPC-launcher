@@ -24,7 +24,8 @@ from hpc_launcher.systems import autodetect, configure
 from hpc_launcher.systems.lc.sierra_family import Sierra
 
 
-def test_output_capture_local():
+@pytest.mark.parametrize('no_launch_dir', [False, True])
+def test_output_capture_local(no_launch_dir: bool):
     # Configure scheduler
     system, nodes, procs_per_node = configure.configure_launch(
         None, 1, 1, None, None)
@@ -32,7 +33,7 @@ def test_output_capture_local():
 
     command = sys.executable
     script = 'output_capture.py'
-    _, launch_dir = scheduler.create_launch_folder_name(command, 'launch')
+    _, launch_dir = scheduler.create_launch_folder_name(command, 'launch', no_launch_dir)
 
     script_file = scheduler.create_launch_folder(launch_dir,
                                                  True)
@@ -47,7 +48,12 @@ def test_output_capture_local():
     assert os.path.isfile(os.path.join(launch_dir, 'err.log'))
     assert open(os.path.join(launch_dir, 'out.log'), 'r').read() == 'output\n'
     assert open(os.path.join(launch_dir, 'err.log'), 'r').read() == 'error\n'
-    shutil.rmtree(launch_dir, ignore_errors=True)
+    if not no_launch_dir:
+        shutil.rmtree(launch_dir, ignore_errors=True)
+    else:
+        os.unlink(f'{launch_dir}/out.log')
+        os.unlink(f'{launch_dir}/err.log')
+        os.unlink(f'{launch_dir}/launch.sh')
 
 
 @pytest.mark.parametrize('scheduler_class', (SlurmScheduler, FluxScheduler, LSFScheduler))
@@ -97,7 +103,8 @@ def test_output_capture_scheduler(scheduler_class, processes):
 
 
 if __name__ == '__main__':
-    test_output_capture_local()
+    test_output_capture_local(False)
+    test_output_capture_local(True)
     if shutil.which('srun'):
         test_output_capture_scheduler(SlurmScheduler, 1)
         test_output_capture_scheduler(SlurmScheduler, 2)

@@ -31,36 +31,35 @@ def main():
     scheduler = get_schedulers()[scheduler_type]
     (world_size, rank, local_world_size, local_rank) = scheduler.get_parallel_configuration()
 
-    rdv_protocol = os.getenv('TORCHRUN_HPC_RDV_PROTOCOL')
-    if rdv_protocol == 'mpi://':
-        try:
-            import mpi4py
-            # This will automatically register MPI for initialization.
-            import mpi_rdv
-            from mpi4py import MPI
-            mpi = True
-        except (ImportError, ModuleNotFoundError):
-            mpi = None
-            raise Exception(f'MPI rendezvous protocol selected without installing mpi_rndv library.')
-
     torch_dist_initialized = dist.is_initialized()
-    if not torch_dist_initialized:
-        # raise Exception('PyTorch Distributed is already initialized')
-
-        print(f'Initializing distributed PyTorch using protocol: {rdv_protocol}')
-        # TODO(later): Fix how we handle CUDA visible devices and MPI bind
-        dist.init_process_group("nccl", init_method=rdv_protocol,
-                                world_size=world_size, rank=rank)
-
+    if world_size > 1:
+        rdv_protocol = os.getenv('TORCHRUN_HPC_RDV_PROTOCOL')
         if rdv_protocol == 'mpi://':
-            print('MPI Version: {}'.format(MPI.Get_version()))
-            print('MPI Implementation: {}'.format(MPI.Get_library_version()))
+            try:
+                import mpi4py
+                # This will automatically register MPI for initialization.
+                import mpi_rdv
+                from mpi4py import MPI
+                mpi = True
+            except (ImportError, ModuleNotFoundError):
+                mpi = None
+                raise Exception(f'MPI rendezvous protocol selected without installing mpi_rndv library.')
+
+        if not torch_dist_initialized:
+            print(f'Initializing distributed PyTorch using protocol: {rdv_protocol}')
+            # TODO(later): Fix how we handle CUDA visible devices and MPI bind
+            dist.init_process_group("nccl", init_method=rdv_protocol,
+                                    world_size=world_size, rank=rank)
+
+            if rdv_protocol == 'mpi://':
+                print('MPI Version: {}'.format(MPI.Get_version()))
+                print('MPI Implementation: {}'.format(MPI.Get_library_version()))
 
 
     # Run underlying script
     runpy.run_path(args[0], run_name="__main__")
 
-    if not torch_dist_initialized:
+    if dist.is_initialized():
         # Deal with destroying the process group here
         dist.destroy_process_group()
 
