@@ -157,7 +157,6 @@ class LSFScheduler(Scheduler):
 
     @classmethod
     def num_nodes_in_allocation(cls) -> Optional[int]:
-        # LLNL_COMPUTE_NODES=lassen733
         if os.getenv('LLNL_NUM_COMPUTE_NODES'):
             return int(os.getenv('LLNL_NUM_COMPUTE_NODES'))
 

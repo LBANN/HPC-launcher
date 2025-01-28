@@ -144,8 +144,8 @@ def setup_arguments(parser: argparse.ArgumentParser):
         '--no-launch-dir',
         action='store_true',
         default=False,
-        help='If set, the launcher will not create a timestamped launch directory '
-        'instead it will create the launch file and logs in the current working '
+        help='If set, the launcher will not create a timestamped launch directory. '
+        'Instead, it will create the launch file and logs in the current working '
         'directory')
 
     group.add_argument(
