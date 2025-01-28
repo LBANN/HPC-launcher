@@ -43,7 +43,7 @@ def main():
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
 
-    _, folder_name = scheduler.create_launch_folder_name(args.command, 'launch')
+    _, folder_name = scheduler.create_launch_folder_name(args.command, 'launch', args.no_launch_dir)
 
     script_file = scheduler.create_launch_folder(folder_name,
                                                  not args.bg,

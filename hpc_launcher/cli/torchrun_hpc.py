@@ -98,8 +98,9 @@ def main():
         )
         exit(1)
 
-    command_as_folder_name, folder_name = scheduler.create_launch_folder_name(args.command,
-                                                                                'torchrun_hpc',)
+    _, folder_name = scheduler.create_launch_folder_name(args.command,
+                                                         'torchrun_hpc',
+                                                         args.no_launch_dir)
 
     script_file = scheduler.create_launch_folder(folder_name,
                                                  not args.bg,

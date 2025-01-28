@@ -202,7 +202,8 @@ class Scheduler:
 
     def create_launch_folder_name(self,
                                   command: str,
-                                  folder_prefix: str = 'launch'
+                                  folder_prefix: str = 'launch',
+                                  no_launch_dir: bool = False,
                              ) -> (str, str):
         """
         Create a folder name for the launcher based on the command.
@@ -215,7 +216,10 @@ class Scheduler:
         command_as_folder_name = os.path.basename(command).replace(' ', '_').replace(';','-')
         # Create a folder for the output and error logs
         # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
-        folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
+        if no_launch_dir:
+            folder_name = os.getcwd()
+        else:
+            folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
         return (command_as_folder_name, folder_name)
 
     def create_launch_folder(self,
