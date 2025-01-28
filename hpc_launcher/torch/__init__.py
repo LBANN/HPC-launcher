@@ -12,6 +12,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 from psutil import Process
+import inspect
 
 affinity = None
 if (hasattr(Process, 'cpu_affinity') and inspect.isfunction(Process.cpu_affinity)):
