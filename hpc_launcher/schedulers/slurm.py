@@ -192,10 +192,8 @@ class SlurmScheduler(Scheduler):
             m = re.search(r'^(\d*) Nodes, (\d*) Cores, (\d*) GPUs$', proc.stdout)
             if m:
                 return int(m.group(1))
-        elif os.getenv('SLURM_STEP_NUM_NODES'):
-            # What about SLURM_NNODES=1
-            # SLURM_JOB_NUM_NODES=1
-            return int(os.getenv('SLURM_STEP_NUM_NODES'))
+        elif os.getenv('SLURM_JOB_NUM_NODES'):
+            return int(os.getenv('SLURM_JOB_NUM_NODES'))
         elif os.getenv('LLNL_NUM_COMPUTE_NODES'):
             return int(os.getenv('LLNL_NUM_COMPUTE_NODES'))
 
