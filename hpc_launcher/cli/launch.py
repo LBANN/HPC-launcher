@@ -48,12 +48,12 @@ def main():
     script_file = scheduler.create_launch_folder(folder_name,
                                                  not args.bg,
                                                  args.output_script,
-                                                 args.run_from_dir)
+                                                 args.run_from_launch_dir)
 
     jobid = scheduler.launch(system, folder_name, script_file,
                              args.command, args.args, not args.bg,
                              args.setup_only,
-                             args.color_stderr, args.run_from_dir)
+                             args.color_stderr, args.run_from_launch_dir)
 
     if jobid:
         logger.info(f'Job ID: {jobid}')

@@ -222,7 +222,7 @@ class Scheduler:
                              folder_name: str,
                              blocking: bool = True,
                              script_file: Optional[str] = None,
-                             run_from_dir: bool = False,
+                             run_from_launch_dir: bool = False,
                              ) -> (str, str):
         """
         Create a folder and associated launch script if approrpiate.
@@ -230,11 +230,11 @@ class Scheduler:
         :param folder_name: The name of the folder for containing all of the launch artifacts.
         :param blocking: If True, the job should run from the launch folder.
         :param script_file: If given, saves the output script to this file.
-        :param run_from_dir: If True, runs the command from the launch folder.
+        :param run_from_launch_dir: If True, runs the command from the launch folder.
         :return: The filename for the launch script as a string.
         """
 
-        should_make_folder = blocking or run_from_dir
+        should_make_folder = blocking or run_from_launch_dir
 
         # Create a temporary file or a script file, if given
         if script_file is not None:
@@ -274,7 +274,7 @@ class Scheduler:
                blocking: bool = True,
                setup_only: bool = False,
                color_stderr: bool = False,
-               run_from_dir: bool = False) -> str:
+               run_from_launch_dir: bool = False) -> str:
         """
         Launches the given command and arguments uaing this launcher.
 
@@ -287,13 +287,13 @@ class Scheduler:
                          and redirects/duplicates outputs to the terminal.
         :param setup_only: If True, only sets up the job and does not launch it.
         :param color_stderr: If True, colors stderr terminal outputs in red.
-        :param run_from_dir: If True, runs the command from the launch directory.
+        :param run_from_launch_dir: If True, runs the command from the launch directory.
         :return: The queued job ID as a string.
         """
 
         # If the command is run from a directory, and the command exists as a
         # file, use its absolute path
-        if run_from_dir:
+        if run_from_launch_dir:
             if os.path.isfile(command):
                 command = os.path.abspath(command)
             # Change the working directory to the launch folder

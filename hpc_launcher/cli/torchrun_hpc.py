@@ -104,7 +104,7 @@ def main():
     script_file = scheduler.create_launch_folder(folder_name,
                                                  not args.bg,
                                                  args.output_script,
-                                                 args.run_from_dir)
+                                                 args.run_from_launch_dir)
 
     trampoline_file = 'torchrun_hpc_trampoline.py'
 
@@ -123,7 +123,7 @@ def main():
                              command, launch_args, not args.bg,
                              # args.output_script,
                              args.setup_only,
-                             args.color_stderr, args.run_from_dir)
+                             args.color_stderr, args.run_from_launch_dir)
 
     if jobid:
         logger.info(f'Job ID: {jobid}')
