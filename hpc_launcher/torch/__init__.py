@@ -16,20 +16,8 @@ import inspect
 
 affinity = None
 if (hasattr(Process, 'cpu_affinity') and inspect.isfunction(Process.cpu_affinity)):
-    print(f'BVE I think that I have a function here')
     # Save affinity before importing torch
     affinity = Process().cpu_affinity()
-else:
-    print(f'BVE I think that I do not have a function here')
-
-# if callable(getattr(Process,'cpu_affinity')):
-# if getattr(Process,'cpu_affinity'):
-#     print(f'BVE I think that I have a function here')
-# else:
-#     print(f'BVE I think that I do not have a function here')
-
-# Save affinity before importing torch
-# affinity = Process().cpu_affinity()
 
 import torch
 
