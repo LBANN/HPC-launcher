@@ -113,13 +113,19 @@ class Scheduler:
     def launcher_script(self,
                         system: 'System',
                         command: str,
-                        args: Optional[list[str]] = None) -> str:
+                        args: Optional[list[str]] = None,
+                        blocking: bool = True,
+                        save_hostlist: bool = False) -> str:
         """
         Returns the full launcher script, which can be saved as a batch
         script, for the given system and launcher configuration.
         This script usually performs node/resource allocation and manages I/O.
 
         :param system: The system to use.
+        :param command: The command to launch
+        :param args: Optional list of argument for the command to launch
+        :param blocking: Launch the comamnd interactively if true, else in a batch job
+        :params save_hostlist: Add local scripting to capture the list of hosts the command is launched on
         :return: A shell script as a string.
         """
         raise NotImplementedError
@@ -278,7 +284,8 @@ class Scheduler:
                blocking: bool = True,
                setup_only: bool = False,
                color_stderr: bool = False,
-               run_from_launch_dir: bool = False) -> str:
+               run_from_launch_dir: bool = False,
+               save_hostlist: bool = False) -> str:
         """
         Launches the given command and arguments uaing this launcher.
 
@@ -292,6 +299,7 @@ class Scheduler:
         :param setup_only: If True, only sets up the job and does not launch it.
         :param color_stderr: If True, colors stderr terminal outputs in red.
         :param run_from_launch_dir: If True, runs the command from the launch directory.
+        :params save_hostlist: Add local scripting to capture the list of hosts the command is launched on
         :return: The queued job ID as a string.
         """
 
@@ -312,11 +320,13 @@ class Scheduler:
 
         logger.info(f'Script filename: {filename}')
         with open(filename, 'w') as fp:
-            fp.write(self.launcher_script(system, command, args, blocking))
-            fp.write('\nif [ "${RANK}" = "0" ]; then')
-            fp.write('\n    echo ${HPC_LAUNCHER_HOSTLIST} > '
-                     + os.path.join(os.path.dirname(filename), f'hpc_launcher_hostlist.txt\n'))
-            fp.write('fi\n')
+            fp.write(self.launcher_script(system, command, args, blocking, save_hostlist))
+            if save_hostlist:
+                fp.write('\nif [ "${RANK}" = "0" ]; then')
+                fp.write('\n    echo ${HPC_LAUNCHER_HOSTLIST} > '
+                         + os.path.join(os.path.dirname(filename), f'hpc_launcher_hostlist.txt\n'))
+                fp.write('fi\n')
+
             fp.write(f'\n# Launch command: ' + ' '.join(full_cmdline) + '\n')
             if self.command_line:
                 fp.write(f'# User command invoked: ' + ' '.join(self.command_line) + '\n')

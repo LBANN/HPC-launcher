@@ -148,7 +148,8 @@ class FluxScheduler(Scheduler):
                         system: 'System',
                         command: str,
                         args: Optional[list[str]] = None,
-                        blocking: bool = True) -> str:
+                        blocking: bool = True,
+                        save_hostlist: bool = False) -> str:
 
         script = ''
         # Launcher script only use the header_lines to construct the shell script to be launched
@@ -157,7 +158,8 @@ class FluxScheduler(Scheduler):
              system, blocking)
         script += header_lines
         script += '\n'
-        script += 'export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n'
+        if save_hostlist:
+            script += 'export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n'
 
         if not blocking:
             script += 'flux run '

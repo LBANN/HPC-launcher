@@ -59,5 +59,5 @@ def test_validate_arguments():
         validate_arguments(args)
 
     with pytest.raises(ValueError):
-        args = parser.parse_args(['--work-dir', '/tmp', '--run-from-dir'])
+        args = parser.parse_args(['--work-dir', '/tmp', '--run-from-launch-dir'])
         validate_arguments(args)

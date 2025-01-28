@@ -152,7 +152,8 @@ class SlurmScheduler(Scheduler):
                         system: 'System',
                         command: str,
                         args: Optional[list[str]] = None,
-                        blocking: bool = True) -> str:
+                        blocking: bool = True,
+                        save_hostlist: bool = False) -> str:
 
         script = ''
         # Launch command only use the cmd_args to construct the shell script to be launched
@@ -161,7 +162,8 @@ class SlurmScheduler(Scheduler):
         # Configure header and command line with Slurm job options
         script += header_lines
         script += '\n'
-        script += 'export HPC_LAUNCHER_HOSTLIST=${SLURM_JOB_NODELIST}\n'
+        if save_hostlist:
+            script += 'export HPC_LAUNCHER_HOSTLIST=${SLURM_JOB_NODELIST}\n'
 
         if not blocking:
             script += 'srun -u '

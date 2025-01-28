@@ -88,7 +88,7 @@ def test_launcher_one_node(local):
 
     cmd = [
         sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v",
-        "--local" if local else "-n1", "-N1", driver_file
+        "--local" if local else "-n1", "-N1", "--save-hostlist", driver_file
     ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
     m = re.search(r'^.*Script filename: (\S+)$', proc.stderr,
@@ -130,7 +130,7 @@ def test_launcher_multinode(num_nodes, procs_per_node, rdv, scheduler_type):
 
     cmd = [
         sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v", f"-N{num_nodes}",
-        f"-n{procs_per_node}", f"-r{rdv}", driver_file
+        f"-n{procs_per_node}", f"-r{rdv}", "--save-hostlist", driver_file
     ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
     exp_dir = None

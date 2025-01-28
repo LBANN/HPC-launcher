@@ -178,6 +178,11 @@ def setup_arguments(parser: argparse.ArgumentParser):
         help='Add a reservation arguement to scheduler.  '
         'Typically used for Dedecated Application Time runs (DATs)')
 
+    group.add_argument(
+        '--save-hostlist',
+        action='store_true',
+        default=False,
+        help='Write the hostlist to a file: hpc_launcher_hostlist.txt.')
 
 def validate_arguments(args: argparse.Namespace):
     """

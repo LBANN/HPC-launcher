@@ -54,7 +54,6 @@ def test_output_capture_local(no_launch_dir: bool):
         os.unlink(f'{launch_dir}/out.log')
         os.unlink(f'{launch_dir}/err.log')
         os.unlink(f'{launch_dir}/launch.sh')
-        os.unlink(f'{launch_dir}/hpc_launcher_hostlist.txt')
 
 
 @pytest.mark.parametrize('scheduler_class', (SlurmScheduler, FluxScheduler, LSFScheduler))
