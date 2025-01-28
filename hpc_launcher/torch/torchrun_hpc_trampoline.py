@@ -59,7 +59,7 @@ def main():
     # Run underlying script
     runpy.run_path(args[0], run_name="__main__")
 
-    if not torch_dist_initialized and world_size > 1:
+    if dist.is_initialized():
         # Deal with destroying the process group here
         dist.destroy_process_group()
 
