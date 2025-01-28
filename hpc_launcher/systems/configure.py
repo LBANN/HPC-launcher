@@ -19,9 +19,13 @@ from hpc_launcher.utils import ceildiv
 logger = logging.getLogger(__name__)
 
 
-def configure_launch(queue: str, nodes: int, procs_per_node: int,
-                     gpus_at_least: int,
-                     gpumem_at_least: int) -> tuple[System, int, int]:
+def configure_launch(
+    queue: str,
+    nodes: int,
+    procs_per_node: int,
+    gpus_at_least: int,
+    gpumem_at_least: int,
+) -> tuple[System, int, int]:
     """
     See if the system can be autodetected and then process some special
     arguments that can autoselect the number of ranks / GPUs.
@@ -39,7 +43,7 @@ def configure_launch(queue: str, nodes: int, procs_per_node: int,
     """
     system = autodetect.autodetect_current_system()
     logger.info(
-        f'Detected system: {system.system_name} [{type(system).__name__}-class]'
+        f"Detected system: {system.system_name} [{type(system).__name__}-class]"
     )
     system_params = system.system_parameters(queue)
 

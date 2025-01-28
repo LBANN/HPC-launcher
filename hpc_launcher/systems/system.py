@@ -46,7 +46,7 @@ class SystemParams:
 
     def print_params(self):
         logger.info(
-            f'c={self.cores_per_node} g={self.gpus_per_node} s={self.scheduler} arch={self.gpu_arch} numa={self.numa_domains}'
+            f"c={self.cores_per_node} g={self.gpus_per_node} s={self.scheduler} arch={self.gpu_arch} numa={self.numa_domains}"
         )
 
     def has_gpu(self):
@@ -77,12 +77,11 @@ class System:
         self.known_systems = known_systems
         if self.known_systems:
             if system_name in self.known_systems.keys():
-                (self.default_queue,
-                 self.system_params) = self.known_systems[system_name]
+                (self.default_queue, self.system_params) = self.known_systems[
+                    system_name
+                ]
             else:
-                logger.warning(
-                    'Could not auto-detect current system parameters')
-
+                logger.warning("Could not auto-detect current system parameters")
 
     _aux_env_list = []
 
@@ -124,7 +123,7 @@ class System:
         if self.system_params:
             if queue not in self.system_params:
                 logger.warning(
-                    f'Unknown queue {queue} on system {self.system_name} using system parameters from default queue {self.default_queue}'
+                    f"Unknown queue {queue} on system {self.system_name} using system parameters from default queue {self.default_queue}"
                 )
                 params = self.system_params[self.default_queue]
             else:
@@ -151,7 +150,7 @@ class GenericSystem(System):
     """
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, system_name='generic', **kwargs)
+        super().__init__(*args, system_name="generic", **kwargs)
 
     def environment_variables(self) -> list[tuple[str, str]]:
         return []
@@ -160,4 +159,5 @@ class GenericSystem(System):
     def preferred_scheduler(self) -> type[Scheduler]:
         # SLURM is a relatively safe bet for a scheduler
         from hpc_launcher.schedulers.slurm import SlurmScheduler
+
         return SlurmScheduler

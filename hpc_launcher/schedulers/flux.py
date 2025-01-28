@@ -32,21 +32,22 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FluxScheduler(Scheduler):
 
-    def select_interactive_or_batch(self,
-                                    tmp: list[str],
-                                    header: StringIO,
-                                    cmd_args: list[str],
-                                    blocking: bool = True) -> None:
+    def select_interactive_or_batch(
+        self,
+        tmp: list[str],
+        header: StringIO,
+        cmd_args: list[str],
+        blocking: bool = True,
+    ) -> None:
         if blocking:
             cmd_args += tmp
         else:
             header.write(f'# FLUX: {" ".join(tmp)}\n')
         return
 
-    def build_command_string_and_batch_script(self,
-                                              system: 'System',
-                                              blocking: bool = True
-                                              ) -> (str, list[str]):
+    def build_command_string_and_batch_script(
+        self, system: "System", blocking: bool = True
+    ) -> (str, list[str]):
 
         env_vars = system.environment_variables()
         passthrough_env_vars = system.passthrough_environment_variables()
@@ -54,36 +55,36 @@ class FluxScheduler(Scheduler):
         system.customize_scheduler(self)
 
         header = StringIO()
-        header.write('#!/bin/sh\n')
+        header.write("#!/bin/sh\n")
         cmd_args = []
         if self.out_log_file and not blocking:
-            header.write(f'# FLUX: --output={self.out_log_file}\n')
+            header.write(f"# FLUX: --output={self.out_log_file}\n")
         if self.err_log_file and not blocking:
-            header.write(f'# FLUX: --error={self.err_log_file}\n')
+            header.write(f"# FLUX: --error={self.err_log_file}\n")
 
         # Unbuffered output
-        tmp = '-u'
+        tmp = "-u"
         cmd_args += [tmp]
         if not blocking:
-            header.write(f'# FLUX: {tmp}\n')
+            header.write(f"# FLUX: {tmp}\n")
 
         # Number of Nodes
-        tmp = f'-N{self.nodes}'
+        tmp = f"-N{self.nodes}"
         cmd_args += [tmp]
         if not blocking:
-            header.write(f'# FLUX: {tmp}\n')
+            header.write(f"# FLUX: {tmp}\n")
 
         # Total number of Tasks / Processes
-        tmp = f'-n{self.nodes * self.procs_per_node}'
+        tmp = f"-n{self.nodes * self.procs_per_node}"
         cmd_args += [tmp]
         if not blocking:
-            header.write(f'# FLUX: {tmp}\n')
+            header.write(f"# FLUX: {tmp}\n")
 
         if self.work_dir:
-            tmp = [f'--setattr=system.cwd={os.path.abspath(self.work_dir)}']
+            tmp = [f"--setattr=system.cwd={os.path.abspath(self.work_dir)}"]
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
-        tmp = ['-onosetpgrp']
+        tmp = ["-onosetpgrp"]
         self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.ld_preloads:
@@ -91,29 +92,29 @@ class FluxScheduler(Scheduler):
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.time_limit is not None:
-            tmp = [f'--time={self.time_limit}m']
+            tmp = [f"--time={self.time_limit}m"]
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.job_name:
-            tmp = [f'--job-name={self.job_name}']
+            tmp = [f"--job-name={self.job_name}"]
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.queue:
-            if os.getenv('FLUX_URI'):
+            if os.getenv("FLUX_URI"):
                 logger.warning(
-                    f'WARNING: Dropping unsupported option requested when running inside of an allocation: --queue={self.queue}'
+                    f"WARNING: Dropping unsupported option requested when running inside of an allocation: --queue={self.queue}"
                 )
             else:
-                tmp = [f'--queue={self.queue}']
+                tmp = [f"--queue={self.queue}"]
                 self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:
-            tmp = [f'--account={self.account}']
+            tmp = [f"--account={self.account}"]
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.reservation:
             logger.warning(
-                f'WARNING: Unsupported option requested: --reservation={self.reservation}'
+                f"WARNING: Unsupported option requested: --reservation={self.reservation}"
             )
 
         if self.launcher_flags:
@@ -122,56 +123,57 @@ class FluxScheduler(Scheduler):
                 cmd_args += [flag]
 
         for k, v in env_vars:
-            header.write(f'export {k}={v}\n')
+            header.write(f"export {k}={v}\n")
 
         for k, v in passthrough_env_vars:
             if not blocking:
-                cmd_args += [f' --env={k}={v}']
+                cmd_args += [f" --env={k}={v}"]
             else:
-                header += f'export {k}={v}\n'
+                header += f"export {k}={v}\n"
 
         return (header.getvalue(), cmd_args)
 
-    def launch_command(self,
-                       system: 'System',
-                       blocking: bool = True) -> list[str]:
+    def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
         # Launch command only use the cmd_args to construct the shell script to be launched
         (header_lines, cmd_args) = self.build_command_string_and_batch_script(
-            system, blocking)
+            system, blocking
+        )
 
         if not blocking:
-            return ['flux', 'batch'] + cmd_args
+            return ["flux", "batch"] + cmd_args
 
-        return ['flux', 'run'] + cmd_args
+        return ["flux", "run"] + cmd_args
 
-    def launcher_script(self,
-                        system: 'System',
-                        command: str,
-                        args: Optional[list[str]] = None,
-                        blocking: bool = True,
-                        save_hostlist: bool = False) -> str:
+    def launcher_script(
+        self,
+        system: "System",
+        command: str,
+        args: Optional[list[str]] = None,
+        blocking: bool = True,
+        save_hostlist: bool = False,
+    ) -> str:
 
-        script = ''
+        script = ""
         # Launcher script only use the header_lines to construct the shell script to be launched
-        (header_lines,
-         cmd_string) = self.build_command_string_and_batch_script(
-             system, blocking)
+        (header_lines, cmd_string) = self.build_command_string_and_batch_script(
+            system, blocking
+        )
         script += header_lines
-        script += '\n'
+        script += "\n"
         if save_hostlist:
-            script += 'export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n'
+            script += "export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n"
 
         if not blocking:
-            script += 'flux run '
-            script += ' '.join(cmd_string)
-            script += ' '
+            script += "flux run "
+            script += " ".join(cmd_string)
+            script += " "
 
-        script += f'{command}'
+        script += f"{command}"
 
         for arg in args:
-            script += f' {arg}'
+            script += f" {arg}"
 
-        script += '\n'
+        script += "\n"
 
         return script
 
@@ -181,10 +183,10 @@ class FluxScheduler(Scheduler):
 
     @classmethod
     def num_nodes_in_allocation(cls) -> Optional[int]:
-        if os.getenv('FLUX_URI'):
-            cmd = ['flux', 'resource', 'info']
+        if os.getenv("FLUX_URI"):
+            cmd = ["flux", "resource", "info"]
             proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
-            m = re.search(r'^(\d*) Nodes, (\d*) Cores, (\d*) GPUs$', proc.stdout)
+            m = re.search(r"^(\d*) Nodes, (\d*) Cores, (\d*) GPUs$", proc.stdout)
             if m:
                 return int(m.group(1))
 
@@ -193,34 +195,43 @@ class FluxScheduler(Scheduler):
     @classmethod
     def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
         env_vars = [
-            'FLUX_JOB_SIZE', 'FLUX_TASK_RANK', 'FLUX_TASK_LOCAL_ID',
-            'FLUX_JOB_NNODES'
+            "FLUX_JOB_SIZE",
+            "FLUX_TASK_RANK",
+            "FLUX_TASK_LOCAL_ID",
+            "FLUX_JOB_NNODES",
         ]
         env = {}
         for e in env_vars:
             if not os.getenv(e):
-                msg = f'Unable to launch torchrun_hpc on FLUX scheduler - {e} not defined'
+                msg = (
+                    f"Unable to launch torchrun_hpc on FLUX scheduler - {e} not defined"
+                )
                 raise Exception(msg)
             else:
                 env[e] = int(os.getenv(e))
 
-        world_size = env['FLUX_JOB_SIZE']
-        rank = env['FLUX_TASK_RANK']
-        local_rank = env['FLUX_TASK_LOCAL_ID']
-        nodes_per_job = env['FLUX_JOB_NNODES']
+        world_size = env["FLUX_JOB_SIZE"]
+        rank = env["FLUX_TASK_RANK"]
+        local_rank = env["FLUX_TASK_LOCAL_ID"]
+        nodes_per_job = env["FLUX_JOB_NNODES"]
         local_world_size = world_size // nodes_per_job
         return (world_size, rank, local_world_size, local_rank)
 
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
-        env_list.append(('RANK', '${FLUX_TASK_RANK}'))
-        if protocol.lower() == 'tcp':
-            env_list.append(('TORCHRUN_HPC_MASTER_ADDR', '`flux hostlist local | /bin/hostlist -n 1`'))
-            env_list.append(('TORCHRUN_HPC_MASTER_PORT', '23456'))
+        env_list.append(("RANK", "${FLUX_TASK_RANK}"))
+        if protocol.lower() == "tcp":
+            env_list.append(
+                (
+                    "TORCHRUN_HPC_MASTER_ADDR",
+                    "`flux hostlist local | /bin/hostlist -n 1`",
+                )
+            )
+            env_list.append(("TORCHRUN_HPC_MASTER_PORT", "23456"))
             return env_list
-        elif protocol.lower() == 'mpi':
+        elif protocol.lower() == "mpi":
             # To use MPI, pass `init_method="mpi://"` - no special work here.
             return env_list
         else:
-            msg = f'Unsupported rendezvous protocol {protocol} for scheduler {type(self).__name__}'
+            msg = f"Unsupported rendezvous protocol {protocol} for scheduler {type(self).__name__}"
             raise Exception(msg)

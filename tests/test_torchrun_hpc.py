@@ -24,23 +24,25 @@ from hpc_launcher.systems import autodetect
 from hpc_launcher.systems.lc.sierra_family import Sierra
 from hpc_launcher.schedulers import get_schedulers
 
+
 def check_hostlist_file(exp_dir: str, stdout_buffer, num_ranks):
     hostlist = os.path.join(exp_dir, "hpc_launcher_hostlist.txt")
     with open(hostlist) as f:
         s = f.read()
         s = s.strip("]\n")
-        cluster_list = re.split(r'[,\s]+', s)
+        cluster_list = re.split(r"[,\s]+", s)
         hosts = []
         for cluster in cluster_list:
-            if cluster == 'lassen710' and \
-               ((isinstance(autodetect.autodetect_current_system(), Sierra)) or \
-                os.getenv('LSB_HOSTS')):
+            if cluster == "lassen710" and (
+                (isinstance(autodetect.autodetect_current_system(), Sierra))
+                or os.getenv("LSB_HOSTS")
+            ):
                 continue
 
-            if '[' in cluster:
+            if "[" in cluster:
                 (hostname, inst_array) = cluster.split("[")
                 # This only works up to two nodes
-                instances = re.split(r'[,-]+', inst_array)
+                instances = re.split(r"[,-]+", inst_array)
                 for i in instances:
                     hosts.append(hostname + i)
             else:
@@ -50,17 +52,18 @@ def check_hostlist_file(exp_dir: str, stdout_buffer, num_ranks):
         matched = []
         unmatched = []
         for h in hosts:
-            print(f'I am looking for host {h}')
+            print(f"I am looking for host {h}")
             regex = re.compile(
-                '.*({}) reporting it is rank ({}).*'.format(h, i),
-                re.MULTILINE | re.DOTALL)
+                ".*({}) reporting it is rank ({}).*".format(h, i),
+                re.MULTILINE | re.DOTALL,
+            )
             match = regex.match(stdout_buffer)
             if match:
-                assert match.group(
-                    2
-                ) != i, f'{match.group(1)} has the incorrect rank in test {exp_dir}'
+                assert (
+                    match.group(2) != i
+                ), f"{match.group(1)} has the incorrect rank in test {exp_dir}"
                 print(
-                    f'\n{match.group(1)} is correctly reporting that it was assigned rank {match.group(2)}'
+                    f"\n{match.group(1)} is correctly reporting that it was assigned rank {match.group(2)}"
                 )
                 matched.append(h)
                 i += 1
@@ -68,9 +71,14 @@ def check_hostlist_file(exp_dir: str, stdout_buffer, num_ranks):
                     break
             else:
                 unmatched.append(h)
-                print(f'{h} not found in output in test {exp_dir} - only {i} found: {matched}')
+                print(
+                    f"{h} not found in output in test {exp_dir} - only {i} found: {matched}"
+                )
 
-        assert len(matched) == num_ranks, f'Incorrect number of ranks reported, required {num_ranks} -- matched: {matched} and unmatched: {unmatched}'
+        assert (
+            len(matched) == num_ranks
+        ), f"Incorrect number of ranks reported, required {num_ranks} -- matched: {matched} and unmatched: {unmatched}"
+
 
 @pytest.mark.parametrize("local", [True, False])
 def test_launcher_one_node(local):
@@ -78,40 +86,52 @@ def test_launcher_one_node(local):
         import torch
     except (ImportError, ModuleNotFoundError):
         pytest.skip("torch not found")
-    if (not local and not shutil.which("srun") and not shutil.which("flux")
-            and not shutil.which("jsrun")):
+    if (
+        not local
+        and not shutil.which("srun")
+        and not shutil.which("flux")
+        and not shutil.which("jsrun")
+    ):
         pytest.skip("No distributed launcher found")
 
     # Get full path to torch_dist_driver.py
-    driver_file = os.path.join(os.path.dirname(__file__),
-                               "torch_driver.py")
+    driver_file = os.path.join(os.path.dirname(__file__), "torch_driver.py")
 
     cmd = [
-        sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v",
-        "--local" if local else "-n1", "-N1", "--save-hostlist", driver_file
+        sys.executable,
+        "-m",
+        "hpc_launcher.cli.torchrun_hpc",
+        "-v",
+        "--local" if local else "-n1",
+        "-N1",
+        "--save-hostlist",
+        driver_file,
     ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
-    m = re.search(r'^.*Script filename: (\S+)$', proc.stderr,
-                  re.MULTILINE | re.DOTALL)
+    m = re.search(r"^.*Script filename: (\S+)$", proc.stderr, re.MULTILINE | re.DOTALL)
     if m:
         script = m.group(1)
         exp_dir = os.path.dirname(script)
         check_hostlist_file(exp_dir, proc.stdout, 1)
     else:
-        assert False, f'Unable to find expected hostlist: hpc_launcher_hostlist.txt'
+        assert False, f"Unable to find expected hostlist: hpc_launcher_hostlist.txt"
 
     assert proc.returncode == 0
 
 
-@pytest.mark.parametrize('num_nodes', [2])
-@pytest.mark.parametrize('procs_per_node', [1])
-@pytest.mark.parametrize('rdv', ('mpi', 'tcp'))
-@pytest.mark.parametrize('scheduler_type', ('flux', 'slurm', 'lsf'))
+@pytest.mark.parametrize("num_nodes", [2])
+@pytest.mark.parametrize("procs_per_node", [1])
+@pytest.mark.parametrize("rdv", ("mpi", "tcp"))
+@pytest.mark.parametrize("scheduler_type", ("flux", "slurm", "lsf"))
 def test_launcher_multinode(num_nodes, procs_per_node, rdv, scheduler_type):
-    if ((scheduler_type == 'slurm' and not shutil.which("srun")) or
-        (scheduler_type == 'flux' and (not shutil.which("flux") or
-                                       not os.path.exists('/run/flux/local'))) or
-        (scheduler_type == 'lsf' and not shutil.which("jsrun"))):
+    if (
+        (scheduler_type == "slurm" and not shutil.which("srun"))
+        or (
+            scheduler_type == "flux"
+            and (not shutil.which("flux") or not os.path.exists("/run/flux/local"))
+        )
+        or (scheduler_type == "lsf" and not shutil.which("jsrun"))
+    ):
         pytest.skip("No distributed launcher found")
 
     scheduler = get_schedulers()[scheduler_type]
@@ -125,30 +145,40 @@ def test_launcher_multinode(num_nodes, procs_per_node, rdv, scheduler_type):
         pytest.skip("torch not found")
 
     # Get full path to torch_dist_driver.py
-    driver_file = os.path.join(os.path.dirname(__file__),
-                               "torch_dist_driver.py")
+    driver_file = os.path.join(os.path.dirname(__file__), "torch_dist_driver.py")
 
     cmd = [
-        sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc", "-v", f"-N{num_nodes}",
-        f"-n{procs_per_node}", f"-r{rdv}", "--save-hostlist", driver_file
+        sys.executable,
+        "-m",
+        "hpc_launcher.cli.torchrun_hpc",
+        "-v",
+        f"-N{num_nodes}",
+        f"-n{procs_per_node}",
+        f"-r{rdv}",
+        "--save-hostlist",
+        driver_file,
     ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
     exp_dir = None
-    m = re.search(r'^.*Script filename: (\S+)$', proc.stderr,
-                  re.MULTILINE | re.DOTALL)
+    m = re.search(r"^.*Script filename: (\S+)$", proc.stderr, re.MULTILINE | re.DOTALL)
     if m:
         script = m.group(1)
         exp_dir = os.path.dirname(script)
         check_hostlist_file(exp_dir, proc.stdout, num_nodes * procs_per_node)
     else:
-        assert False, f'Unable to find expected hostlist: hpc_launcher_hostlist.txt'
+        assert False, f"Unable to find expected hostlist: hpc_launcher_hostlist.txt"
 
-    regex = re.compile('.*Initializing distributed PyTorch using protocol: ({})://.*'.format(rdv), re.MULTILINE | re.DOTALL)
+    regex = re.compile(
+        ".*Initializing distributed PyTorch using protocol: ({})://.*".format(rdv),
+        re.MULTILINE | re.DOTALL,
+    )
     match = regex.match(proc.stdout)
     if match:
-        assert match.group(1) == rdv, f'{match.group(1)} is the incorrect rendezvous protocol: requested {rdv}'
+        assert (
+            match.group(1) == rdv
+        ), f"{match.group(1)} is the incorrect rendezvous protocol: requested {rdv}"
     else:
-        assert False, f'Unable to detect a valid rendezvous protocol for test {rdv}'
+        assert False, f"Unable to detect a valid rendezvous protocol for test {rdv}"
     assert proc.returncode == 0
 
     if exp_dir:

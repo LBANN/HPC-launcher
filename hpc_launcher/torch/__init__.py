@@ -15,7 +15,7 @@ from psutil import Process
 import inspect
 
 affinity = None
-if (hasattr(Process, 'cpu_affinity') and inspect.isfunction(Process.cpu_affinity)):
+if hasattr(Process, "cpu_affinity") and inspect.isfunction(Process.cpu_affinity):
     # Save affinity before importing torch
     affinity = Process().cpu_affinity()
 
@@ -27,7 +27,7 @@ if affinity is not None:
 import os
 
 if torch.cuda.is_available():
-    fraction_max_gpu_mem = float(os.getenv('TORCHRUN_HPC_MAX_GPU_MEM'))
+    fraction_max_gpu_mem = float(os.getenv("TORCHRUN_HPC_MAX_GPU_MEM"))
     if fraction_max_gpu_mem != 1.0:
-        print(f'Setting the max GPU memory fraction to {fraction_max_gpu_mem}')
+        print(f"Setting the max GPU memory fraction to {fraction_max_gpu_mem}")
         torch.cuda.set_per_process_memory_fraction(fraction_max_gpu_mem)

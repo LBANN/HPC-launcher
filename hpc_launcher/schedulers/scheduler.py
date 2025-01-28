@@ -65,11 +65,13 @@ class Scheduler:
     # Capture the original command so that it can be added to the launch script
     command_line: Optional[list[str]] = None
 
-    def select_interactive_or_batch(self,
-                                    tmp: list[str],
-                                    header: StringIO,
-                                    cmd_args: list[str],
-                                    blocking: bool = True) -> type(None):
+    def select_interactive_or_batch(
+        self,
+        tmp: list[str],
+        header: StringIO,
+        cmd_args: list[str],
+        blocking: bool = True,
+    ) -> type(None):
         """
         Given a specific string "tmp" write it either in a command line argument
         or a batch shell argument.
@@ -84,7 +86,8 @@ class Scheduler:
         return None
 
     def build_command_string_and_batch_script(
-            self, system: 'System') -> (str, list[str]):
+        self, system: "System"
+    ) -> (str, list[str]):
         """
         Returns the strings used for a launch command as well as a batch script
         full launcher script, which can be saved as a batch
@@ -94,11 +97,9 @@ class Scheduler:
         :param system: The system to use.
         :return: A tuple of (shell script as a string, list of command-line arguments).
         """
-        return ('', [])
+        return ("", [])
 
-    def launch_command(self,
-                       system: 'System',
-                       blocking: bool = True) -> list[str]:
+    def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
         """
         Returns the launch command for this scheduler. Returns the
         command prefix before the program to run.
@@ -110,12 +111,14 @@ class Scheduler:
         """
         raise NotImplementedError
 
-    def launcher_script(self,
-                        system: 'System',
-                        command: str,
-                        args: Optional[list[str]] = None,
-                        blocking: bool = True,
-                        save_hostlist: bool = False) -> str:
+    def launcher_script(
+        self,
+        system: "System",
+        command: str,
+        args: Optional[list[str]] = None,
+        blocking: bool = True,
+        save_hostlist: bool = False,
+    ) -> str:
         """
         Returns the full launcher script, which can be saved as a batch
         script, for the given system and launcher configuration.
@@ -130,7 +133,7 @@ class Scheduler:
         """
         raise NotImplementedError
 
-    def internal_script(self, system: 'System') -> Optional[str]:
+    def internal_script(self, system: "System") -> Optional[str]:
         """
         Returns the script that runs on each process within the allocated job.
         This script is optional, and usually sets up additional elements (e.g.,
@@ -195,22 +198,28 @@ class Scheduler:
         :return: A list of strings that are added to the torchrun-hpc launch environment.
         """
         env_list = []
-        env_list.append(('TORCHRUN_HPC_SCHEDULER', type(self).__name__))
+        env_list.append(("TORCHRUN_HPC_SCHEDULER", type(self).__name__))
         env_list.extend(self.dynamically_configure_rendezvous_protocol(protocol))
-        if protocol.lower() == 'tcp':
-            env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', '\"tcp://${TORCHRUN_HPC_MASTER_ADDR}:${TORCHRUN_HPC_MASTER_PORT}\"'))
-        elif protocol.lower() == 'mpi':
-            env_list.append(('TORCHRUN_HPC_RDV_PROTOCOL', 'mpi://'))
+        if protocol.lower() == "tcp":
+            env_list.append(
+                (
+                    "TORCHRUN_HPC_RDV_PROTOCOL",
+                    '"tcp://${TORCHRUN_HPC_MASTER_ADDR}:${TORCHRUN_HPC_MASTER_PORT}"',
+                )
+            )
+        elif protocol.lower() == "mpi":
+            env_list.append(("TORCHRUN_HPC_RDV_PROTOCOL", "mpi://"))
         else:
-            msg = f'Unsupported rendezvous protocol {protocol}'
+            msg = f"Unsupported rendezvous protocol {protocol}"
             raise Exception(msg)
         return env_list
 
-    def create_launch_folder_name(self,
-                                  command: str,
-                                  folder_prefix: str = 'launch',
-                                  no_launch_dir: bool = False,
-                             ) -> (str, str):
+    def create_launch_folder_name(
+        self,
+        command: str,
+        folder_prefix: str = "launch",
+        no_launch_dir: bool = False,
+    ) -> (str, str):
         """
         Create a folder name for the launcher based on the command.
 
@@ -219,7 +228,9 @@ class Scheduler:
         :return: A tuple of strings with the the command as a possible folder name, and the folder name.
         """
         # Remove spaces and semi-colons from the command sequence
-        command_as_folder_name = os.path.basename(command).replace(' ', '_').replace(';','-')
+        command_as_folder_name = (
+            os.path.basename(command).replace(" ", "_").replace(";", "-")
+        )
         # Create a folder for the output and error logs
         # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
         if no_launch_dir:
@@ -228,12 +239,13 @@ class Scheduler:
             folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
         return (command_as_folder_name, folder_name)
 
-    def create_launch_folder(self,
-                             folder_name: str,
-                             blocking: bool = True,
-                             script_file: Optional[str] = None,
-                             run_from_launch_dir: bool = False,
-                             ) -> (str, str):
+    def create_launch_folder(
+        self,
+        folder_name: str,
+        blocking: bool = True,
+        script_file: Optional[str] = None,
+        run_from_launch_dir: bool = False,
+    ) -> (str, str):
         """
         Create a folder and associated launch script if approrpiate.
 
@@ -253,39 +265,39 @@ class Scheduler:
 
             # Warn if this file exists
             if os.path.exists(script_file):
-                logger.warning(f'Overwriting existing file {script_file}')
+                logger.warning(f"Overwriting existing file {script_file}")
 
             filename = os.path.abspath(script_file)
         else:
             should_make_folder = True
-            filename = os.path.abspath(os.path.join(folder_name, 'launch.sh'))
+            filename = os.path.abspath(os.path.join(folder_name, "launch.sh"))
 
         if self.out_log_file is None:
-            self.out_log_file = os.path.abspath(
-                os.path.join(folder_name, 'out.log'))
+            self.out_log_file = os.path.abspath(os.path.join(folder_name, "out.log"))
             should_make_folder = True
         if self.err_log_file is None:
-            self.err_log_file = os.path.abspath(
-                os.path.join(folder_name, 'err.log'))
+            self.err_log_file = os.path.abspath(os.path.join(folder_name, "err.log"))
             should_make_folder = True
 
-        stub_file = ''
+        stub_file = ""
         if should_make_folder:
             os.makedirs(folder_name, exist_ok=True)
 
         return filename
 
-    def launch(self,
-               system: 'System',
-               folder_name: str,
-               filename: str,
-               command: str,
-               args: Optional[list[str]] = None,
-               blocking: bool = True,
-               setup_only: bool = False,
-               color_stderr: bool = False,
-               run_from_launch_dir: bool = False,
-               save_hostlist: bool = False) -> str:
+    def launch(
+        self,
+        system: "System",
+        folder_name: str,
+        filename: str,
+        command: str,
+        args: Optional[list[str]] = None,
+        blocking: bool = True,
+        setup_only: bool = False,
+        color_stderr: bool = False,
+        run_from_launch_dir: bool = False,
+        save_hostlist: bool = False,
+    ) -> str:
         """
         Launches the given command and arguments uaing this launcher.
 
@@ -318,35 +330,44 @@ class Scheduler:
         cmd = self.launch_command(system, blocking)
         full_cmdline = cmd + [filename]
 
-        logger.info(f'Script filename: {filename}')
-        with open(filename, 'w') as fp:
-            fp.write(self.launcher_script(system, command, args, blocking, save_hostlist))
+        logger.info(f"Script filename: {filename}")
+        with open(filename, "w") as fp:
+            fp.write(
+                self.launcher_script(system, command, args, blocking, save_hostlist)
+            )
             if save_hostlist:
                 fp.write('\nif [ "${RANK}" = "0" ]; then')
-                fp.write('\n    echo ${HPC_LAUNCHER_HOSTLIST} > '
-                         + os.path.join(os.path.dirname(filename), f'hpc_launcher_hostlist.txt\n'))
-                fp.write('fi\n')
+                fp.write(
+                    "\n    echo ${HPC_LAUNCHER_HOSTLIST} > "
+                    + os.path.join(
+                        os.path.dirname(filename), f"hpc_launcher_hostlist.txt\n"
+                    )
+                )
+                fp.write("fi\n")
 
-            fp.write(f'\n# Launch command: ' + ' '.join(full_cmdline) + '\n')
+            fp.write(f"\n# Launch command: " + " ".join(full_cmdline) + "\n")
             if self.command_line:
-                fp.write(f'# User command invoked: ' + ' '.join(self.command_line) + '\n')
+                fp.write(
+                    f"# User command invoked: " + " ".join(self.command_line) + "\n"
+                )
         os.chmod(filename, 0o700)
 
         if setup_only:
             logger.warning(f'To launch, run: {" ".join(full_cmdline)}')
-            return ''
+            return ""
 
         logger.info(f'Launching {" ".join(full_cmdline)}')
 
         if blocking:  # Launch job and trace outputs live
-            with open(os.path.join(folder_name, 'out.log'), 'wb') as out_file:
-                with open(os.path.join(folder_name, 'err.log'),
-                          'wb') as err_file:
+            with open(os.path.join(folder_name, "out.log"), "wb") as out_file:
+                with open(os.path.join(folder_name, "err.log"), "wb") as err_file:
 
-                    run_process_with_live_output(full_cmdline,
-                                                 out_file=out_file,
-                                                 err_file=err_file,
-                                                 color_stderr=color_stderr)
+                    run_process_with_live_output(
+                        full_cmdline,
+                        out_file=out_file,
+                        err_file=err_file,
+                        color_stderr=color_stderr,
+                    )
             # In this mode, there is no job ID
             return None
         else:
@@ -354,7 +375,7 @@ class Scheduler:
             process = subprocess.run(full_cmdline, capture_output=True)
             if process.returncode or process.stderr:
                 logging.error(
-                    f'Batch scheduler exited with error code {process.returncode}'
+                    f"Batch scheduler exited with error code {process.returncode}"
                 )
                 sys.stderr.buffer.write(process.stderr)
                 return None
