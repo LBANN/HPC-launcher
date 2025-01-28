@@ -125,7 +125,7 @@ def main():
                              # args.output_script,
                              args.setup_only,
                              args.color_stderr, args.run_from_launch_dir,
-                             args.save_hostlist)
+                             (args.save_hostlist or args.verbose))
 
     if jobid:
         logger.info(f'Job ID: {jobid}')

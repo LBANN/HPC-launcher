@@ -44,7 +44,7 @@ def setup_arguments(parser: argparse.ArgumentParser):
                         '-v',
                         action='store_true',
                         default=False,
-                        help='Run in verbose mode')
+                        help='Run in verbose mode.  Also save the hostlist as if --save-hostlist is set')
 
     # Job size arguments
     group = parser.add_argument_group(
