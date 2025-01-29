@@ -33,6 +33,12 @@ def main():
         scheduler.get_parallel_configuration()
     )
 
+    # Report if the memory size was set
+    if torch.cuda.is_available():
+        fraction_max_gpu_mem = float(os.getenv("TORCHRUN_HPC_MAX_GPU_MEM"))
+        if fraction_max_gpu_mem != 1.0 and rank == 0:
+            print(f"[Rank {rank} of {world_size}] TORCHRUN-HPC set the max GPU memory fraction to {fraction_max_gpu_mem}")
+
     torch_dist_initialized = dist.is_initialized()
     if world_size > 1:
         rdv_protocol = os.getenv("TORCHRUN_HPC_RDV_PROTOCOL")
@@ -52,16 +58,19 @@ def main():
                 )
 
         if not torch_dist_initialized:
-            print(f"Initializing distributed PyTorch using protocol: {rdv_protocol}")
+            if rank == 0:
+                print(f"[Rank {rank} of {world_size}]: Initializing distributed PyTorch using protocol: {rdv_protocol}")
             # TODO(later): Fix how we handle CUDA visible devices and MPI bind
             dist.init_process_group(
                 "nccl", init_method=rdv_protocol, world_size=world_size, rank=rank
             )
 
-            if rdv_protocol == "mpi://":
-                print("MPI Version: {}".format(MPI.Get_version()))
-                print("MPI Implementation: {}".format(MPI.Get_library_version()))
+            if rdv_protocol == "mpi://" and rank == 0:
+                print("[Rank {} of {}]: MPI Version: {}".format(rank, world_size, MPI.Get_version()))
+                print("[Rank {} of {}]: MPI Implementation: {}".format(rank, world_size, MPI.Get_library_version()))
 
+    # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
+    sys.argv = sys.argv[1:]
     # Run underlying script
     runpy.run_path(args[0], run_name="__main__")
 
