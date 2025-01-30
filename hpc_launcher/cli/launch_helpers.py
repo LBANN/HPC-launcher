@@ -24,20 +24,25 @@ from hpc_launcher.systems import autodetect
 import logging
 import sys
 
+
 def setup_logging(logger: logging.Logger, verbose: bool):
     if verbose:
         # Another option: format='%(levelname)-7s: %(message)s',
-        logging.basicConfig(level=logging.INFO,
-                            format='\033[2mhpc-launcher\033[0m: %(message)s')
+        logging.basicConfig(
+            level=logging.INFO, format="\033[2mhpc-launcher\033[0m: %(message)s"
+        )
     else:
-        logging.basicConfig(level=logging.WARNING,
-                            format='\033[2mhpc-launcher\033[0m: %(message)s')
+        logging.basicConfig(
+            level=logging.WARNING, format="\033[2mhpc-launcher\033[0m: %(message)s"
+        )
 
-    logger.info(f'Verbose mode enabled')
+    logger.info(f"Verbose mode enabled")
 
 
 # Using the args and an autodetected system, select a scheduler
-def select_scheduler(args: argparse.Namespace, logger: logging.Logger, system: System) -> Scheduler:
+def select_scheduler(
+    args: argparse.Namespace, logger: logging.Logger, system: System
+) -> Scheduler:
     # Pick batch scheduler
     if args.local:
         scheduler_class = LocalScheduler
@@ -45,14 +50,14 @@ def select_scheduler(args: argparse.Namespace, logger: logging.Logger, system: S
         scheduler_class = get_schedulers()[args.scheduler]
     else:
         scheduler_class = system.preferred_scheduler
-    logger.info(f'Using {scheduler_class.__name__}')
+    logger.info(f"Using {scheduler_class.__name__}")
 
     scheduler_args = common_args.create_scheduler_arguments(**vars(args))
     scheduler = scheduler_class(**scheduler_args)
     scheduler.command_line = sys.argv
 
     logger.info(
-        f'system parameters: node={scheduler.nodes} ppn={scheduler.procs_per_node}'
+        f"system parameters: node={scheduler.nodes} ppn={scheduler.procs_per_node}"
     )
 
     return scheduler

@@ -6,6 +6,7 @@ Works best with unbuffered Python (``python -u``).
 The implementation is loosely based on https://stackoverflow.com/a/25960956
 but modernized to use ``async def``.
 """
+
 import asyncio
 import io
 import sys
@@ -13,13 +14,10 @@ import subprocess
 from typing import Optional
 
 
-async def replicate_output(input_stream,
-                           out1,
-                           out2=None,
-                           prefix=b'',
-                           suffix=b'',
-                           buffer_size=32):
-    """ 
+async def replicate_output(
+    input_stream, out1, out2=None, prefix=b"", suffix=b"", buffer_size=32
+):
+    """
     Reads a stream, ``buffer_size`` characters at a time, and replicates
     outputs to ``out1`` and ``out2``.
     """
@@ -34,11 +32,13 @@ async def replicate_output(input_stream,
             out2.flush()
 
 
-async def _run_process(command: list[str],
-                       out_file: Optional[io.FileIO] = None,
-                       err_file: Optional[io.FileIO] = None,
-                       color_stderr: bool = False,
-                       buffer_size: int = 32) -> int:
+async def _run_process(
+    command: list[str],
+    out_file: Optional[io.FileIO] = None,
+    err_file: Optional[io.FileIO] = None,
+    color_stderr: bool = False,
+    buffer_size: int = 32,
+) -> int:
     """
     Runs a process asynchronously and pipes its stdout and stderr to up to two
     streams.
@@ -54,24 +54,25 @@ async def _run_process(command: list[str],
     """
     # Create the subprocess
     args = [] if len(command) == 1 else command[1:]
-    process = await asyncio.create_subprocess_exec(command[0],
-                                                   *args,
-                                                   stdout=subprocess.PIPE,
-                                                   stderr=subprocess.PIPE)
+    process = await asyncio.create_subprocess_exec(
+        command[0], *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
 
     # Read the stdout and stderr concurrently
     try:
         await asyncio.gather(
-            replicate_output(process.stdout,
-                             sys.stdout.buffer,
-                             out_file,
-                             buffer_size=buffer_size),
-            replicate_output(process.stderr,
-                             sys.stderr.buffer,
-                             err_file,
-                             prefix=(b'\033[31m' if color_stderr else b''),
-                             suffix=(b'\033[0m' if color_stderr else b''),
-                             buffer_size=buffer_size))
+            replicate_output(
+                process.stdout, sys.stdout.buffer, out_file, buffer_size=buffer_size
+            ),
+            replicate_output(
+                process.stderr,
+                sys.stderr.buffer,
+                err_file,
+                prefix=(b"\033[31m" if color_stderr else b""),
+                suffix=(b"\033[0m" if color_stderr else b""),
+                buffer_size=buffer_size,
+            ),
+        )
     except Exception:
         process.kill()
         raise
@@ -88,15 +89,17 @@ def run_process_without_files(command: list[str]) -> int:
     :param command: The command to run and its arguments.
     :return: The command's exit code.
     """
-    result = subprocess.run(' '.join(command), shell=True)
+    result = subprocess.run(" ".join(command), shell=True)
     return result.returncode
 
 
-def run_process_with_live_output(command: list[str],
-                                 out_file: Optional[io.FileIO] = None,
-                                 err_file: Optional[io.FileIO] = None,
-                                 color_stderr: bool = False,
-                                 buffer_size: int = 32) -> int:
+def run_process_with_live_output(
+    command: list[str],
+    out_file: Optional[io.FileIO] = None,
+    err_file: Optional[io.FileIO] = None,
+    color_stderr: bool = False,
+    buffer_size: int = 32,
+) -> int:
     """
     Runs a process asynchronously and pipes its stdout and stderr to up to two
     streams.
@@ -114,11 +117,11 @@ def run_process_with_live_output(command: list[str],
         return 0
     if out_file is not None or err_file is not None or color_stderr:
         return asyncio.run(
-            _run_process(command, out_file, err_file, color_stderr,
-                         buffer_size))
+            _run_process(command, out_file, err_file, color_stderr, buffer_size)
+        )
     return run_process_without_files(command)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     code = run_process_with_live_output(sys.argv[1:], color_stderr=True)
-    print('Process finished with exit code', code)
+    print("Process finished with exit code", code)

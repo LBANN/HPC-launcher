@@ -40,149 +40,169 @@ def setup_arguments(parser: argparse.ArgumentParser):
 
     :param parser: The ``argparse`` parser of the tool.
     """
-    parser.add_argument('--verbose',
-                        '-v',
-                        action='store_true',
-                        default=False,
-                        help='Run in verbose mode.  Also save the hostlist as if --save-hostlist is set')
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        default=False,
+        help="Run in verbose mode.  Also save the hostlist as if --save-hostlist is set",
+    )
 
     # Job size arguments
     group = parser.add_argument_group(
-        'Job size',
-        'Determines the number of nodes, accelerators, and ranks for the job')
-    group.add_argument('-N',
-                       '--nodes',
-                       type=int,
-                       default=0,
-                       help='Specifies the number of requested nodes')
+        "Job size",
+        "Determines the number of nodes, accelerators, and ranks for the job",
+    )
     group.add_argument(
-        '-n',
-        '--procs-per-node',
+        "-N",
+        "--nodes",
+        type=int,
+        default=0,
+        help="Specifies the number of requested nodes",
+    )
+    group.add_argument(
+        "-n",
+        "--procs-per-node",
         type=int,
         default=None,
-        help='Specifies the number of requested processes per node')
+        help="Specifies the number of requested processes per node",
+    )
 
-    group.add_argument('-q',
-                       '--queue',
-                       default=None,
-                       help='Specifies the queue to use')
+    group.add_argument("-q", "--queue", default=None, help="Specifies the queue to use")
 
     # Constraints
     group.add_argument(
-        '-g',
-        '--gpus-at-least',
+        "-g",
+        "--gpus-at-least",
         type=int,
         default=0,
-        help='Specifies the total number of accelerators requested. Mutually '
-        'exclusive with "--procs-per-node" and "--nodes"')
+        help="Specifies the total number of accelerators requested. Mutually "
+        'exclusive with "--procs-per-node" and "--nodes"',
+    )
 
-    group.add_argument('--gpumem-at-least',
-                       type=int,
-                       default=0,
-                       help='A constraint that specifies how much accelerator '
-                       'memory is needed for the job (in gigabytes). If this '
-                       'flag is specified, the number of nodes and processes '
-                       'are not necessary. Requires the system to be '
-                       'registered with the launcher.')
+    group.add_argument(
+        "--gpumem-at-least",
+        type=int,
+        default=0,
+        help="A constraint that specifies how much accelerator "
+        "memory is needed for the job (in gigabytes). If this "
+        "flag is specified, the number of nodes and processes "
+        "are not necessary. Requires the system to be "
+        "registered with the launcher.",
+    )
 
-    group.add_argument('--local',
-                       action='store_true',
-                       default=False,
-                       help='Run locally (i.e., one process without a batch '
-                       'scheduler)')
+    group.add_argument(
+        "--local",
+        action="store_true",
+        default=False,
+        help="Run locally (i.e., one process without a batch " "scheduler)",
+    )
 
     # Schedule
     group = parser.add_argument_group(
-        'Schedule', 'Arguments that determine when a job will run')
+        "Schedule", "Arguments that determine when a job will run"
+    )
 
     # Blocking
     group.add_argument(
-        '--bg',
-        action='store_true',
+        "--bg",
+        action="store_true",
         default=False,
-        help='If set, the job will be run in the background. Otherwise, the '
-        'launcher will wait for the job to start and forward the outputs to '
-        'the console')
-
-    group.add_argument('--scheduler',
-                       type=str,
-                       default=None,
-                       choices=get_schedulers().keys(),
-                       help='If set, overrides the default batch scheduler')
-
-    group = parser.add_argument_group('Logging', 'Logging parameters')
-    group.add_argument(
-        '--out',
-        default=None,
-        dest='out_log_file',
-        help='Capture standard output to a log file. If not given, only prints '
-        'out logs to the console')
-    group.add_argument(
-        '--err',
-        default=None,
-        dest='err_log_file',
-        help='Capture standard error to a log file. If not given, only prints '
-        'out logs to the console')
-    group.add_argument(
-        '--color-stderr',
-        action='store_true',
-        default=False,
-        help='If True, uses terminal colors to color the standard error '
-        'outputs in red. This does not affect the output files')
-
-    group = parser.add_argument_group('Script',
-                                      'Batch scheduler script parameters')
-
-    group.add_argument(
-        '--run-from-launch-dir',
-        action='store_true',
-        default=False,
-        help='If set, the launcher will run the command from the timestamped '
-        'launch directory')
-
-    group.add_argument(
-        '--no-launch-dir',
-        action='store_true',
-        default=False,
-        help='If set, the launcher will not create a timestamped launch directory. '
-        'Instead, it will create the launch file and logs in the current working '
-        'directory')
-
-    group.add_argument(
-        '-o',
-        '--output-script',
-        default=None,
-        help='Output job setup script file. If not given, uses a temporary file'
+        help="If set, the job will be run in the background. Otherwise, the "
+        "launcher will wait for the job to start and forward the outputs to "
+        "the console",
     )
 
     group.add_argument(
-        '--setup-only',
-        action='store_true',
-        default=False,
-        help='If set, the launcher will only write the job setup script file, '
-        'without scheduling it.')
-
-    group.add_argument(
-        '--work-dir',
+        "--scheduler",
+        type=str,
         default=None,
-        help=
-        'Working directory used to run the command.  If not given run from the cwd'
+        choices=get_schedulers().keys(),
+        help="If set, overrides the default batch scheduler",
     )
-    group.add_argument('--account',
-                       default=None,
-                       help='Specify the account (or bank) to use fo the job')
 
+    group = parser.add_argument_group("Logging", "Logging parameters")
     group.add_argument(
-        '--reservation',
+        "--out",
         default=None,
-        help='Add a reservation arguement to scheduler.  '
-        'Typically used for Dedecated Application Time runs (DATs)')
+        dest="out_log_file",
+        help="Capture standard output to a log file. If not given, only prints "
+        "out logs to the console",
+    )
+    group.add_argument(
+        "--err",
+        default=None,
+        dest="err_log_file",
+        help="Capture standard error to a log file. If not given, only prints "
+        "out logs to the console",
+    )
+    group.add_argument(
+        "--color-stderr",
+        action="store_true",
+        default=False,
+        help="If True, uses terminal colors to color the standard error "
+        "outputs in red. This does not affect the output files",
+    )
+
+    group = parser.add_argument_group("Script", "Batch scheduler script parameters")
 
     group.add_argument(
-        '--save-hostlist',
-        action='store_true',
+        "--run-from-launch-dir",
+        action="store_true",
         default=False,
-        help='Write the hostlist to a file: hpc_launcher_hostlist.txt.')
+        help="If set, the launcher will run the command from the timestamped "
+        "launch directory",
+    )
+
+    group.add_argument(
+        "--no-launch-dir",
+        action="store_true",
+        default=False,
+        help="If set, the launcher will not create a timestamped launch directory. "
+        "Instead, it will create the launch file and logs in the current working "
+        "directory",
+    )
+
+    group.add_argument(
+        "-o",
+        "--output-script",
+        default=None,
+        help="Output job setup script file. If not given, uses a temporary file",
+    )
+
+    group.add_argument(
+        "--setup-only",
+        action="store_true",
+        default=False,
+        help="If set, the launcher will only write the job setup script file, "
+        "without scheduling it.",
+    )
+
+    group.add_argument(
+        "--work-dir",
+        default=None,
+        help="Working directory used to run the command.  If not given run from the cwd",
+    )
+    group.add_argument(
+        "--account",
+        default=None,
+        help="Specify the account (or bank) to use fo the job",
+    )
+
+    group.add_argument(
+        "--reservation",
+        default=None,
+        help="Add a reservation arguement to scheduler.  "
+        "Typically used for Dedecated Application Time runs (DATs)",
+    )
+
+    group.add_argument(
+        "--save-hostlist",
+        action="store_true",
+        default=False,
+        help="Write the hostlist to a file: hpc_launcher_hostlist.txt.",
+    )
+
 
 def validate_arguments(args: argparse.Namespace):
     """
@@ -201,33 +221,37 @@ def validate_arguments(args: argparse.Namespace):
     #              number of nodes/ranks
     if not args.nodes and not args.gpus_at_least and not args.gpumem_at_least:
         raise ValueError(
-            'One of the following flags has to be set: --nodes, --gpus-at-least, or --gpumem-at-least'
+            "One of the following flags has to be set: --nodes, --gpus-at-least, or --gpumem-at-least"
         )
     if args.nodes and args.gpus_at_least:
-        raise ValueError('The --nodes and --gpus-at-least flags are mutually '
-                         'exclusive')
+        raise ValueError(
+            "The --nodes and --gpus-at-least flags are mutually " "exclusive"
+        )
     if args.nodes and args.gpumem_at_least:
         raise ValueError(
-            'The --nodes and --gpumem-at-least flags are mutually '
-            'exclusive')
+            "The --nodes and --gpumem-at-least flags are mutually " "exclusive"
+        )
     if args.gpus_at_least and args.procs_per_node:
-        raise ValueError('The --gpus-at-least and --procs-per-node flags '
-                         'are mutually exclusive')
+        raise ValueError(
+            "The --gpus-at-least and --procs-per-node flags " "are mutually exclusive"
+        )
     if args.gpumem_at_least and args.procs_per_node:
-        raise ValueError('The --gpumem-at-least and --procs-per-node flags '
-                         'are mutually exclusive')
+        raise ValueError(
+            "The --gpumem-at-least and --procs-per-node flags " "are mutually exclusive"
+        )
     if args.gpumem_at_least and args.gpus_at_least:
-        raise ValueError('The --gpumem-at-least and --gpus-at-least flags '
-                         'are mutually exclusive')
+        raise ValueError(
+            "The --gpumem-at-least and --gpus-at-least flags " "are mutually exclusive"
+        )
     if args.local and args.bg:
         raise ValueError('"--local" jobs cannot be run in the background')
     if args.local and args.scheduler:
-        raise ValueError('The --local and --scheduler flags are mutually '
-                         'exclusive')
+        raise ValueError("The --local and --scheduler flags are mutually " "exclusive")
     if args.work_dir and args.run_from_launch_dir:
         raise ValueError(
-            'The --work-dir and --run-from-launch-dir flags are mutually '
-            'exclusive')
+            "The --work-dir and --run-from-launch-dir flags are mutually " "exclusive"
+        )
+
 
 # See if the system can be autodetected and then process some special arguments
 # that can autoselect the number of ranks / GPUs
@@ -236,7 +260,11 @@ def process_arguments(args: argparse.Namespace, logger: logging.Logger) -> Syste
 
     # Set system and launch configuration based on arguments
     system, args.nodes, args.procs_per_node = configure.configure_launch(
-        args.queue, args.nodes, args.procs_per_node, args.gpus_at_least,
-        args.gpumem_at_least)
+        args.queue,
+        args.nodes,
+        args.procs_per_node,
+        args.gpus_at_least,
+        args.gpumem_at_least,
+    )
 
     return system

@@ -21,12 +21,12 @@ def get_schedulers():
 
     return {
         None: LocalScheduler,
-        'local': LocalScheduler,
-        'LocalScheduler': LocalScheduler,
-        'flux': FluxScheduler,
-        'FluxScheduler': FluxScheduler,
-        'slurm': SlurmScheduler,
-        'SlurmScheduler': SlurmScheduler,
-        'lsf': LSFScheduler,
-        'LSFScheduler': LSFScheduler,
+        "local": LocalScheduler,
+        "LocalScheduler": LocalScheduler,
+        "flux": FluxScheduler,
+        "FluxScheduler": FluxScheduler,
+        "slurm": SlurmScheduler,
+        "SlurmScheduler": SlurmScheduler,
+        "lsf": LSFScheduler,
+        "LSFScheduler": LSFScheduler,
     }

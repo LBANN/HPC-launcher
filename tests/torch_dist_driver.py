@@ -19,14 +19,14 @@ import torch.distributed as dist
 import sys
 import socket
 
+
 def main():
     args = sys.argv[1:]
     print(
         f"Device mesh: rank={dist.get_rank()},",
     )
 
-    print(f'{socket.gethostname()} reporting it is rank {dist.get_rank()}')
-
+    print(f"{socket.gethostname()} reporting it is rank {dist.get_rank()}")
 
 
 if __name__ == "__main__":

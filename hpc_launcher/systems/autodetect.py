@@ -37,7 +37,7 @@ def system():
     """
     global _system
     if _system is None:
-        _system = re.sub(r'\d+', '', socket.gethostname())
+        _system = re.sub(r"\d+", "", socket.gethostname())
     return _system
 
 
@@ -56,19 +56,20 @@ def autodetect_current_system(quiet: bool = False) -> System:
     """
 
     sys = system()
-    if sys in ('tioga', 'tuolumne', 'elcap'):
+    if sys in ("tioga", "tuolumne", "elcap"):
         return ElCapitan(sys)
 
-    if sys == 'ipa':
+    if sys == "ipa":
         return CTS2(sys)
 
-    if sys in ('lassen', 'sierra', 'rzanzel'):
+    if sys in ("lassen", "sierra", "rzanzel"):
         return Sierra(sys)
 
     # TODO(later): Try to find current system via other means
 
     if not quiet:
-        logger.warning('Could not auto-detect current system, defaulting '
-                       'to generic system')
+        logger.warning(
+            "Could not auto-detect current system, defaulting " "to generic system"
+        )
 
     return GenericSystem()

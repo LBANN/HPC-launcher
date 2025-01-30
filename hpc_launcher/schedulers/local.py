@@ -32,43 +32,40 @@ class LocalScheduler(Scheduler):
     in ``--local`` jobs.
     """
 
-    def launch_command(self,
-                       system: 'System',
-                       blocking: bool = True) -> list[str]:
+    def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
         return []
 
-    def launcher_script(self,
-                        system: 'System',
-                        command: str,
-                        args: Optional[list[str]] = None,
-                        blocking: bool = True,
-                        save_hostlist: bool = False) -> str:
-        envvars = [
-            f'export {k}={v}' for k, v in system.environment_variables()
+    def launcher_script(
+        self,
+        system: "System",
+        command: str,
+        args: Optional[list[str]] = None,
+        blocking: bool = True,
+        save_hostlist: bool = False,
+    ) -> str:
+        envvars = [f"export {k}={v}" for k, v in system.environment_variables()]
+        envvars += [
+            f"export {k}={v}" for k, v in system.passthrough_environment_variables()
         ]
         envvars += [
-            f'export {k}={v}'
-            for k, v in system.passthrough_environment_variables()
-        ]
-        envvars += [
-            'export RANK=0',
+            "export RANK=0",
         ]
         if save_hostlist:
             envvars += [
-                'export HPC_LAUNCHER_HOSTLIST=$(hostname)',
+                "export HPC_LAUNCHER_HOSTLIST=$(hostname)",
             ]
-        header = '\n'.join(envvars)
+        header = "\n".join(envvars)
 
         if self.work_dir:
-            header += f'\ncd {os.path.abspath(self.work_dir)}\n'
+            header += f"\ncd {os.path.abspath(self.work_dir)}\n"
 
-        return f'''#!/bin/sh
+        return f"""#!/bin/sh
 # Setup
 {header}
 
 # Run
 {command} {" ".join(args)}
-'''
+"""
 
     def get_job_id(self, output: str) -> Optional[str]:
         return None
@@ -79,10 +76,10 @@ class LocalScheduler(Scheduler):
 
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
-        if protocol.lower() == 'tcp':
-            env_list.append(('TORCHRUN_HPC_MASTER_ADDR', 'localhost'))
-            env_list.append(('TORCHRUN_HPC_MASTER_PORT', '23456'))
+        if protocol.lower() == "tcp":
+            env_list.append(("TORCHRUN_HPC_MASTER_ADDR", "localhost"))
+            env_list.append(("TORCHRUN_HPC_MASTER_PORT", "23456"))
             return env_list
         else:
-            msg = f'Unsupported rendezvous protocol {protocol} for scheduler {type(self).__name__}'
+            msg = f"Unsupported rendezvous protocol {protocol} for scheduler {type(self).__name__}"
             raise Exception(msg)

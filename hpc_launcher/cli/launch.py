@@ -20,18 +20,20 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def main():
     parser = argparse.ArgumentParser(
-        description=
-        'Launches a distributed job on the current HPC cluster or cloud.')
+        description="Launches a distributed job on the current HPC cluster or cloud."
+    )
     common_args.setup_arguments(parser)
 
     # Grab the rest of the command line to launch
-    parser.add_argument('command', help='Command to be executed')
+    parser.add_argument("command", help="Command to be executed")
     parser.add_argument(
-        'args',
+        "args",
         nargs=argparse.REMAINDER,
-        help='Arguments to the command that should be executed')
+        help="Arguments to the command that should be executed",
+    )
 
     args = parser.parse_args()
 
@@ -43,22 +45,30 @@ def main():
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
 
-    _, folder_name = scheduler.create_launch_folder_name(args.command, 'launch', args.no_launch_dir)
+    _, folder_name = scheduler.create_launch_folder_name(
+        args.command, "launch", args.no_launch_dir
+    )
 
-    script_file = scheduler.create_launch_folder(folder_name,
-                                                 not args.bg,
-                                                 args.output_script,
-                                                 args.run_from_launch_dir)
+    script_file = scheduler.create_launch_folder(
+        folder_name, not args.bg, args.output_script, args.run_from_launch_dir
+    )
 
-    jobid = scheduler.launch(system, folder_name, script_file,
-                             args.command, args.args, not args.bg,
-                             args.setup_only,
-                             args.color_stderr, args.run_from_launch_dir,
-                             (args.save_hostlist or args.verbose))
+    jobid = scheduler.launch(
+        system,
+        folder_name,
+        script_file,
+        args.command,
+        args.args,
+        not args.bg,
+        args.setup_only,
+        args.color_stderr,
+        args.run_from_launch_dir,
+        (args.save_hostlist or args.verbose),
+    )
 
     if jobid:
-        logger.info(f'Job ID: {jobid}')
+        logger.info(f"Job ID: {jobid}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

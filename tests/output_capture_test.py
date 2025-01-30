@@ -24,93 +24,104 @@ from hpc_launcher.systems import autodetect, configure
 from hpc_launcher.systems.lc.sierra_family import Sierra
 
 
-@pytest.mark.parametrize('no_launch_dir', [False, True])
+@pytest.mark.parametrize("no_launch_dir", [False, True])
 def test_output_capture_local(no_launch_dir: bool):
     # Configure scheduler
-    system, nodes, procs_per_node = configure.configure_launch(
-        None, 1, 1, None, None)
+    system, nodes, procs_per_node = configure.configure_launch(None, 1, 1, None, None)
     scheduler = LocalScheduler(nodes, procs_per_node)
 
     command = sys.executable
-    script = 'output_capture.py'
-    _, launch_dir = scheduler.create_launch_folder_name(command, 'launch', no_launch_dir)
+    script = "output_capture.py"
+    _, launch_dir = scheduler.create_launch_folder_name(
+        command, "launch", no_launch_dir
+    )
 
-    script_file = scheduler.create_launch_folder(launch_dir,
-                                                 True)
+    script_file = scheduler.create_launch_folder(launch_dir, True)
 
     jobid = scheduler.launch(
-        system, launch_dir, script_file, command,
-        [os.path.join(os.path.dirname(__file__), 'output_capture.py')])
+        system,
+        launch_dir,
+        script_file,
+        command,
+        [os.path.join(os.path.dirname(__file__), "output_capture.py")],
+    )
 
     assert os.path.exists(launch_dir)
     assert os.path.isdir(launch_dir)
-    assert os.path.isfile(os.path.join(launch_dir, 'out.log'))
-    assert os.path.isfile(os.path.join(launch_dir, 'err.log'))
-    assert open(os.path.join(launch_dir, 'out.log'), 'r').read() == 'output\n'
-    assert open(os.path.join(launch_dir, 'err.log'), 'r').read() == 'error\n'
+    assert os.path.isfile(os.path.join(launch_dir, "out.log"))
+    assert os.path.isfile(os.path.join(launch_dir, "err.log"))
+    assert open(os.path.join(launch_dir, "out.log"), "r").read() == "output\n"
+    assert open(os.path.join(launch_dir, "err.log"), "r").read() == "error\n"
     if not no_launch_dir:
         shutil.rmtree(launch_dir, ignore_errors=True)
     else:
-        os.unlink(f'{launch_dir}/out.log')
-        os.unlink(f'{launch_dir}/err.log')
-        os.unlink(f'{launch_dir}/launch.sh')
+        os.unlink(f"{launch_dir}/out.log")
+        os.unlink(f"{launch_dir}/err.log")
+        os.unlink(f"{launch_dir}/launch.sh")
 
 
-@pytest.mark.parametrize('scheduler_class', (SlurmScheduler, FluxScheduler, LSFScheduler))
-@pytest.mark.parametrize('processes', [1, 2])
+@pytest.mark.parametrize(
+    "scheduler_class", (SlurmScheduler, FluxScheduler, LSFScheduler)
+)
+@pytest.mark.parametrize("processes", [1, 2])
 def test_output_capture_scheduler(scheduler_class, processes):
-    if scheduler_class is SlurmScheduler and not shutil.which('srun'):
-        pytest.skip('SLURM not available')
+    if scheduler_class is SlurmScheduler and not shutil.which("srun"):
+        pytest.skip("SLURM not available")
 
     if scheduler_class is FluxScheduler and (
-            not shutil.which('flux') or not os.path.exists('/run/flux/local')):
-        pytest.skip('FLUX not available')
+        not shutil.which("flux") or not os.path.exists("/run/flux/local")
+    ):
+        pytest.skip("FLUX not available")
 
-    if scheduler_class is LSFScheduler and not shutil.which('jsrun'):
-        pytest.skip('LSF not available')
+    if scheduler_class is LSFScheduler and not shutil.which("jsrun"):
+        pytest.skip("LSF not available")
 
     # Configure scheduler
     system, nodes, procs_per_node = configure.configure_launch(
-        None, 1, processes, None, None)
+        None, 1, processes, None, None
+    )
     scheduler = scheduler_class(nodes, procs_per_node)
 
     command = sys.executable
-    _, launch_dir = scheduler.create_launch_folder_name(command, 'launch')
+    _, launch_dir = scheduler.create_launch_folder_name(command, "launch")
 
-    script_file = scheduler.create_launch_folder(launch_dir,
-                                                 True)
+    script_file = scheduler.create_launch_folder(launch_dir, True)
 
     jobid = scheduler.launch(
-        system, launch_dir, script_file, command,
-        [os.path.join(os.path.dirname(__file__), 'output_capture.py')])
+        system,
+        launch_dir,
+        script_file,
+        command,
+        [os.path.join(os.path.dirname(__file__), "output_capture.py")],
+    )
 
     assert os.path.exists(launch_dir)
     assert os.path.isdir(launch_dir)
-    assert os.path.isfile(os.path.join(launch_dir, 'out.log'))
-    assert os.path.isfile(os.path.join(launch_dir, 'err.log'))
-    outfile = open(os.path.join(launch_dir, 'out.log'), 'r').read()
-    errfile = open(os.path.join(launch_dir, 'err.log'), 'r').read()
-    assert outfile.count('output') == processes
-    if ((scheduler_class is LSFScheduler or \
-        scheduler_class is SlurmScheduler) and \
-        isinstance(autodetect.autodetect_current_system(), Sierra)) and \
-        not os.getenv('LSB_HOSTS'):
+    assert os.path.isfile(os.path.join(launch_dir, "out.log"))
+    assert os.path.isfile(os.path.join(launch_dir, "err.log"))
+    outfile = open(os.path.join(launch_dir, "out.log"), "r").read()
+    errfile = open(os.path.join(launch_dir, "err.log"), "r").read()
+    assert outfile.count("output") == processes
+    if (
+        (scheduler_class is LSFScheduler or scheduler_class is SlurmScheduler)
+        and isinstance(autodetect.autodetect_current_system(), Sierra)
+    ) and not os.getenv("LSB_HOSTS"):
         # bsub -Is has a bad behavior where the error stream is appended to the output stream
-        assert outfile.count('error') == processes
+        assert outfile.count("error") == processes
     else:
-        assert errfile.count('error') == processes
+        assert errfile.count("error") == processes
     shutil.rmtree(launch_dir, ignore_errors=True)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_output_capture_local(False)
     test_output_capture_local(True)
-    if shutil.which('srun'):
+    if shutil.which("srun"):
         test_output_capture_scheduler(SlurmScheduler, 1)
         test_output_capture_scheduler(SlurmScheduler, 2)
-    if shutil.which('flux'):
+    if shutil.which("flux"):
         test_output_capture_scheduler(FluxScheduler, 1)
         test_output_capture_scheduler(FluxScheduler, 2)
-    if shutil.which('jsrun'):
+    if shutil.which("jsrun"):
         test_output_capture_scheduler(LSFScheduler, 1)
         test_output_capture_scheduler(LSFScheduler, 2)
