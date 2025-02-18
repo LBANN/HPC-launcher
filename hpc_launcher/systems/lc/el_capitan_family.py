@@ -101,6 +101,9 @@ class ElCapitan(System):
 
         # Performance tuning for HPE Slingshot Cassini NIC
         env_list.append(("FI_CXI_RDZV_PROTO", "alt_read"))
+        env_list.append(("FI_CXI_RDZV_THRESHOLD", "0"))
+        env_list.append(("FI_CXI_RDZV_GET_MIN", "0"))
+        env_list.append(("FI_CXI_RDZV_EAGER_SIZE", "0"))
 
         for i in self._aux_env_list:
             env_list.append(i)
