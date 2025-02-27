@@ -68,6 +68,12 @@ def main():
             if rdv_protocol == "mpi://" and rank == 0:
                 print("[Rank {} of {}]: MPI Version: {}".format(rank, world_size, MPI.Get_version()))
                 print("[Rank {} of {}]: MPI Implementation: {}".format(rank, world_size, MPI.Get_library_version()))
+    else:
+        # If the world size is only 1, torch distributed doesn't have to be initialized
+        # however, the called application may try to setup torch distributed -- provide env variables
+        os.environ["WORLD_SIZE"] = f"{world_size}"
+        os.environ["MASTER_ADDR"] = os.getenv("TORCHRUN_HPC_MASTER_ADDR")
+        os.environ["MASTER_PORT"] = os.getenv("TORCHRUN_HPC_MASTER_PORT")
 
     # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
     sys.argv = sys.argv[1:]
