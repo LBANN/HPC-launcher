@@ -40,8 +40,8 @@ def main():
             print(f"[Rank {rank} of {world_size}] TORCHRUN-HPC set the max GPU memory fraction to {fraction_max_gpu_mem}")
 
     torch_dist_initialized = dist.is_initialized()
-    if world_size > 1:
-        rdv_protocol = os.getenv("TORCHRUN_HPC_RDV_PROTOCOL")
+    rdv_protocol = os.getenv("TORCHRUN_HPC_RDV_PROTOCOL")
+    if world_size > 1 or rdv_protocol == "mpi://":
         if rdv_protocol == "mpi://":
             try:
                 import mpi4py
@@ -72,8 +72,11 @@ def main():
         # If the world size is only 1, torch distributed doesn't have to be initialized
         # however, the called application may try to setup torch distributed -- provide env variables
         os.environ["WORLD_SIZE"] = f"{world_size}"
-        os.environ["MASTER_ADDR"] = os.getenv("TORCHRUN_HPC_MASTER_ADDR")
-        os.environ["MASTER_PORT"] = os.getenv("TORCHRUN_HPC_MASTER_PORT")
+        if os.getenv("TORCHRUN_HPC_MASTER_ADDR"):
+            os.environ["MASTER_ADDR"] = os.getenv("TORCHRUN_HPC_MASTER_ADDR")
+        if os.getenv("TORCHRUN_HPC_MASTER_PORT"):
+            os.environ["MASTER_PORT"] = os.getenv("TORCHRUN_HPC_MASTER_PORT")
+
 
     # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
     sys.argv = sys.argv[1:]

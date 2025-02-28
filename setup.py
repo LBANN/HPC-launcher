@@ -29,7 +29,7 @@ setup(
             "launch = hpc_launcher.cli.launch:main",
         ],
     },
-    install_requires=["psutil"],
+    install_requires=["psutil", "pyrsmi", "gputil", "py-libnuma"],
     extras_require={
         "torch": ["torch", "numpy"],
         "mpi": ["mpi4py>=3.1.4", "mpi_rdv"],
