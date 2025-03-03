@@ -19,6 +19,7 @@ import logging
 import socket
 import re
 import math
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -54,22 +55,24 @@ def find_AMD_gpus() -> (int, float, str):
 
 def find_NVIDIA_gpus() -> (int, float, str):
     try:
-        import GPUtil
+        import pynvml
         num_gpus = 0
         mem_per_gpu = 0
         gpu_arch = None
         try:
-            GPUs = GPUtil.getGPUs()
+            pynvml.nvmlInit()
         except:
             return (0, 0, None)
-        num_gpus = len(GPUs)
+
+        deviceCount = pynvml.nvmlDeviceGetCount()
         # Assume that the GPUs are homogenous on a system
-        if num_gpus > 0:
-            gpu_name = GPUs[0].name
-            mem_per_gpu = math.floor(GPUs[0].memoryTotal / 1024)
-            if 'V100' in gpu_name:
-                gpu_arch = 'sm_70'
-        return (num_gpus, mem_per_gpu, gpu_arch)
+        if deviceCount > 0:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            gpu_arch = f"sm_{major}{minor}"
+            mem_per_gpu = math.floor(info.total / (1024*1024*1024))
+        return (deviceCount, mem_per_gpu, gpu_arch)
     except (ImportError, ModuleNotFoundError):
         return (0, 0, None)
 
@@ -90,8 +93,6 @@ def find_gpus() -> (str, int, float, str):
 
 def count_cpus():
     try:
-        import multiprocessing
-        num_cpus = multiprocessing.cpu_count()
         import psutil
         num_cpus = psutil.cpu_count(logical=False)
         return num_cpus
@@ -99,10 +100,39 @@ def count_cpus():
         return 0
 
 def num_NUMA_domains():
+    """
+    Get the number of NUMA domains on a Linux system, filtering out nodes without CPUs.
+
+    Returns:
+        int: The number of NUMA domains with CPUs attached.
+    Errors:
+        If an error is detected just return that there is 1 NUMA domain
+    """
+    numa_nodes_path = "/sys/devices/system/node/"
     try:
-        import numa
-        return numa.info.get_num_configured_nodes()
-    except (ImportError, ModuleNotFoundError):
+        # List all entries in the NUMA nodes directory
+        entries = os.listdir(numa_nodes_path)
+
+        # Filter entries that match the pattern "nodeX" where X is a number
+        numa_nodes = [entry for entry in entries if entry.startswith("node") and entry[4:].isdigit()]
+
+        # Check if each NUMA node has CPUs attached
+        nodes_with_cpus = 0
+        for node in numa_nodes:
+            cpulist_path = os.path.join(numa_nodes_path, node, "cpulist")
+            if os.path.exists(cpulist_path):
+                with open(cpulist_path, "r") as cpulist_file:
+                    cpulist = cpulist_file.read().strip()
+                    if cpulist:  # If the cpulist is not empty, the node has CPUs
+                        nodes_with_cpus += 1
+
+        return nodes_with_cpus
+    except FileNotFoundError:
+        # The path does not exist, likely indicating NUMA is not supported
+        return 1
+    except Exception as e:
+        # Handle unexpected errors
+        print(f"Error while determining NUMA domains: {e}")
         return 1
 
 def find_scheduler():
