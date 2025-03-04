@@ -45,11 +45,9 @@ class SystemParams:
     fraction_max_gpu_mem: Optional[float] = 1.0
 
     def __repr__(self):
-        print('repr called')
         return json.dumps(asdict(self))
 
     def __str__(self):
-        print('str called')
         return json.dumps(asdict(self))
 
     def has_gpu(self):
