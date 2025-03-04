@@ -34,7 +34,7 @@ class SystemParams:
     # Vendor specific GPU compiler architecture
     gpu_arch: str
     # Number of GB of memory per GPU
-    mem_per_gpu: int
+    mem_per_gpu: float
     # # Physical number of CPUs per node
     # cpus_per_node: int
     # Number of NUMA domains

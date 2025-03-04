@@ -1,11 +1,21 @@
 import os
 from setuptools import find_packages, setup
+import ctypes.util
 
 with open("README.md", "r") as fp:
     long_description = fp.read()
 
 with open(os.path.join("hpc_launcher", "version.py"), "r") as fp:
     version = fp.read().strip().split(" ")[-1][1:-1]
+
+extras=[]
+path = ctypes.util.find_library('amdhip64')
+if path:
+    extras.append("amdsmi")
+
+path = ctypes.util.find_library('cudart')
+if path:
+    extras.append("nvidia-ml-py")
 
 setup(
     name="hpc-launcher",
@@ -29,7 +39,7 @@ setup(
             "launch = hpc_launcher.cli.launch:main",
         ],
     },
-    install_requires=["psutil", "pyrsmi", "gputil", "py-libnuma"],
+    install_requires=["psutil"]+extras,
     extras_require={
         "torch": ["torch", "numpy"],
         "mpi": ["mpi4py>=3.1.4", "mpi_rdv"],

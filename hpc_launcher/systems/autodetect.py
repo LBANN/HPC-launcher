@@ -32,58 +32,65 @@ _system = None
 
 def find_AMD_gpus() -> (int, float, str):
     try:
-        from pyrsmi import rocml
-        try:
-            rocml.smi_initialize()
-        except:
-            return (0, 0, None)
-
-        num_gpus = rocml.smi_get_device_count()
+        import amdsmi as smi
+    except (ImportError, ModuleNotFoundError, KeyError):
+        return (0, 0, None)
+    try:
+        smi.amdsmi_init()
+        devices = smi.amdsmi_get_processor_handles()
+        num_gpus = len(devices)
         mem_per_gpu = 0
         gpu_arch = None
-        if num_gpus > 0:
-            mem_per_gpu = math.floor(rocml.smi_get_device_memory_total(0) / (1024*1024*1024))
-            device_id = rocml.smi_get_device_id(0)
-            if device_id == 0x74a0:
-                gpu_arch = 'gfx942'
-            if device_id == 0x7408:
-                gpu_arch = 'gfx90a'
-        rocml.smi_shutdown()
+        if len(devices) == 0:
+            return (0, 0, None)
+        else:
+            asic_info = smi.amdsmi_get_gpu_asic_info(devices[0])
+            gpu_arch = asic_info["target_graphics_version"]
+            if gpu_arch == "gfx9010":
+                gpu_arch = "gfx90a"
+            vram_memory_total = smi.amdsmi_get_gpu_memory_total(devices[0], smi.amdsmi_interface.AmdSmiMemoryType.VRAM)
+            mem_per_gpu = vram_memory_total / (1024**3)
+
         return (num_gpus, mem_per_gpu, gpu_arch)
-    except (ImportError, ModuleNotFoundError):
+    except smi.AmdSmiException as e:
         return (0, 0, None)
+    finally:
+        try:
+            smi.amdsmi_shut_down()
+        except smi.AmdSmiException as e:
+            return (0, 0, None)
 
 def find_NVIDIA_gpus() -> (int, float, str):
     try:
         import pynvml
-        num_gpus = 0
-        mem_per_gpu = 0
-        gpu_arch = None
-        try:
-            pynvml.nvmlInit()
-        except:
-            return (0, 0, None)
-
-        deviceCount = pynvml.nvmlDeviceGetCount()
-        # Assume that the GPUs are homogenous on a system
-        if deviceCount > 0:
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-            major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
-            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            gpu_arch = f"sm_{major}{minor}"
-            mem_per_gpu = math.floor(info.total / (1024*1024*1024))
-        return (deviceCount, mem_per_gpu, gpu_arch)
     except (ImportError, ModuleNotFoundError):
         return (0, 0, None)
+    num_gpus = 0
+    mem_per_gpu = 0
+    gpu_arch = None
+    try:
+        pynvml.nvmlInit()
+    except:
+        return (0, 0, None)
+
+    deviceCount = pynvml.nvmlDeviceGetCount()
+    # Assume that the GPUs are homogenous on a system
+    if deviceCount > 0:
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
+        info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        gpu_arch = f"sm_{major}{minor}"
+        mem_per_gpu = info.total / (1024**3)
+    return (deviceCount, mem_per_gpu, gpu_arch)
 
 def find_gpus() -> (str, int, float, str):
     (num_AMD_gpus, mem_per_AMD_gpu, AMD_arch) = find_AMD_gpus()
     (num_NVIDIA_gpus, mem_per_NVIDIA_gpu, NVIDIA_arch) = find_NVIDIA_gpus()
     if num_AMD_gpus == 0 and num_NVIDIA_gpus == 0:
-        print('Unable to autodetect any GPUs on this system')
+        logger.warning('Unable to autodetect any GPUs on this system - try installing amdsmi or nvidia-ml-py')
         return ("Generic CPU", 0, 0, None)
     if num_AMD_gpus != 0 and num_NVIDIA_gpus != 0:
-        print('Autodetected both AMD and NVIDIA GPUs on this system - Aborting autodectection')
+        logger.warning('Autodetected both AMD and NVIDIA GPUs on this system - Aborting autodectection')
         return ("Generic AMD+NVIDIA", 0, 0, None)
     if num_AMD_gpus > 0:
         return ("Generic AMD", num_AMD_gpus, mem_per_AMD_gpu, AMD_arch)
