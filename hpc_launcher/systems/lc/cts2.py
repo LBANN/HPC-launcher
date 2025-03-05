@@ -17,7 +17,7 @@ from hpc_launcher.schedulers.slurm import SlurmScheduler
 from hpc_launcher.systems.system import System, SystemParams
 import os
 
-_h100_node = SystemParams(112, 4, "sm_90", 128, 8, "slurm")
+_h100_node = SystemParams(112, 4, "sm_90", 80, 8, "slurm")
 
 # Known LC systems
 _system_params = {
