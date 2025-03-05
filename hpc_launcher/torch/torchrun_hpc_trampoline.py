@@ -37,11 +37,13 @@ def main():
     if torch.cuda.is_available():
         fraction_max_gpu_mem = float(os.getenv("TORCHRUN_HPC_MAX_GPU_MEM"))
         if fraction_max_gpu_mem != 1.0 and rank == 0:
-            print(f"[Rank {rank} of {world_size}] TORCHRUN-HPC set the max GPU memory fraction to {fraction_max_gpu_mem}")
+            print(
+                f"[Rank {rank} of {world_size}] TORCHRUN-HPC set the max GPU memory fraction to {fraction_max_gpu_mem}"
+            )
 
     torch_dist_initialized = dist.is_initialized()
-    if world_size > 1:
-        rdv_protocol = os.getenv("TORCHRUN_HPC_RDV_PROTOCOL")
+    rdv_protocol = os.getenv("TORCHRUN_HPC_RDV_PROTOCOL")
+    if world_size > 1 or rdv_protocol == "mpi://":
         if rdv_protocol == "mpi://":
             try:
                 import mpi4py
@@ -59,21 +61,33 @@ def main():
 
         if not torch_dist_initialized:
             if rank == 0:
-                print(f"[Rank {rank} of {world_size}]: Initializing distributed PyTorch using protocol: {rdv_protocol}")
+                print(
+                    f"[Rank {rank} of {world_size}]: Initializing distributed PyTorch using protocol: {rdv_protocol}"
+                )
             # TODO(later): Fix how we handle CUDA visible devices and MPI bind
             dist.init_process_group(
                 "nccl", init_method=rdv_protocol, world_size=world_size, rank=rank
             )
 
             if rdv_protocol == "mpi://" and rank == 0:
-                print("[Rank {} of {}]: MPI Version: {}".format(rank, world_size, MPI.Get_version()))
-                print("[Rank {} of {}]: MPI Implementation: {}".format(rank, world_size, MPI.Get_library_version()))
+                print(
+                    "[Rank {} of {}]: MPI Version: {}".format(
+                        rank, world_size, MPI.Get_version()
+                    )
+                )
+                print(
+                    "[Rank {} of {}]: MPI Implementation: {}".format(
+                        rank, world_size, MPI.Get_library_version()
+                    )
+                )
     else:
         # If the world size is only 1, torch distributed doesn't have to be initialized
         # however, the called application may try to setup torch distributed -- provide env variables
         os.environ["WORLD_SIZE"] = f"{world_size}"
-        os.environ["MASTER_ADDR"] = os.getenv("TORCHRUN_HPC_MASTER_ADDR")
-        os.environ["MASTER_PORT"] = os.getenv("TORCHRUN_HPC_MASTER_PORT")
+        if os.getenv("TORCHRUN_HPC_MASTER_ADDR"):
+            os.environ["MASTER_ADDR"] = os.getenv("TORCHRUN_HPC_MASTER_ADDR")
+        if os.getenv("TORCHRUN_HPC_MASTER_PORT"):
+            os.environ["MASTER_PORT"] = os.getenv("TORCHRUN_HPC_MASTER_PORT")
 
     # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
     sys.argv = sys.argv[1:]

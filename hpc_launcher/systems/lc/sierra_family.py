@@ -5,7 +5,7 @@ import os
 
 
 # Supported LC systems
-_sierra_node = SystemParams(16, 4, "sm_70", 16, 2, 2, "lsf")
+_sierra_node = SystemParams(16, 4, "sm_70", 16, 2, "lsf")
 _system_params = {
     "lassen": (
         "pbatch",

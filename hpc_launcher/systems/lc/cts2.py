@@ -22,10 +22,10 @@ _system_params = {
     "ipa": (
         "a100",
         {
-            "a100": SystemParams(32, 2, "sm_80", 40, 2, 1, "slurm"),
-            "aa100": SystemParams(16, 2, "sm_80", 40, 4, 2, "slurm"),
-            "av100": SystemParams(32, 2, "sm_70", 32, 4, 2, "slurm"),
-            "v100": SystemParams(16, 2, "sm_70", 32, 4, 2, "slurm"),
+            "a100": SystemParams(32, 2, "sm_80", 40, 1, "slurm"),
+            "aa100": SystemParams(16, 2, "sm_80", 40, 2, "slurm"),
+            "av100": SystemParams(32, 2, "sm_70", 32, 2, "slurm"),
+            "v100": SystemParams(16, 2, "sm_70", 32, 2, "slurm"),
         },
     ),
 }

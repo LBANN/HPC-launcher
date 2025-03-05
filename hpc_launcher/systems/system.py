@@ -11,7 +11,8 @@
 # https://github.com/LBANN and https://github.com/LLNL/LBANN.
 #
 # SPDX-License-Identifier: (Apache-2.0)
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
+import json
 from typing import Optional
 import logging
 from hpc_launcher.schedulers.scheduler import Scheduler
@@ -34,9 +35,7 @@ class SystemParams:
     # Vendor specific GPU compiler architecture
     gpu_arch: str
     # Number of GB of memory per GPU
-    mem_per_gpu: int
-    # Physical number of CPUs per node
-    cpus_per_node: int
+    mem_per_gpu: float
     # Number of NUMA domains
     numa_domains: int
     # String name of the Scheduler class
@@ -44,10 +43,11 @@ class SystemParams:
     # Optional system level guard to limit GPU/APU memory utilization
     fraction_max_gpu_mem: Optional[float] = 1.0
 
-    def print_params(self):
-        logger.info(
-            f"c={self.cores_per_node} g={self.gpus_per_node} s={self.scheduler} arch={self.gpu_arch} numa={self.numa_domains}"
-        )
+    def __repr__(self):
+        return json.dumps(asdict(self))
+
+    def __str__(self):
+        return json.dumps(asdict(self))
 
     def has_gpu(self):
         """Whether LC system has GPUs."""

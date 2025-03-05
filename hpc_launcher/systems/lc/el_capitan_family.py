@@ -18,9 +18,9 @@ import os
 
 
 # Known LC systems
-_mi250x_node = SystemParams(64, 8, "gfx90a", 64, 4, 4, "flux")
+_mi250x_node = SystemParams(64, 8, "gfx90a", 64, 4, "flux")
 # APUs can run into a snarl where they OOM if too much GPU memory is allocated
-_mi300a_node = SystemParams(96, 4, "gfx942", 128, 4, 4, "flux", 0.8)
+_mi300a_node = SystemParams(96, 4, "gfx942", 128, 4, "flux", 0.8)
 _system_params = {
     "tioga": (
         "pdebug",
@@ -44,6 +44,13 @@ _system_params = {
         },
     ),
     "rzadams": (
+        "pbatch",
+        {
+            "pbatch": _mi300a_node,
+            "pdebug": _mi300a_node,
+        },
+    ),
+    "tenaya": (
         "pbatch",
         {
             "pbatch": _mi300a_node,
@@ -104,6 +111,9 @@ class ElCapitan(System):
         env_list.append(("FI_CXI_RDZV_THRESHOLD", "0"))
         env_list.append(("FI_CXI_RDZV_GET_MIN", "0"))
         env_list.append(("FI_CXI_RDZV_EAGER_SIZE", "0"))
+
+        # Performance tuning for RCCL multi-threading
+        env_list.append(("NCCL_IGNORE_CPU_AFFINITY", "1"))
 
         for i in self._aux_env_list:
             env_list.append(i)
