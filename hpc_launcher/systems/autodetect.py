@@ -74,7 +74,7 @@ def find_NVIDIA_gpus() -> (int, float, str):
         return (0, 0, None)
 
     deviceCount = pynvml.nvmlDeviceGetCount()
-    # Assume that the GPUs are homogenous on a system
+    # Assume that the GPUs are homogeneous on a system
     if deviceCount > 0:
         handle = pynvml.nvmlDeviceGetHandleByIndex(0)
         major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
@@ -110,10 +110,7 @@ def num_NUMA_domains():
     """
     Get the number of NUMA domains on a Linux system, filtering out nodes without CPUs.
 
-    Returns:
-        int: The number of NUMA domains with CPUs attached.
-    Errors:
-        If an error is detected just return that there is 1 NUMA domain
+    :return: The number of NUMA domains with CPUs attached, or 1 in case of an error.
     """
     numa_nodes_path = "/sys/devices/system/node/"
     try:
@@ -138,8 +135,6 @@ def num_NUMA_domains():
         # The path does not exist, likely indicating NUMA is not supported
         return 1
     except Exception as e:
-        # Handle unexpected errors
-        print(f"Error while determining NUMA domains: {e}")
         return 1
 
 def find_scheduler():
