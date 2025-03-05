@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # Set system parameters
 # ==============================================
 
+
 @dataclass
 class SystemParams:
     """Simple data structure to describe an LC system."""

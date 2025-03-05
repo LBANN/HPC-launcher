@@ -30,6 +30,7 @@ _system = None
 # Access functions
 # ==============================================
 
+
 def find_AMD_gpus() -> (int, float, str):
     try:
         import amdsmi as smi
@@ -48,7 +49,9 @@ def find_AMD_gpus() -> (int, float, str):
             gpu_arch = asic_info["target_graphics_version"]
             if gpu_arch == "gfx9010":
                 gpu_arch = "gfx90a"
-            vram_memory_total = smi.amdsmi_get_gpu_memory_total(devices[0], smi.amdsmi_interface.AmdSmiMemoryType.VRAM)
+            vram_memory_total = smi.amdsmi_get_gpu_memory_total(
+                devices[0], smi.amdsmi_interface.AmdSmiMemoryType.VRAM
+            )
             mem_per_gpu = vram_memory_total / (1024**3)
 
         return (num_gpus, mem_per_gpu, gpu_arch)
@@ -59,6 +62,7 @@ def find_AMD_gpus() -> (int, float, str):
             smi.amdsmi_shut_down()
         except smi.AmdSmiException as e:
             return (0, 0, None)
+
 
 def find_NVIDIA_gpus() -> (int, float, str):
     try:
@@ -88,14 +92,19 @@ def find_NVIDIA_gpus() -> (int, float, str):
         except pynvml.NVMLError as e:
             return (0, 0, None)
 
+
 def find_gpus() -> (str, int, float, str):
     (num_AMD_gpus, mem_per_AMD_gpu, AMD_arch) = find_AMD_gpus()
     (num_NVIDIA_gpus, mem_per_NVIDIA_gpu, NVIDIA_arch) = find_NVIDIA_gpus()
     if num_AMD_gpus == 0 and num_NVIDIA_gpus == 0:
-        logger.warning('Unable to autodetect any GPUs on this system - try installing amdsmi or nvidia-ml-py')
+        logger.warning(
+            "Unable to autodetect any GPUs on this system - try installing amdsmi or nvidia-ml-py"
+        )
         return ("Generic CPU", 0, 0, None)
     if num_AMD_gpus != 0 and num_NVIDIA_gpus != 0:
-        logger.warning('Autodetected both AMD and NVIDIA GPUs on this system - Aborting autodectection')
+        logger.warning(
+            "Autodetected both AMD and NVIDIA GPUs on this system - Aborting autodectection"
+        )
         return ("Generic AMD+NVIDIA", 0, 0, None)
     if num_AMD_gpus > 0:
         return ("Generic AMD", num_AMD_gpus, mem_per_AMD_gpu, AMD_arch)
@@ -106,10 +115,12 @@ def find_gpus() -> (str, int, float, str):
 def count_cpus():
     try:
         import psutil
+
         num_cpus = psutil.cpu_count(logical=False)
         return num_cpus
     except (ImportError, ModuleNotFoundError):
         return 0
+
 
 def num_NUMA_domains():
     """
@@ -123,7 +134,11 @@ def num_NUMA_domains():
         entries = os.listdir(numa_nodes_path)
 
         # Filter entries that match the pattern "nodeX" where X is a number
-        numa_nodes = [entry for entry in entries if entry.startswith("node") and entry[4:].isdigit()]
+        numa_nodes = [
+            entry
+            for entry in entries
+            if entry.startswith("node") and entry[4:].isdigit()
+        ]
 
         # Check if each NUMA node has CPUs attached
         nodes_with_cpus = 0
@@ -142,9 +157,11 @@ def num_NUMA_domains():
     except Exception as e:
         return 1
 
+
 def find_scheduler():
     import shutil
     import os
+
     scheduler = None
     if shutil.which("flux") and os.path.exists("/run/flux/local"):
         scheduler = "flux"
@@ -198,19 +215,21 @@ def autodetect_current_system(quiet: bool = False) -> System:
     scheduler = find_scheduler()
     generic_sys = GenericSystem()
     autodetected_system_params = SystemParams(
-                cores_per_node=num_cpus,
-                gpus_per_node=num_gpus,
-                gpu_arch=gpu_arch,
-                mem_per_gpu=mem_per_gpu,
-                scheduler=scheduler,
-                numa_domains=num_NUMA_domains())
+        cores_per_node=num_cpus,
+        gpus_per_node=num_gpus,
+        gpu_arch=gpu_arch,
+        mem_per_gpu=mem_per_gpu,
+        scheduler=scheduler,
+        numa_domains=num_NUMA_domains(),
+    )
     generic_sys.system_params = {"auto": autodetected_system_params}
     generic_sys.default_queue = "auto"
     generic_sys.system_name = generic_name
 
     if not quiet:
         logger.warning(
-            "Could not auto-detect current system, defaulting " f"to {generic_name} system: "
-            f'{autodetected_system_params}'
+            "Could not auto-detect current system, defaulting "
+            f"to {generic_name} system: "
+            f"{autodetected_system_params}"
         )
     return generic_sys
