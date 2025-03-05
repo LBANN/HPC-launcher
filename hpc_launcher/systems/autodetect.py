@@ -70,18 +70,23 @@ def find_NVIDIA_gpus() -> (int, float, str):
     gpu_arch = None
     try:
         pynvml.nvmlInit()
+
+        deviceCount = pynvml.nvmlDeviceGetCount()
+        # Assume that the GPUs are homogeneous on a system
+        if deviceCount > 0:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            gpu_arch = f"sm_{major}{minor}"
+            mem_per_gpu = info.total / (1024**3)
+        return (deviceCount, mem_per_gpu, gpu_arch)
     except:
         return (0, 0, None)
-
-    deviceCount = pynvml.nvmlDeviceGetCount()
-    # Assume that the GPUs are homogeneous on a system
-    if deviceCount > 0:
-        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-        major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
-        info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        gpu_arch = f"sm_{major}{minor}"
-        mem_per_gpu = info.total / (1024**3)
-    return (deviceCount, mem_per_gpu, gpu_arch)
+    finally:
+        try:
+            pynvml.nvmlShutdown()
+        except pynvml.NVMLError as e:
+            return (0, 0, None)
 
 def find_gpus() -> (str, int, float, str):
     (num_AMD_gpus, mem_per_AMD_gpu, AMD_arch) = find_AMD_gpus()
