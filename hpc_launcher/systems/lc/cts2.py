@@ -1,3 +1,4 @@
+
 # Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
 # Produced at the Lawrence Livermore National Laboratory.
 # Written by the LBANN Research Team (B. Van Essen, et al.) listed in
@@ -16,6 +17,7 @@ from hpc_launcher.schedulers.slurm import SlurmScheduler
 from hpc_launcher.systems.system import System, SystemParams
 import os
 
+_h100_node = SystemParams(112, 4, "sm_90", 128, 8, "slurm")
 
 # Known LC systems
 _system_params = {
@@ -26,6 +28,14 @@ _system_params = {
             "aa100": SystemParams(16, 2, "sm_80", 40, 2, "slurm"),
             "av100": SystemParams(32, 2, "sm_70", 32, 2, "slurm"),
             "v100": SystemParams(16, 2, "sm_70", 32, 2, "slurm"),
+        },
+    ),
+    "matrix": (
+        "pbatch",
+        {
+            "pbatch": _h100_node,
+            "pdebug": _h100_node,
+            "erl": _h100_node,
         },
     ),
 }

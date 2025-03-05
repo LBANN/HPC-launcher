@@ -203,7 +203,7 @@ def autodetect_current_system(quiet: bool = False) -> System:
     if sys in ("tioga", "tuolumne", "elcap", "rzadams", "tenaya"):
         return ElCapitan(sys)
 
-    if sys == "ipa":
+    if sys in ("ipa", "matrix", "vector"):
         return CTS2(sys)
 
     if sys in ("lassen", "sierra", "rzanzel"):
