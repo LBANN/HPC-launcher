@@ -93,10 +93,17 @@ class SlurmScheduler(Scheduler):
             header.write(f"#SBATCH {tmp}\n")
 
         # Number of Tasks per node
-        tmp = f"--ntasks-per-node={self.nodes * self.procs_per_node}"
+        tmp = f"--ntasks-per-node={self.procs_per_node}"
         cmd_args += [tmp]
         if not blocking:
             header.write(f"#SBATCH {tmp}\n")
+
+        # Set the Number of GPUs per task
+        if self.gpus_per_proc > 0:
+            tmp = f"--gpus-per-task={self.gpus_per_proc}"
+            cmd_args += [tmp]
+            if not blocking:
+                header.write(f"#SBATCH {tmp}\n")
 
         if self.work_dir:
             tmp = [f"--chdir={os.path.abspath(self.work_dir)}"]

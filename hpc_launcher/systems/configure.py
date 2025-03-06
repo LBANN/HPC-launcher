@@ -23,9 +23,10 @@ def configure_launch(
     queue: str,
     nodes: int,
     procs_per_node: int,
+    gpus_per_proc: int,
     gpus_at_least: int,
     gpumem_at_least: int,
-) -> tuple[System, int, int]:
+) -> tuple[System, int, int, int]:
     """
     See if the system can be autodetected and then process some special
     arguments that can autoselect the number of ranks / GPUs.
@@ -47,9 +48,22 @@ def configure_launch(
     )
     system_params = system.system_parameters(queue)
 
+    if not gpus_per_proc:
+        gpus_per_proc = 0
+    if system_params is not None:
+        if gpus_per_proc == 0 and system_params.gpus_per_node > 0:
+            # If gpus_per_proc wasn't set and there are gpus on the node set it to a default of 1
+            gpus_per_proc = 1
+        if gpus_per_proc > system_params.gpus_per_node:
+            logger.info(f'Requested number of GPUs per process {gpus_per_proc} exceeds the number of GPUs per node {system_params.gpus_per_node}')
+            gpus_per_proc = system_params.gpus_per_node
+
+        if procs_per_node * gpus_per_proc > system_params.gpus_per_node:
+            logger.info(f'The combination of {procs_per_node} processes per node and {gpus_per_proc} GPUs per process exceeds the number of GPUs per node {system_params.gpus_per_node}')
+
     # If the user requested a specific number of processes per node, honor that
     if nodes and procs_per_node:
-        return system, nodes, procs_per_node
+        return system, nodes, procs_per_node, gpus_per_proc
 
     # Otherwise, if there is a valid set of system parameters, try to fill in
     # the blanks provided by the user
@@ -69,5 +83,7 @@ def configure_launch(
             nodes = 1
         if not procs_per_node:
             procs_per_node = 1
+        if not gpus_per_proc:
+            gpus_per_proc = 1
 
-    return system, nodes, procs_per_node
+    return system, nodes, procs_per_node, gpus_per_proc

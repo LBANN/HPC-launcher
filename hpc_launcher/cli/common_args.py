@@ -68,6 +68,13 @@ def setup_arguments(parser: argparse.ArgumentParser):
         help="Specifies the number of requested processes per node",
     )
 
+    group.add_argument(
+        "--gpus-per-proc",
+        type=int,
+        default=None, # Internally, if there are GPUs, this will default to 1
+        help="Specifies the number of requested GPUs per process (default: 1)",
+    )
+
     group.add_argument("-q", "--queue", default=None, help="Specifies the queue to use")
 
     # Constraints
@@ -259,10 +266,11 @@ def process_arguments(args: argparse.Namespace, logger: logging.Logger) -> Syste
     validate_arguments(args)
 
     # Set system and launch configuration based on arguments
-    system, args.nodes, args.procs_per_node = configure.configure_launch(
+    system, args.nodes, args.procs_per_node, args.gpus_per_proc = configure.configure_launch(
         args.queue,
         args.nodes,
         args.procs_per_node,
+        args.gpus_per_proc,
         args.gpus_at_least,
         args.gpumem_at_least,
     )

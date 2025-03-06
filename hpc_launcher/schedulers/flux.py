@@ -80,6 +80,13 @@ class FluxScheduler(Scheduler):
         if not blocking:
             header.write(f"# FLUX: {tmp}\n")
 
+        # Set the Number of GPUs per task
+        if self.gpus_per_proc > 0:
+            tmp = f"--gpus-per-task={self.gpus_per_proc}"
+            cmd_args += [tmp]
+            if not blocking:
+                header.write(f"#FLUX: {tmp}\n")
+
         if self.work_dir:
             tmp = [f"--setattr=system.cwd={os.path.abspath(self.work_dir)}"]
             self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
