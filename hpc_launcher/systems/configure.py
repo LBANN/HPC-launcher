@@ -55,11 +55,15 @@ def configure_launch(
             # If gpus_per_proc wasn't set and there are gpus on the node set it to a default of 1
             gpus_per_proc = 1
         if gpus_per_proc > system_params.gpus_per_node:
-            logger.info(f'Requested number of GPUs per process {gpus_per_proc} exceeds the number of GPUs per node {system_params.gpus_per_node}')
+            logger.info(
+                f"Requested number of GPUs per process {gpus_per_proc} exceeds the number of GPUs per node {system_params.gpus_per_node}"
+            )
             gpus_per_proc = system_params.gpus_per_node
 
         if procs_per_node * gpus_per_proc > system_params.gpus_per_node:
-            logger.info(f'The combination of {procs_per_node} processes per node and {gpus_per_proc} GPUs per process exceeds the number of GPUs per node {system_params.gpus_per_node}')
+            logger.info(
+                f"The combination of {procs_per_node} processes per node and {gpus_per_proc} GPUs per process exceeds the number of GPUs per node {system_params.gpus_per_node}"
+            )
 
     # If the user requested a specific number of processes per node, honor that
     if nodes and procs_per_node:
