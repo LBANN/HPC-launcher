@@ -12,12 +12,16 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 import logging
+from typing import Optional
+from dataclasses import dataclass, fields, asdict
 from hpc_launcher.systems import autodetect
-from hpc_launcher.systems.system import System
+from hpc_launcher.systems.system import System, SystemParams
 from hpc_launcher.utils import ceildiv
 
 logger = logging.getLogger(__name__)
 
+def convert_to_type_of_another(variable_to_convert, reference_variable):
+    return type(reference_variable)(variable_to_convert)
 
 def configure_launch(
     queue: str,
@@ -26,6 +30,7 @@ def configure_launch(
     gpus_per_proc: int,
     gpus_at_least: int,
     gpumem_at_least: int,
+    cli_system_params: Optional[tuple[int, int, str, float, int, str, Optional[float]]],
 ) -> tuple[System, int, int, int]:
     """
     See if the system can be autodetected and then process some special
@@ -47,6 +52,17 @@ def configure_launch(
         f"Detected system: {system.system_name} [{type(system).__name__}-class]"
     )
     system_params = system.system_parameters(queue)
+
+    # If any system parameters were provided on the command line, potentially overriding any known or discovered system parameters
+    if cli_system_params:
+        if not system_params: # Use a default set of system parameters
+            system_params = SystemParams()
+        _cli_system_params_dict = asdict(system_params)
+        for field in fields(system_params):
+            if field.name in cli_system_params:
+                _cli_system_params_dict[field.name] = convert_to_type_of_another(cli_system_params[field.name], _cli_system_params_dict[field.name])
+        # Create a new system_params with the proper fields overwritten
+        system_params = SystemParams(**_cli_system_params_dict)
 
     if not gpus_per_proc:
         gpus_per_proc = 0

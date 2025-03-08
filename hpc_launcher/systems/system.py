@@ -29,17 +29,17 @@ class SystemParams:
     """Simple data structure to describe an LC system."""
 
     # Number of CPU cores per compute node
-    cores_per_node: int
+    cores_per_node: int = 1
     # Number of GPUs per node
-    gpus_per_node: int
+    gpus_per_node: int = 0
     # Vendor specific GPU compiler architecture
-    gpu_arch: str
+    gpu_arch: str = None
     # Number of GB of memory per GPU
-    mem_per_gpu: float
+    mem_per_gpu: float = 0.0
     # Number of NUMA domains
-    numa_domains: int
+    numa_domains: int = 1
     # String name of the Scheduler class
-    scheduler: str
+    scheduler: str = None
     # Optional system level guard to limit GPU/APU memory utilization
     fraction_max_gpu_mem: Optional[float] = 1.0
 

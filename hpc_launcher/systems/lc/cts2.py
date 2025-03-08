@@ -16,17 +16,17 @@ from hpc_launcher.schedulers.slurm import SlurmScheduler
 from hpc_launcher.systems.system import System, SystemParams
 import os
 
-_h100_node = SystemParams(112, 4, "sm_90", 80, 8, "slurm")
+_h100_node = SystemParams(112, 4, "sm_90", 80.0, 8, "slurm")
 
 # Known LC systems
 _system_params = {
     "ipa": (
         "a100",
         {
-            "a100": SystemParams(32, 2, "sm_80", 40, 1, "slurm"),
-            "aa100": SystemParams(16, 2, "sm_80", 40, 2, "slurm"),
-            "av100": SystemParams(32, 2, "sm_70", 32, 2, "slurm"),
-            "v100": SystemParams(16, 2, "sm_70", 32, 2, "slurm"),
+            "a100": SystemParams(32, 2, "sm_80", 40.0, 1, "slurm"),
+            "aa100": SystemParams(16, 2, "sm_80", 40.0, 2, "slurm"),
+            "av100": SystemParams(32, 2, "sm_70", 32.0, 2, "slurm"),
+            "v100": SystemParams(16, 2, "sm_70", 32.0, 2, "slurm"),
         },
     ),
     "matrix": (
