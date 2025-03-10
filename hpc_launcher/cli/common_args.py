@@ -23,6 +23,18 @@ import logging
 
 from dataclasses import fields
 
+class ParseKVAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, dict())
+        for each in values:
+            try:
+                key, value = each.split("=")
+                getattr(namespace, self.dest)[key] = value
+            except ValueError as ex:
+                message = "\nTraceback: {}".format(ex)
+                message += "\nError on '{}' || It should be 'key=value'".format(each)
+                raise argparse.ArgumentError(self, str(message))
+
 
 def create_scheduler_arguments(**kwargs) -> dict[str, str]:
     cmdline_args = {}
@@ -68,6 +80,13 @@ def setup_arguments(parser: argparse.ArgumentParser):
         help="Specifies the number of requested processes per node",
     )
 
+    group.add_argument(
+        "--gpus-per-proc",
+        type=int,
+        default=None,  # Internally, if there are GPUs, this will default to 1
+        help="Specifies the number of requested GPUs per process (default: 1)",
+    )
+
     group.add_argument("-q", "--queue", default=None, help="Specifies the queue to use")
 
     # Constraints
@@ -96,6 +115,21 @@ def setup_arguments(parser: argparse.ArgumentParser):
         action="store_true",
         default=False,
         help="Run locally (i.e., one process without a batch " "scheduler)",
+    )
+
+    # System
+    group = parser.add_argument_group(
+        "System",
+        "Provide system parameters from the CLI -- overrides built-in system descriptions and autodetection",
+    )
+    group.add_argument(
+        "-p",
+        "--system-params",
+        dest="system_params",
+        nargs='+',
+        action=ParseKVAction,
+        help="Specifies some or all of the parameters of a system as a dictionary (note it will override any known or autodetected parameters): -p cores_per_node=<int> gpus_per_node=<int> gpu_arch=<str> mem_per_gpu=<float> numa_domains=<int> scheduler=<str>",
+        metavar="KEY1=VALUE1",
     )
 
     # Schedule
@@ -206,7 +240,7 @@ def setup_arguments(parser: argparse.ArgumentParser):
 
 def validate_arguments(args: argparse.Namespace):
     """
-    Validation checks for the commong arguments. Raises exceptions on failure.
+    Validation checks for the common arguments. Raises exceptions on failure.
 
     :param args: The parsed arguments.
     """
@@ -259,12 +293,16 @@ def process_arguments(args: argparse.Namespace, logger: logging.Logger) -> Syste
     validate_arguments(args)
 
     # Set system and launch configuration based on arguments
-    system, args.nodes, args.procs_per_node = configure.configure_launch(
-        args.queue,
-        args.nodes,
-        args.procs_per_node,
-        args.gpus_at_least,
-        args.gpumem_at_least,
+    system, args.nodes, args.procs_per_node, args.gpus_per_proc = (
+        configure.configure_launch(
+            args.queue,
+            args.nodes,
+            args.procs_per_node,
+            args.gpus_per_proc,
+            args.gpus_at_least,
+            args.gpumem_at_least,
+            args.system_params,
+        )
     )
 
     return system

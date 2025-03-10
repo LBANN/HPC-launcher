@@ -42,6 +42,8 @@ class Scheduler:
     nodes: int
     # Processes per node
     procs_per_node: int
+    # GPUs per Process (or task) if any
+    gpus_per_proc: int
     # Job name
     job_name: Optional[str] = None
     # Working directory (by default, uses current working directory)
