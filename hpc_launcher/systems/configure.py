@@ -27,10 +27,10 @@ def configure_launch(
     queue: str,
     nodes: int,
     procs_per_node: int,
-    gpus_per_proc: int,
-    gpus_at_least: int,
-    gpumem_at_least: int,
-    cli_system_params: Optional[tuple[int, int, str, float, int, str, Optional[float]]],
+    gpus_per_proc: Optional[int],
+    gpus_at_least: int = 0,
+    gpumem_at_least: int = 0,
+    cli_system_params: Optional[tuple[int, int, str, float, int, str, Optional[float]]] = None,
 ) -> tuple[System, int, int, int]:
     """
     See if the system can be autodetected and then process some special
@@ -40,10 +40,14 @@ def configure_launch(
     :param nodes: The number of nodes to use (or 0 if not specified)
     :param procs_per_node: The number of processes per node given by the user
                            (or 0 if not specified)
+    :param gpus_per_proc: The number of GPUs per process given by the user
+                           (or None if not specified)
     :param gpus_at_least: The minimum number of GPUs to use (or 0 if not
                           specified)
     :param gpumem_at_least: The minimum amount of GPU memory (in gigabytes) to
                             use (or 0 if not specified)
+    :param cli_system_params: CLI provide description of the system configuration
+                            (or None if not specified)
     :return: A tuple of (autodetected System, number of nodes, number of
              processes per node)
     """
@@ -70,11 +74,13 @@ def configure_launch(
         if gpus_per_proc == 0 and system_params.gpus_per_node > 0:
             # If gpus_per_proc wasn't set and there are gpus on the node set it to a default of 1
             gpus_per_proc = 1
-        if gpus_per_proc > system_params.gpus_per_node:
+        if procs_per_node * gpus_per_proc > system_params.gpus_per_node:
             logger.info(
                 f"Requested number of GPUs per process {gpus_per_proc} exceeds the number of GPUs per node {system_params.gpus_per_node}"
             )
-            gpus_per_proc = system_params.gpus_per_node
+            # If no, or an invalid, configuration is given, set the gpus_per_proc
+            if gpus_per_proc == 0 or gpus_per_proc > system_params.gpus_per_node:
+                gpus_per_proc = max(system_params.gpus_per_node // procs_per_node, 1)
 
         if procs_per_node * gpus_per_proc > system_params.gpus_per_node:
             logger.info(

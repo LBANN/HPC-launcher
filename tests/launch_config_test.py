@@ -71,28 +71,51 @@ def test_launch_config(*args):
     Tests various launch configurations for GPU count and memory size.
     """
     # User-specified procs_per_node
-    system, nodes, procs_per_node = configure_launch(None, 2, 4, 0, 0)
+    system, nodes, procs_per_node, gpus_per_proc = configure_launch(None, 2, 4, 1, 0, 0, None)
     assert isinstance(system, MockSystem)
     assert nodes == 2
     assert procs_per_node == 4
+    assert gpus_per_proc == 1
 
     # GPU count constraint test
-    system, nodes, procs_per_node = configure_launch(None, 0, 0, 6, 0)
+    system, nodes, procs_per_node, gpus_per_proc = configure_launch(None, 0, 0, 1, 6, 0, None)
     assert isinstance(system, MockSystem)
     assert nodes == 2
     assert procs_per_node == 3
+    assert gpus_per_proc == 1
 
     # Memory constraint test
-    system, nodes, procs_per_node = configure_launch(None, 0, 0, 0, 22)
+    system, nodes, procs_per_node, gpus_per_proc = configure_launch(None, 0, 0, 1, 0, 22, None)
     assert isinstance(system, MockSystem)
     assert nodes == 1
     assert procs_per_node == 2
+    assert gpus_per_proc == 1
 
     # Just above the memory limit of a single node, this triggers a switch to all gpus per node
-    system, nodes, procs_per_node = configure_launch(None, 0, 0, 0, 34)
+    system, nodes, procs_per_node, gpus_per_proc = configure_launch(None, 0, 0, 1, 0, 34, None)
     assert isinstance(system, MockSystem)
     assert nodes == 2
     assert procs_per_node == 3
+    assert gpus_per_proc == 1
+
+    # Ask for too many GPUs per proc, this should snap down to the 3 GPUs available
+    system, nodes, procs_per_node, gpus_per_proc = configure_launch(None, 2, 1, 4, 0, 0, None)
+    assert isinstance(system, MockSystem)
+    assert nodes == 2
+    assert procs_per_node == 1
+    assert gpus_per_proc == 3
+
+    system, nodes, procs_per_node, gpus_per_proc = configure_launch(None, 2, 2, 2, 0, 0, None)
+    assert isinstance(system, MockSystem)
+    assert nodes == 2
+    assert procs_per_node == 2
+    assert gpus_per_proc == 2
+
+    system, nodes, procs_per_node, gpus_per_proc = configure_launch(None, 2, 2, None, 0, 0, None)
+    assert isinstance(system, MockSystem)
+    assert nodes == 2
+    assert procs_per_node == 2
+    assert gpus_per_proc == 1
 
 
 @patch(
@@ -103,16 +126,18 @@ def test_nondefault_queue(*args):
     """
     Tests the configuration of a non-default queue.
     """
-    system, nodes, procs_per_node = configure_launch("nondefault", 1, None, 0, 0)
+    system, nodes, procs_per_node, gpus_per_proc = configure_launch("nondefault", 1, 2, 1, 0, 0, None)
     assert isinstance(system, MockSystem)
     assert nodes == 1
     assert procs_per_node == 2
+    assert gpus_per_proc == 1
 
     # Memory constraint test
-    system, nodes, procs_per_node = configure_launch("nondefault", 0, 0, 0, 22)
+    system, nodes, procs_per_node, gpus_per_proc = configure_launch("nondefault", 0, 0, 1, 0, 22, None)
     assert isinstance(system, MockSystem)
     assert nodes == 3
     assert procs_per_node == 2
+    assert gpus_per_proc == 1
 
 
 @patch(
@@ -125,16 +150,18 @@ def test_preferred_procs_per_node(*args):
     """
 
     # User specifies only number of nodes (GPU system)
-    system, nodes, procs_per_node = configure_launch(None, 3, 0, 0, 0)
+    system, nodes, procs_per_node, gpus_per_proc = configure_launch(None, 3, 0, 1, 0, 0, None)
     assert isinstance(system, MockSystem)
     assert nodes == 3
     assert procs_per_node == 3
+    assert gpus_per_proc == 1
 
     # User specifies only number of nodes (CPU system)
-    system, nodes, procs_per_node = configure_launch("cpuonly", 3, 0, 0, 0)
+    system, nodes, procs_per_node, gpus_per_proc = configure_launch("cpuonly", 3, 0, 0, 0, 0, None)
     assert isinstance(system, MockSystem)
     assert nodes == 3
     assert procs_per_node == 4
+    assert gpus_per_proc == 0
 
 
 @patch(
