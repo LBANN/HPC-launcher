@@ -70,7 +70,11 @@ def configure_launch(
 
     if not gpus_per_proc:
         gpus_per_proc = 0
+
+    # If not provided, attempt to figure out the basics of procs_per_node and gpus_per_proc
     if system_params is not None:
+        if not procs_per_node:
+            procs_per_node = system_params.procs_per_node()
         if gpus_per_proc == 0 and system_params.gpus_per_node > 0:
             # If gpus_per_proc wasn't set and there are gpus on the node set it to a default of 1
             gpus_per_proc = 1
@@ -82,9 +86,9 @@ def configure_launch(
             if gpus_per_proc == 0 or gpus_per_proc > system_params.gpus_per_node:
                 gpus_per_proc = max(system_params.gpus_per_node // procs_per_node, 1)
 
-        if procs_per_node * gpus_per_proc > system_params.gpus_per_node:
+        if procs_per_node and procs_per_node * gpus_per_proc > system_params.gpus_per_node:
             logger.info(
-                f"The combination of {procs_per_node} processes per node and {gpus_per_proc} GPUs per process exceeds the number of GPUs per node {system_params.gpus_per_node}"
+                f"The combination of {procs_per_node} processes per node and {gpus_per_proc} GPUs per process exceeds the number of GPUs per node {system_params.gpus_per_node} - Job will not launch, please fix requested parameters"
             )
 
     # If the user requested a specific number of processes per node, honor that
@@ -94,8 +98,6 @@ def configure_launch(
     # Otherwise, if there is a valid set of system parameters, try to fill in
     # the blanks provided by the user
     if system_params is not None:
-        if not procs_per_node:
-            procs_per_node = system_params.procs_per_node()
         if gpus_at_least > 0:
             nodes = ceildiv(gpus_at_least, procs_per_node)
         elif gpumem_at_least > 0:
