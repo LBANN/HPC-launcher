@@ -111,6 +111,8 @@ def test_launcher_one_node(local):
     ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
     exp_dir = None
+    print(f'BVE Here is the output {proc.stdout}')
+    print(f'BVE Here is the error {proc.stderr}')
     m = re.search(r"^.*Script filename: (\S+)$", proc.stderr, re.MULTILINE | re.DOTALL)
     if m:
         script = m.group(1)
