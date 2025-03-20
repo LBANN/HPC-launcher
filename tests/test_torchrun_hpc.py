@@ -144,6 +144,11 @@ def test_launcher_multinode(num_nodes, procs_per_node, rdv, scheduler_type):
     except (ImportError, ModuleNotFoundError):
         pytest.skip("torch not found")
 
+    try:
+        import mpi4py
+    except (ImportError, ModuleNotFoundError):
+        pytest.skip("mpi not found")
+
     # Get full path to torch_dist_driver.py
     driver_file = os.path.join(os.path.dirname(__file__), "torch_dist_driver.py")
 
@@ -183,3 +188,11 @@ def test_launcher_multinode(num_nodes, procs_per_node, rdv, scheduler_type):
 
     if exp_dir:
         shutil.rmtree(exp_dir, ignore_errors=True)
+
+if __name__ == "__main__":
+    test_launcher_multinode(2, 1, "tcp", "slurm")
+    test_launcher_multinode(2, 1, "tcp", "flux")
+    test_launcher_multinode(2, 1, "tcp", "lsf")
+    test_launcher_multinode(2, 1, "mpi", "slurm")
+    test_launcher_multinode(2, 1, "mpi", "flux")
+    test_launcher_multinode(2, 1, "mpi", "lsf")

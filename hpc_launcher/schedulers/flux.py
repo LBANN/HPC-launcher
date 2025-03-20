@@ -158,6 +158,7 @@ class FluxScheduler(Scheduler):
         args: Optional[list[str]] = None,
         blocking: bool = True,
         save_hostlist: bool = False,
+        launch_dir: str = "",
     ) -> str:
 
         script = ""
@@ -169,6 +170,9 @@ class FluxScheduler(Scheduler):
         script += "\n"
         if save_hostlist:
             script += "export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n"
+            script += '\nif [ "${RANK}" = "0" ]; then'
+            script += "\n    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
+            script += "fi\n"
 
         if not blocking:
             script += "flux run "

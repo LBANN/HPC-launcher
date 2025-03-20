@@ -120,6 +120,7 @@ class Scheduler:
         args: Optional[list[str]] = None,
         blocking: bool = True,
         save_hostlist: bool = False,
+        launch_dir: str = "",
     ) -> str:
         """
         Returns the full launcher script, which can be saved as a batch
@@ -335,17 +336,8 @@ class Scheduler:
         logger.info(f"Script filename: {filename}")
         with open(filename, "w") as fp:
             fp.write(
-                self.launcher_script(system, command, args, blocking, save_hostlist)
+                self.launcher_script(system, command, args, blocking, save_hostlist, os.path.dirname(filename))
             )
-            if save_hostlist:
-                fp.write('\nif [ "${RANK}" = "0" ]; then')
-                fp.write(
-                    "\n    echo ${HPC_LAUNCHER_HOSTLIST} > "
-                    + os.path.join(
-                        os.path.dirname(filename), f"hpc_launcher_hostlist.txt\n"
-                    )
-                )
-                fp.write("fi\n")
 
             fp.write(f"\n# Launch command: " + " ".join(full_cmdline) + "\n")
             if self.command_line:

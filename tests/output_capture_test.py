@@ -27,8 +27,8 @@ from hpc_launcher.systems.lc.sierra_family import Sierra
 @pytest.mark.parametrize("no_launch_dir", [False, True])
 def test_output_capture_local(no_launch_dir: bool):
     # Configure scheduler
-    system, nodes, procs_per_node = configure.configure_launch(None, 1, 1, None, None)
-    scheduler = LocalScheduler(nodes, procs_per_node)
+    system, nodes, procs_per_node, gpus_per_proc = configure.configure_launch(None, 1, 1, 1, None, None)
+    scheduler = LocalScheduler(nodes, procs_per_node, gpus_per_proc)
 
     command = sys.executable
     script = "output_capture.py"
@@ -77,10 +77,10 @@ def test_output_capture_scheduler(scheduler_class, processes):
         pytest.skip("LSF not available")
 
     # Configure scheduler
-    system, nodes, procs_per_node = configure.configure_launch(
-        None, 1, processes, None, None
+    system, nodes, procs_per_node, gpus_per_proc = configure.configure_launch(
+        None, 1, processes, 1, None, None
     )
-    scheduler = scheduler_class(nodes, procs_per_node)
+    scheduler = scheduler_class(nodes, procs_per_node, gpus_per_proc)
 
     command = sys.executable
     _, launch_dir = scheduler.create_launch_folder_name(command, "launch")

@@ -167,6 +167,7 @@ class SlurmScheduler(Scheduler):
         args: Optional[list[str]] = None,
         blocking: bool = True,
         save_hostlist: bool = False,
+        launch_dir: str = "",
     ) -> str:
 
         script = ""
@@ -180,6 +181,9 @@ class SlurmScheduler(Scheduler):
         script += "\n"
         if save_hostlist:
             script += "export HPC_LAUNCHER_HOSTLIST=${SLURM_JOB_NODELIST}\n"
+            script += '\nif [ "${RANK}" = "0" ]; then'
+            script += "\n    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
+            script += "fi\n"
 
         if not blocking:
             script += "srun -u "
