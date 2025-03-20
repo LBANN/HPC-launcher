@@ -108,6 +108,7 @@ def test_launcher_one_node(local):
         driver_file,
     ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
+    exp_dir = None
     m = re.search(r"^.*Script filename: (\S+)$", proc.stderr, re.MULTILINE | re.DOTALL)
     if m:
         script = m.group(1)
@@ -118,6 +119,9 @@ def test_launcher_one_node(local):
 
     assert proc.returncode == 0
 
+    if exp_dir:
+        shutil.rmtree(exp_dir, ignore_errors=True)
+
 
 @pytest.mark.parametrize("num_nodes", [2])
 @pytest.mark.parametrize("procs_per_node", [1])
@@ -125,7 +129,7 @@ def test_launcher_one_node(local):
 @pytest.mark.parametrize("scheduler_type", ("flux", "slurm", "lsf"))
 def test_launcher_multinode(num_nodes, procs_per_node, rdv, scheduler_type):
     if (
-        (scheduler_type == "slurm" and not shutil.which("srun"))
+        (scheduler_type == "slurm" and (not shutil.which("srun") or shutil.which("srun") and shutil.which("jsrun")))
         or (
             scheduler_type == "flux"
             and (not shutil.which("flux") or not os.path.exists("/run/flux/local"))
@@ -144,10 +148,16 @@ def test_launcher_multinode(num_nodes, procs_per_node, rdv, scheduler_type):
     except (ImportError, ModuleNotFoundError):
         pytest.skip("torch not found")
 
-    try:
-        import mpi4py
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("mpi not found")
+    if rdv == "mpi":
+        try:
+            import mpi4py
+        except (ImportError, ModuleNotFoundError):
+            pytest.skip("mpi not found")
+
+        try:
+            import mpi_rdv
+        except (ImportError, ModuleNotFoundError):
+            pytest.skip("mpi_rdv not found")
 
     # Get full path to torch_dist_driver.py
     driver_file = os.path.join(os.path.dirname(__file__), "torch_dist_driver.py")
