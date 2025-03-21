@@ -27,8 +27,10 @@ from hpc_launcher.schedulers import get_schedulers
 
 def check_hostlist_file(exp_dir: str, stdout_buffer, num_ranks):
     hostlist = os.path.join(exp_dir, "hpc_launcher_hostlist.txt")
+    print(f'BVE I have stdout_buffer {stdout_buffer}')
     with open(hostlist) as f:
         s = f.read()
+        print(f'BVE I have found hostlist line {s}')
         s = s.strip("]\n")
         cluster_list = re.split(r"[,\s]+", s)
         hosts = []
@@ -109,6 +111,8 @@ def test_launcher_one_node(local):
     ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
     exp_dir = None
+    print(f'BVE Here is the output {proc.stdout}')
+    print(f'BVE Here is the error {proc.stderr}')
     m = re.search(r"^.*Script filename: (\S+)$", proc.stderr, re.MULTILINE | re.DOTALL)
     if m:
         script = m.group(1)

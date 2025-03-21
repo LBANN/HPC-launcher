@@ -153,7 +153,11 @@ class GenericSystem(System):
         super().__init__(*args, system_name="generic", **kwargs)
 
     def environment_variables(self) -> list[tuple[str, str]]:
-        return []
+        env_list = []
+        for i in self._aux_env_list:
+            env_list.append(i)
+
+        return env_list
 
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
