@@ -53,10 +53,10 @@ class LocalScheduler(Scheduler):
         ]
         if save_hostlist:
             envvars += [
-                "export HPC_LAUNCHER_HOSTLIST=$(hostname)",
-                '\nif [ "${RANK}" = "0" ]; then',
-                "\n    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n"),
-                "fi\n",
+                "export HPC_LAUNCHER_HOSTLIST=$(hostname)\n",
+                'if [ "${RANK}" = "0" ]; then\n',
+                "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n"),
+                "fi\n\n",
             ]
         header = "\n".join(envvars)
 
