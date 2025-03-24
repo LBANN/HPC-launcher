@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
+# Copyright (c) 2014-2025, Lawrence Livermore National Security, LLC.
 # Produced at the Lawrence Livermore National Laboratory.
 # Written by the LBANN Research Team (B. Van Essen, et al.) listed in
 # the CONTRIBUTORS file. See the top-level LICENSE file for details.
@@ -33,13 +33,17 @@ def main():
         scheduler.get_parallel_configuration()
     )
 
-    # Report if the memory size was set
+    # Check on the backend and report if the memory size was set
+    backend = None
     if torch.cuda.is_available():
+        backend = "nccl"
         fraction_max_gpu_mem = float(os.getenv("TORCHRUN_HPC_MAX_GPU_MEM"))
         if fraction_max_gpu_mem != 1.0 and rank == 0:
             print(
                 f"[Rank {rank} of {world_size}] TORCHRUN-HPC set the max GPU memory fraction to {fraction_max_gpu_mem}"
             )
+    else:
+        backend = "gloo"
 
     torch_dist_initialized = dist.is_initialized()
     rdv_protocol = os.getenv("TORCHRUN_HPC_RDV_PROTOCOL")
@@ -53,6 +57,8 @@ def main():
                 from mpi4py import MPI
 
                 mpi = True
+                if backend == "gloo" and torch.distributed.is_mpi_available():
+                    backend = "mpi"
             except (ImportError, ModuleNotFoundError):
                 mpi = None
                 raise Exception(
@@ -60,13 +66,18 @@ def main():
                 )
 
         if not torch_dist_initialized:
+            if not backend:
+                raise Exception(
+                    f"torchrun-hpc is unable to find a valid backend for torch distributed."
+                )
+
             if rank == 0:
                 print(
                     f"[Rank {rank} of {world_size}]: Initializing distributed PyTorch using protocol: {rdv_protocol}"
                 )
             # TODO(later): Fix how we handle CUDA visible devices and MPI bind
             dist.init_process_group(
-                "nccl", init_method=rdv_protocol, world_size=world_size, rank=rank
+                backend, init_method=rdv_protocol, world_size=world_size, rank=rank
             )
 
             if rdv_protocol == "mpi://" and rank == 0:

@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
+# Copyright (c) 2014-2025, Lawrence Livermore National Security, LLC.
 # Produced at the Lawrence Livermore National Laboratory.
 # Written by the LBANN Research Team (B. Van Essen, et al.) listed in
 # the CONTRIBUTORS file. See the top-level LICENSE file for details.
@@ -53,10 +53,10 @@ class LocalScheduler(Scheduler):
         ]
         if save_hostlist:
             envvars += [
-                "export HPC_LAUNCHER_HOSTLIST=$(hostname)",
-                '\nif [ "${RANK}" = "0" ]; then',
-                "\n    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n"),
-                "fi\n",
+                "export HPC_LAUNCHER_HOSTLIST=$(hostname)\n",
+                'if [ "${RANK}" = "0" ]; then\n',
+                "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n"),
+                "fi\n\n",
             ]
         header = "\n".join(envvars)
 

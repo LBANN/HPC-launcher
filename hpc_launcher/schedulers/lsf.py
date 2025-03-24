@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
+# Copyright (c) 2014-2025, Lawrence Livermore National Security, LLC.
 # Produced at the Lawrence Livermore National Laboratory.
 # Written by the LBANN Research Team (B. Van Essen, et al.) listed in
 # the CONTRIBUTORS file. See the top-level LICENSE file for details.
@@ -148,10 +148,10 @@ class LSFScheduler(Scheduler):
         script += header_lines
         script += "\n"
         if save_hostlist:
-            script += "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n\n"
-            script += '\nif [ "${RANK}" = "0" ]; then'
-            script += "\n    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
-            script += "fi\n"
+            script += "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n"
+            script += 'if [ "${RANK}" = "0" ]; then\n'
+            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
+            script += "fi\n\n"
 
         if not blocking or (blocking and not os.getenv("LSB_HOSTS")):
             script += "jsrun "

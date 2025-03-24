@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
+# Copyright (c) 2014-2025, Lawrence Livermore National Security, LLC.
 # Produced at the Lawrence Livermore National Laboratory.
 # Written by the LBANN Research Team (B. Van Essen, et al.) listed in
 # the CONTRIBUTORS file. See the top-level LICENSE file for details.
@@ -153,7 +153,11 @@ class GenericSystem(System):
         super().__init__(*args, system_name="generic", **kwargs)
 
     def environment_variables(self) -> list[tuple[str, str]]:
-        return []
+        env_list = []
+        for i in self._aux_env_list:
+            env_list.append(i)
+
+        return env_list
 
     @property
     def preferred_scheduler(self) -> type[Scheduler]:

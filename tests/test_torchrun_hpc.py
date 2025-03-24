@@ -52,18 +52,17 @@ def check_hostlist_file(exp_dir: str, stdout_buffer, num_ranks):
         matched = []
         unmatched = []
         for h in hosts:
-            print(f"I am looking for host {h}")
             regex = re.compile(
-                ".*({}) reporting it is rank ({}).*".format(h, i),
+                ".*({}) reporting it is rank ({}) of ({}).*".format(h, i, num_ranks),
                 re.MULTILINE | re.DOTALL,
             )
             match = regex.match(stdout_buffer)
             if match:
                 assert (
-                    match.group(2) != i
+                    match.group(2) != i or match.group(3) != num_ranks
                 ), f"{match.group(1)} has the incorrect rank in test {exp_dir}"
                 print(
-                    f"\n{match.group(1)} is correctly reporting that it was assigned rank {match.group(2)}"
+                    f"\n{match.group(1)} is correctly reporting that it was assigned rank {match.group(2)} of match.group(3)"
                 )
                 matched.append(h)
                 i += 1
@@ -95,7 +94,10 @@ def test_launcher_one_node(local):
         pytest.skip("No distributed launcher found")
 
     # Get full path to torch_dist_driver.py
-    driver_file = os.path.join(os.path.dirname(__file__), "torch_driver.py")
+    if local:
+        driver_file = os.path.join(os.path.dirname(__file__), "torch_driver.py")
+    else:
+        driver_file = os.path.join(os.path.dirname(__file__), "torch_dist_driver.py")
 
     cmd = [
         sys.executable,

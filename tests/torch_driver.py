@@ -14,7 +14,6 @@
 # from psutil import Process
 
 import torch
-import torch.distributed as dist
 
 import sys
 import socket
@@ -22,15 +21,8 @@ import socket
 
 def main():
     args = sys.argv[1:]
-    torch_dist_initialized = dist.is_initialized()
-    if torch_dist_initialized:
-        print(
-            f"Device mesh: rank={dist.get_rank()},",
-        )
 
-        print(f"{socket.gethostname()} reporting it is rank {dist.get_rank()} of {dist.get_world_size()}")
-    else:
-        print(f"{socket.gethostname()} reporting it is rank 0 of 1")
+    print(f"{socket.gethostname()} reporting it is rank 0 of 1")
 
 
 if __name__ == "__main__":
