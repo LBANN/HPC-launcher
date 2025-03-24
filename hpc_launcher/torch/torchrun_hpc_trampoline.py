@@ -36,7 +36,7 @@ def main():
     # Check on the backend and report if the memory size was set
     backend = None
     if torch.cuda.is_available():
-        backend = "cuda"
+        backend = "nccl"
         fraction_max_gpu_mem = float(os.getenv("TORCHRUN_HPC_MAX_GPU_MEM"))
         if fraction_max_gpu_mem != 1.0 and rank == 0:
             print(
