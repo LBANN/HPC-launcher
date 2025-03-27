@@ -37,6 +37,7 @@ setup(
         "console_scripts": [
             "torchrun-hpc = hpc_launcher.cli.torchrun_hpc:main",
             "launch = hpc_launcher.cli.launch:main",
+            "flux-monitor = hpc_launcher.schedulers.utils.flux_monitor:main",
         ],
     },
     install_requires=["psutil"] + extras,
@@ -44,5 +45,6 @@ setup(
         "torch": ["torch", "numpy"],
         "mpi": ["mpi4py>=3.1.4", "mpi_rdv"],
         "testing": ["pytest"],
+        "flux": ["flux-python"]
     },
 )
