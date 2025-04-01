@@ -62,7 +62,7 @@ def check_hostlist_file(exp_dir: str, stdout_buffer, num_ranks):
                     match.group(2) != i or match.group(3) != num_ranks
                 ), f"{match.group(1)} has the incorrect rank in test {exp_dir}"
                 print(
-                    f"\n{match.group(1)} is correctly reporting that it was assigned rank {match.group(2)} of match.group(3)"
+                    f"\n{match.group(1)} is correctly reporting that it was assigned rank {match.group(2)} of {match.group(3)}"
                 )
                 matched.append(h)
                 i += 1

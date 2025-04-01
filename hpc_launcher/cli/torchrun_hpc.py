@@ -66,7 +66,10 @@ def main():
 
     # Process special arguments that can autoselect the number of ranks / GPUs
     system = common_args.process_arguments(args, logger)
-    if args.job_comm_protocol.upper() == "MPI":
+    optimize_comm_protocol = ""
+    if args.job_comm_protocol:
+        optimize_comm_protocol = args.job_comm_protocol
+    if optimize_comm_protocol.upper() == "MPI":
         logger.warning(f"Using MPI as the primary communication protocol for PyTorch is a bad plan")
     else:
         system.job_comm_protocol = "*CCL"
