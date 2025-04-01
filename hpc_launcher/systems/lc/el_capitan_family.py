@@ -106,7 +106,10 @@ class ElCapitan(System):
         env_list.append(("OMP_PLACES", "threads"))
         env_list.append(("OMP_PROC_BIND", "spread"))
 
-        if self.job_comm_protocol.upper() == "RCCL" or self.job_comm_protocol.upper() == "*CCL":
+        optimize_comm_protocol = ""
+        if self.job_comm_protocol:
+            optimize_comm_protocol = self.job_comm_protocol
+        if optimize_comm_protocol.upper() == "RCCL" or optimize_comm_protocol.upper() == "*CCL":
             # Performance tuning for HPE Slingshot Cassini NIC (Audited on 3/31/25) - Only use with RCCL
             msg = "Performance tuning for RCCL + HPE Slingshot Cassini NIC (Audited on 3/31/25)"
             env_list.append((f"\n# {msg}",))
