@@ -66,6 +66,10 @@ def main():
 
     # Process special arguments that can autoselect the number of ranks / GPUs
     system = common_args.process_arguments(args, logger)
+    if args.job_comm_protocol.upper() == "MPI":
+        logger.warning(f"Using MPI as the primary communication protocol for PyTorch is a bad plan")
+    else:
+        system.job_comm_protocol = "*CCL"
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
 
