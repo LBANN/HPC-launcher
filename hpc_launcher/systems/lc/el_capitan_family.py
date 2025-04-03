@@ -151,7 +151,7 @@ class ElCapitan(System):
             # Performance tuning for HPE Slingshot Cassini NIC
             scheduler.launcher_flags.append("-ofastload")
             scheduler.launcher_flags.append("--setattr=rdzv_get_en=0")
-            # Avoid bug in OMP that ruins the CPU_SET the -o flag to not set the OMP variables
+            # Avoid bug in OMP that ruins the CPU_SET
             scheduler.launcher_flags.append("-o mpibind=omp_proc_bind,omp_places")
 
         if use_this_rccl is not None:

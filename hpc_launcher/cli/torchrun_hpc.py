@@ -70,7 +70,7 @@ def main():
     if args.job_comm_protocol:
         optimize_comm_protocol = args.job_comm_protocol
     if optimize_comm_protocol.upper() == "MPI":
-        logger.warning(f"Using MPI as the primary communication protocol for PyTorch is a bad plan")
+        logger.warning(f"Using MPI as the primary communication protocol for PyTorch requires additional support")
     else:
         system.job_comm_protocol = "*CCL"
     # Pick batch scheduler

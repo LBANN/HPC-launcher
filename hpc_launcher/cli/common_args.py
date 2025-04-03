@@ -118,7 +118,7 @@ def setup_arguments(parser: argparse.ArgumentParser):
     )
 
     group.add_argument(
-        "--optimize-comm-protocol",
+        "--comm-backend",
         dest="job_comm_protocol",
         type=str,
         default=None,
