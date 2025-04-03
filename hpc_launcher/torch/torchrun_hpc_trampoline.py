@@ -108,6 +108,8 @@ def main():
         # If the mpi rendezvous protocol is set, this should be necessary but some packages still look for it
         os.environ["MASTER_ADDR"] = "23456"
 
+    os.environ["LOCAL_RANK"] = f"{local_rank}"
+
     # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
     sys.argv = sys.argv[1:]
     # Run underlying script
