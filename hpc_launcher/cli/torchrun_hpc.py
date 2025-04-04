@@ -77,10 +77,11 @@ def main():
     scheduler = launch_helpers.select_scheduler(args, logger, system)
 
     if args.rdv is None:
-        if mpi and not isinstance(scheduler, LocalScheduler):
-            env_list = scheduler.setup_rendezvous_protocol("mpi")
-        else:
-            env_list = scheduler.setup_rendezvous_protocol("tcp")
+        # Disable this until further testing
+        # if mpi and not isinstance(scheduler, LocalScheduler):
+        #     env_list = scheduler.setup_rendezvous_protocol("mpi")
+        # else:
+        env_list = scheduler.setup_rendezvous_protocol("tcp")
     else:
         if args.rdv == "mpi":
             if not mpi:

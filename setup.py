@@ -44,5 +44,6 @@ setup(
         "torch": ["torch", "numpy"],
         "mpi": ["mpi4py>=3.1.4", "mpi_rdv"],
         "testing": ["pytest"],
+        "e2e_testing": ["accelerate"],
     },
 )
