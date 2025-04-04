@@ -30,3 +30,16 @@ def get_schedulers():
         "lsf": LSFScheduler,
         "LSFScheduler": LSFScheduler,
     }
+
+def parse_env_list(*e) -> str:
+    if len(e) == 1:
+        m = e[0]
+        return f"{m}\n"
+    elif len(e) == 2:
+        k,v = e
+        return f"export {k}={v}\n"
+    elif len(e) == 3:
+        k,v,m = e
+        return f"export {k}={v}\t\t# {m}\n"
+    else:
+        return f'{e}'

@@ -31,6 +31,7 @@ def configure_launch(
     gpus_at_least: int = 0,
     gpumem_at_least: int = 0,
     cli_system_params: Optional[tuple[int, int, str, float, int, str, Optional[float]]] = None,
+    job_comm_protocol: Optional[str] = None,
 ) -> tuple[System, int, int, int]:
     """
     See if the system can be autodetected and then process some special
@@ -48,10 +49,14 @@ def configure_launch(
                             use (or 0 if not specified)
     :param cli_system_params: CLI provide description of the system configuration
                             (or None if not specified)
+    :param job_comm_protocol: CLI provide description of the jos intended communication protocol
+                            (or None if not specified)
     :return: A tuple of (autodetected System, number of nodes, number of
              processes per node)
     """
     system = autodetect.autodetect_current_system()
+    # Pass the job's intended communication protocol to the system object
+    system.job_comm_protocol = job_comm_protocol
     logger.info(
         f"Detected system: {system.system_name} [{type(system).__name__}-class]"
     )

@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from hpc_launcher.systems import System
 
 from hpc_launcher.schedulers.scheduler import Scheduler
+from hpc_launcher.schedulers import parse_env_list
 
 import logging
 
@@ -129,8 +130,8 @@ class FluxScheduler(Scheduler):
                 # These flag should only be on the launcher commands not the batch commands
                 cmd_args += [flag]
 
-        for k, v in env_vars:
-            header.write(f"export {k}={v}\n")
+        for e in env_vars:
+            header.write(parse_env_list(*e))
 
         for k, v in passthrough_env_vars:
             if not blocking:

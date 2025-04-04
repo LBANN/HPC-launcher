@@ -66,14 +66,22 @@ def main():
 
     # Process special arguments that can autoselect the number of ranks / GPUs
     system = common_args.process_arguments(args, logger)
+    optimize_comm_protocol = ""
+    if args.job_comm_protocol:
+        optimize_comm_protocol = args.job_comm_protocol
+    if optimize_comm_protocol.upper() == "MPI":
+        logger.warning(f"Using MPI as the primary communication protocol for PyTorch requires additional support")
+    else:
+        system.job_comm_protocol = "*CCL"
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
 
     if args.rdv is None:
-        if mpi and not isinstance(scheduler, LocalScheduler):
-            env_list = scheduler.setup_rendezvous_protocol("mpi")
-        else:
-            env_list = scheduler.setup_rendezvous_protocol("tcp")
+        # Disable this until further testing
+        # if mpi and not isinstance(scheduler, LocalScheduler):
+        #     env_list = scheduler.setup_rendezvous_protocol("mpi")
+        # else:
+        env_list = scheduler.setup_rendezvous_protocol("tcp")
     else:
         if args.rdv == "mpi":
             if not mpi:

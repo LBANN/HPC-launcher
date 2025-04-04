@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from hpc_launcher.systems import System
 
 from hpc_launcher.schedulers.scheduler import Scheduler
+from hpc_launcher.schedulers import parse_env_list
 
 
 @dataclass
@@ -105,8 +106,8 @@ class LSFScheduler(Scheduler):
                 # Append these to the actual parallel run command
                 parallel_run_args.append(flag)
 
-        for k, v in env_vars:
-            header.write(f"export {k}={v}\n")
+        for e in env_vars:
+            header.write(parse_env_list(*e))
 
         for k, v in passthrough_env_vars:
             if not blocking:

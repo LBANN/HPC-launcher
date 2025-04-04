@@ -318,17 +318,18 @@ class Scheduler:
         :return: The queued job ID as a string.
         """
 
-        # If the command is run from a directory, and the command exists as a
-        # file, use its absolute path
+        # If the command is run from a directory
         if run_from_launch_dir:
-            if os.path.isfile(command):
-                command = os.path.abspath(command)
             # Change the working directory to the launch folder
             if not self.work_dir:
                 self.work_dir = os.path.abspath(folder_name)
             # There is no need to use the following at the moment:
             # elif shutil.which(command):
             #     command = os.path.abspath(shutil.which(command))
+
+        # If the command exists as a file, use its absolute path
+        if os.path.isfile(command):
+            command = os.path.abspath(command)
 
         cmd = self.launch_command(system, blocking)
         full_cmdline = cmd + [filename]

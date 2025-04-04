@@ -102,18 +102,38 @@ class ElCapitan(System):
                 ("LD_LIBRARY_PATH", different_ofi_plugin + ":${LD_LIBRARY_PATH}")
             )
 
-        env_list.append(("OMP_NUM_THREADS", "21"))
-        env_list.append(("OMP_PLACES", "threads"))
-        env_list.append(("OMP_PROC_BIND", "spread"))
+        optimize_comm_protocol = ""
+        if self.job_comm_protocol:
+            optimize_comm_protocol = self.job_comm_protocol
+        if optimize_comm_protocol.upper() == "RCCL" or optimize_comm_protocol.upper() == "*CCL":
+            # Performance tuning for HPE Slingshot Cassini NIC (Audited on 3/31/25) - Only use with RCCL
+            msg = "Performance tuning for RCCL + HPE Slingshot Cassini NIC (Audited on 3/31/25)"
+            env_list.append((f"\n# {msg}",))
+            env_list.append(("FI_CXI_RDZV_PROTO", "alt_read", msg))
+            env_list.append(("FI_CXI_RDZV_THRESHOLD", "0", msg))
+            env_list.append(("FI_CXI_RDZV_GET_MIN", "0", msg))
+            env_list.append(("FI_CXI_RDZV_EAGER_SIZE", "0", msg))
 
-        # Performance tuning for HPE Slingshot Cassini NIC
-        env_list.append(("FI_CXI_RDZV_PROTO", "alt_read"))
-        env_list.append(("FI_CXI_RDZV_THRESHOLD", "0"))
-        env_list.append(("FI_CXI_RDZV_GET_MIN", "0"))
-        env_list.append(("FI_CXI_RDZV_EAGER_SIZE", "0"))
+        # Known issue with memhooks and RCCL hangs (Audited on 3/31/25)
+        # https://support.hpe.com/hpesc/public/docDisplay?docId=dp00004854en_us&docLocale=en_US
+        # env_list.append(("FI_MR_CACHE_MAX_COUNT", "0")) # MPI has a significant performance hit
+        # kdreg2 will be the future
+        env_list.append(("\n# Known issue with memhooks and RCCL hangs (Audited on 3/31/25)",))
+        env_list.append(("# https://support.hpe.com/hpesc/public/docDisplay?docId=dp00004854en_us&docLocale=en_US",))
+        msg = "Known issue with memhooks and RCCL hang (Audited on 3/31/25)"
+        env_list.append(("FI_MR_CACHE_MONITOR", "userfaultfd", msg)) # This should work and be safe and performant
+        msg = "Performance tuning for HPE Slingshot Cassini NIC (Audited on 3/31/25)"
+        env_list.append(("FI_CXI_DEFAULT_TX_SIZE", "1024", msg))
+        env_list.append(("FI_CXI_DISABLE_HOST_REGISTER", "1", msg))
+        env_list.append(("FI_CXI_DEFAULT_CQ_SIZE", "131072", msg))
+        # Run in hardware until the HW queues are exhausted, then fallback to SW
+        env_list.append(("FI_CXI_RX_MATCH_MODE", "hybrid", msg)) # set to software instead when setting up the alt_read
 
-        # Performance tuning for RCCL multi-threading
-        env_list.append(("NCCL_IGNORE_CPU_AFFINITY", "1"))
+        env_list.append(("\n# General tuning knobs (Audited on 3/31/25)",))
+        # =2 may be a future performance improvement (Removes rails configuration)
+        env_list.append(("NCCL_CROSS_NIC", "1"))
+        # Improve the performance of large scale RCCL initialization
+        # env_list.append(("NCCL_SOCKET_IFNAME", "hsi0")) # Disabled on 4/3/2025 due to concern
 
         for i in self._aux_env_list:
             env_list.append(i)
@@ -124,9 +144,12 @@ class ElCapitan(System):
         use_this_rccl = os.getenv("LBANN_USE_THIS_RCCL")
         scheduler.launcher_flags = ["--exclusive"]
         if type(scheduler) is FluxScheduler:
+            # Note that options cannot have a space after the -o flag, e.g. -o<option>
             # Performance tuning for HPE Slingshot Cassini NIC
             scheduler.launcher_flags.append("-ofastload")
             scheduler.launcher_flags.append("--setattr=rdzv_get_en=0")
+            # Avoid bug in OMP that ruins the CPU_SET
+            scheduler.launcher_flags.append("-ompibind=omp_proc_bind,omp_places")
 
         if use_this_rccl is not None:
             scheduler.ld_preloads = [f"{use_this_rccl}"]

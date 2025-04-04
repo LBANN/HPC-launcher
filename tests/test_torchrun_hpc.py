@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2024, Lawrence Livermore National Security, LLC.
+# Copyright (c) 2014-2025, Lawrence Livermore National Security, LLC.
 # Produced at the Lawrence Livermore National Laboratory.
 # Written by the LBANN Research Team (B. Van Essen, et al.) listed in
 # the CONTRIBUTORS file. See the top-level LICENSE file for details.
@@ -62,7 +62,7 @@ def check_hostlist_file(exp_dir: str, stdout_buffer, num_ranks):
                     match.group(2) != i or match.group(3) != num_ranks
                 ), f"{match.group(1)} has the incorrect rank in test {exp_dir}"
                 print(
-                    f"\n{match.group(1)} is correctly reporting that it was assigned rank {match.group(2)} of match.group(3)"
+                    f"\n{match.group(1)} is correctly reporting that it was assigned rank {match.group(2)} of {match.group(3)}"
                 )
                 matched.append(h)
                 i += 1

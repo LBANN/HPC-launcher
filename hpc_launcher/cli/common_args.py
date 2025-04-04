@@ -117,6 +117,14 @@ def setup_arguments(parser: argparse.ArgumentParser):
         help="Run locally (i.e., one process without a batch " "scheduler)",
     )
 
+    group.add_argument(
+        "--comm-backend",
+        dest="job_comm_protocol",
+        type=str,
+        default=None,
+        help="Indicate if the job will primarily use a specific communication protocol and set any relevant environment variables: MPI or *CCL (NCCL, RCCL)",
+    )
+
     # System
     group = parser.add_argument_group(
         "System",
@@ -302,6 +310,7 @@ def process_arguments(args: argparse.Namespace, logger: logging.Logger) -> Syste
             args.gpus_at_least,
             args.gpumem_at_least,
             args.system_params,
+            args.job_comm_protocol,
         )
     )
 

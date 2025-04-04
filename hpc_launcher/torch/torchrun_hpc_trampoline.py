@@ -91,14 +91,40 @@ def main():
                         rank, world_size, MPI.Get_library_version()
                     )
                 )
+
+    # If the world size is only 1, torch distributed doesn't have to be initialized
+    # however, the called application may try to setup torch distributed -- provide env variables
+    # Additionally, some codes (e.g. Huggingface accelerate) will look for these fields
+    os.environ["WORLD_SIZE"] = f"{world_size}"
+    if os.getenv("TORCHRUN_HPC_MASTER_ADDR"):
+        os.environ["MASTER_ADDR"] = os.getenv("TORCHRUN_HPC_MASTER_ADDR")
     else:
-        # If the world size is only 1, torch distributed doesn't have to be initialized
-        # however, the called application may try to setup torch distributed -- provide env variables
-        os.environ["WORLD_SIZE"] = f"{world_size}"
-        if os.getenv("TORCHRUN_HPC_MASTER_ADDR"):
-            os.environ["MASTER_ADDR"] = os.getenv("TORCHRUN_HPC_MASTER_ADDR")
-        if os.getenv("TORCHRUN_HPC_MASTER_PORT"):
-            os.environ["MASTER_PORT"] = os.getenv("TORCHRUN_HPC_MASTER_PORT")
+        # If the mpi rendezvous protocol is set, this should be necessary but some packages still look for it
+        os.environ["MASTER_ADDR"] = "127.0.0.1"
+
+    if os.getenv("TORCHRUN_HPC_MASTER_PORT"):
+        os.environ["MASTER_PORT"] = os.getenv("TORCHRUN_HPC_MASTER_PORT")
+    else:
+        # If the mpi rendezvous protocol is set, this should be necessary but some packages still look for it
+        os.environ["MASTER_ADDR"] = "23456"
+
+    # Standard operating mode assumes that there is one rank per GPU
+    # Check to see how many GPUS are actually available to this rank
+    avail_gpus = 0
+    gpus = []
+    for e in ["CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"]:
+        if os.getenv(e):
+            gpus = os.getenv(e)
+            break
+    if gpus:
+        avail_gpus = gpus.split(",")
+
+    # Round-robin assign the visibile GPUs
+    if avail_gpus:
+        local_gpu_id = local_rank % len(avail_gpus)
+    else:
+        local_gpu_id = local_rank
+    os.environ["LOCAL_RANK"] = f"{local_gpu_id}"
 
     # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
     sys.argv = sys.argv[1:]
