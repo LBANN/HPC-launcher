@@ -131,13 +131,13 @@ class ElCapitan(System):
         env_list.append(("FI_CXI_DISABLE_HOST_REGISTER", "1", msg))
         env_list.append(("FI_CXI_DEFAULT_CQ_SIZE", "131072", msg))
         # Run in hardware until the HW queues are exhausted, then fallback to SW
-        env_list.append(("FI_CXI_RX_MATCH_MODE", "hybrid", msg))
+        env_list.append(("FI_CXI_RX_MATCH_MODE", "hybrid", msg)) # set to software instead when setting up the alt_read
 
         env_list.append(("\n# General tuning knobs (Audited on 3/31/25)",))
         # =2 may be a future performance improvement (Removes rails configuration)
         env_list.append(("NCCL_CROSS_NIC", "1"))
         # Improve the performance of large scale RCCL initialization
-        env_list.append(("NCCL_SOCKET_IFNAME", "hsn0"))
+        # env_list.append(("NCCL_SOCKET_IFNAME", "hsi0")) # Disabled on 4/3/2025 due to concern
 
         for i in self._aux_env_list:
             env_list.append(i)
