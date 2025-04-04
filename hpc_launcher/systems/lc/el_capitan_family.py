@@ -102,10 +102,6 @@ class ElCapitan(System):
                 ("LD_LIBRARY_PATH", different_ofi_plugin + ":${LD_LIBRARY_PATH}")
             )
 
-        env_list.append(("OMP_NUM_THREADS", "21"))
-        env_list.append(("OMP_PLACES", "threads"))
-        env_list.append(("OMP_PROC_BIND", "spread"))
-
         optimize_comm_protocol = ""
         if self.job_comm_protocol:
             optimize_comm_protocol = self.job_comm_protocol

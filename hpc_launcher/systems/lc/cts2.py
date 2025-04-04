@@ -51,9 +51,6 @@ class CTS2(System):
     def environment_variables(self) -> list[tuple[str, str]]:
         env_list = []
         env_list.append(("MPICH_OFI_NIC_POLICY", "GPU"))
-        env_list.append(("OMP_NUM_THREADS", "21"))
-        env_list.append(("OMP_PLACES", "threads"))
-        env_list.append(("OMP_PROC_BIND", "spread"))
 
         for i in self._aux_env_list:
             env_list.append(i)
