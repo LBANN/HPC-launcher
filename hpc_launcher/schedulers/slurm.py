@@ -140,7 +140,7 @@ class SlurmScheduler(Scheduler):
                 cmd_args += [flag]
 
         for e in env_vars:
-            header.write(parse_env_list(e))
+            header.write(parse_env_list(*e))
 
         for k, v in passthrough_env_vars:
             if not blocking:

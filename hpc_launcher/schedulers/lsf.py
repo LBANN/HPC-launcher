@@ -107,7 +107,7 @@ class LSFScheduler(Scheduler):
                 parallel_run_args.append(flag)
 
         for e in env_vars:
-            header.write(parse_env_list(e))
+            header.write(parse_env_list(*e))
 
         for k, v in passthrough_env_vars:
             if not blocking:

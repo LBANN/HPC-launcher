@@ -31,7 +31,7 @@ def get_schedulers():
         "LSFScheduler": LSFScheduler,
     }
 
-def parse_env_list(e: tuple[str,...]) -> str:
+def parse_env_list(*e) -> str:
     if len(e) == 1:
         m = e[0]
         return f"{m}\n"

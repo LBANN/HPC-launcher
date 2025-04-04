@@ -45,7 +45,7 @@ class LocalScheduler(Scheduler):
         save_hostlist: bool = False,
         launch_dir: str = "",
     ) -> str:
-        envvars = [parse_env_list(e) for e in system.environment_variables()]
+        envvars = [parse_env_list(*e) for e in system.environment_variables()]
         envvars += [
             f"export {k}={v}" for k, v in system.passthrough_environment_variables()
         ]
