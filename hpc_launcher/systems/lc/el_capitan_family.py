@@ -132,8 +132,8 @@ class ElCapitan(System):
         env_list.append(("\n# General tuning knobs (Audited on 3/31/25)",))
         # =2 may be a future performance improvement (Removes rails configuration)
         env_list.append(("NCCL_CROSS_NIC", "1"))
-        # Improve the performance of large scale RCCL initialization
-        # env_list.append(("NCCL_SOCKET_IFNAME", "hsi0")) # Disabled on 4/3/2025 due to concern
+        # Improve the performance of large scale RCCL initialization - should only be used on wire-up
+        env_list.append(("NCCL_SOCKET_IFNAME", "hsi0"))
 
         for i in self._aux_env_list:
             env_list.append(i)
