@@ -132,8 +132,8 @@ class ElCapitan(System):
         env_list.append(("\n# General tuning knobs (Audited on 3/31/25)",))
         # =2 may be a future performance improvement (Removes rails configuration)
         env_list.append(("NCCL_CROSS_NIC", "1"))
-        # Improve the performance of large scale RCCL initialization
-        # env_list.append(("NCCL_SOCKET_IFNAME", "hsi0")) # Disabled on 4/3/2025 due to concern
+        # Improve the performance of large scale RCCL initialization - should only be used on wire-up
+        env_list.append(("NCCL_SOCKET_IFNAME", "hsi0"))
 
         for i in self._aux_env_list:
             env_list.append(i)
@@ -146,7 +146,7 @@ class ElCapitan(System):
         if type(scheduler) is FluxScheduler:
             # Note that options cannot have a space after the -o flag, e.g. -o<option>
             # Performance tuning for HPE Slingshot Cassini NIC
-            scheduler.launcher_flags.append("-ofastload")
+            scheduler.launcher_flags.append("-ofastload=on")
             scheduler.launcher_flags.append("--setattr=rdzv_get_en=0")
             # Avoid bug in OMP that ruins the CPU_SET
             scheduler.launcher_flags.append("-ompibind=omp_proc_bind,omp_places")
