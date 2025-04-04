@@ -146,7 +146,7 @@ class ElCapitan(System):
         if type(scheduler) is FluxScheduler:
             # Note that options cannot have a space after the -o flag, e.g. -o<option>
             # Performance tuning for HPE Slingshot Cassini NIC
-            scheduler.launcher_flags.append("-ofastload")
+            scheduler.launcher_flags.append("-ofastload=on")
             scheduler.launcher_flags.append("--setattr=rdzv_get_en=0")
             # Avoid bug in OMP that ruins the CPU_SET
             scheduler.launcher_flags.append("-ompibind=omp_proc_bind,omp_places")
