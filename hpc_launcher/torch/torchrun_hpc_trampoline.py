@@ -108,7 +108,23 @@ def main():
         # If the mpi rendezvous protocol is set, this should be necessary but some packages still look for it
         os.environ["MASTER_ADDR"] = "23456"
 
-    os.environ["LOCAL_RANK"] = f"{local_rank}"
+    # Standard operating mode assumes that there is one rank per GPU
+    # Check to see how many GPUS are actually available to this rank
+    avail_gpus = 0
+    gpus = []
+    for e in ["CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"]:
+        if os.getenv(e):
+            gpus = os.getenv(e)
+            break
+    if gpus:
+        avail_gpus = gpus.split(",")
+
+    # Round-robin assign the visibile GPUs
+    if avail_gpus:
+        local_gpu_id = local_rank % len(avail_gpus)
+    else:
+        local_gpu_id = local_rank
+    os.environ["LOCAL_RANK"] = f"{local_gpu_id}"
 
     # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
     sys.argv = sys.argv[1:]
