@@ -11,6 +11,7 @@
 # https://github.com/LBANN and https://github.com/LLNL/LBANN.
 #
 # SPDX-License-Identifier: (Apache-2.0)
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
@@ -66,6 +67,14 @@ class Scheduler:
     ld_preloads: Optional[list[str]] = None
     # Capture the original command so that it can be added to the launch script
     command_line: Optional[list[str]] = None
+
+    # Flags to be used for a batch scheduling call
+    # written to the header of the batch script
+    batch_script_header = OrderedDict()
+    # Command line flags given to a batch submit command
+    batch_submit_args = OrderedDict()
+    # Commands given to active run command
+    run_launch_args = OrderedDict()
 
     def select_interactive_or_batch(
         self,
