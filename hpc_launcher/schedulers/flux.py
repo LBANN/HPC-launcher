@@ -82,11 +82,14 @@ class FluxScheduler(Scheduler):
             header.write(f"# FLUX: {tmp}\n")
 
         # Set the Number of GPUs per task
+        # There is a difference in option names between tasks and allocations
         if self.gpus_per_proc > 0:
-            tmp = f"--gpus-per-task={self.gpus_per_proc}"
-            cmd_args += [tmp]
-            if not blocking:
-                header.write(f"#FLUX: {tmp}\n")
+            tmp = f"{self.gpus_per_proc}"
+            # command line flag for a task
+            self.run_launch_args["--gpus-per-task"] = tmp
+            # command and shell flags for an allocation
+            self.batch_submit_args["--gpus-per-slot"] = tmp
+            self.batch_script_header["# FLUX: --gpus-per-slot"] = tmp
 
         if self.work_dir:
             tmp = [f"--setattr=system.cwd={os.path.abspath(self.work_dir)}"]
@@ -130,6 +133,10 @@ class FluxScheduler(Scheduler):
                 # These flag should only be on the launcher commands not the batch commands
                 cmd_args += [flag]
 
+        if not blocking: # Only add batch script header items on non-blocking calls
+            for k,v in self.batch_script_header.items():
+                header.write(f"{k}={v}\n")
+
         for e in env_vars:
             header.write(parse_env_list(*e))
 
@@ -148,8 +155,12 @@ class FluxScheduler(Scheduler):
         )
 
         if not blocking:
+            for k,v in self.batch_submit_args.items():
+                cmd_args += [f"{k}={v}"]
             return ["flux", "batch"] + cmd_args
 
+        for k,v in self.run_launch_args.items():
+            cmd_args += [f"{k}={v}"]
         return ["flux", "run"] + cmd_args
 
     def launcher_script(
@@ -167,6 +178,9 @@ class FluxScheduler(Scheduler):
         (header_lines, cmd_string) = self.build_command_string_and_batch_script(
             system, blocking
         )
+        for k,v in self.run_launch_args.items():
+            cmd_string += [f"{k}={v}"]
+
         script += header_lines
         script += "\n"
         if save_hostlist:
