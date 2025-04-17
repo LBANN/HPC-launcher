@@ -25,7 +25,8 @@ from dataclasses import fields
 
 class ParseKVAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        setattr(namespace, self.dest, dict())
+        if not getattr(namespace, self.dest):
+            setattr(namespace, self.dest, dict())
         for each in values:
             try:
                 key, value = each.split("=")
@@ -125,6 +126,16 @@ def setup_arguments(parser: argparse.ArgumentParser):
         help="Indicate if the job will primarily use a specific communication protocol and set any relevant environment variables: MPI or *CCL (NCCL, RCCL)",
     )
 
+    group.add_argument(
+        "-x",
+        "--xargs",
+        dest="override_args",
+        nargs='+',
+        action=ParseKVAction,
+        help="Specifies scheduler and launch arguments (note it will override any known key): --xargs k1=v1 k2=v2 \n or --xargs k1=v1 --xargs k2=v2 \n Also note that a double dash -- is need if this is the last argument",
+        metavar="KEY1=VALUE1",
+    )
+
     # System
     group = parser.add_argument_group(
         "System",
@@ -136,7 +147,7 @@ def setup_arguments(parser: argparse.ArgumentParser):
         dest="system_params",
         nargs='+',
         action=ParseKVAction,
-        help="Specifies some or all of the parameters of a system as a dictionary (note it will override any known or autodetected parameters): -p cores_per_node=<int> gpus_per_node=<int> gpu_arch=<str> mem_per_gpu=<float> numa_domains=<int> scheduler=<str>",
+        help="Specifies some or all of the parameters of a system as a dictionary (note it will override any known or autodetected parameters): -p cores_per_node=<int> gpus_per_node=<int> gpu_arch=<str> mem_per_gpu=<float> numa_domains=<int> scheduler=<str>\n -p cores_per_node=<int> gpus_per_node=<int> \n Also note that a double dash -- is need if this is the last argument",
         metavar="KEY1=VALUE1",
     )
 
