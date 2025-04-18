@@ -88,13 +88,26 @@ class ElCapitan(System):
                 )
             )
         if os.getenv("ROCM_PATH") is not None:
+            rocm_path = os.getenv("ROCM_PATH")
             env_list.append(
                 (
                     "LD_LIBRARY_PATH",
-                    os.path.join(os.getenv("ROCM_PATH"), "llvm", "lib")
+                    os.path.join(f"{rocm_path}", "llvm", "lib")
                     + ":${LD_LIBRARY_PATH}",
                 )
             )
+            rocm_ver = os.path.basename(rocm_path)
+            # Check for and include the AWS_OFI_PLUGIN if it exists
+            sys_type = os.getenv("SYS_TYPE")
+            aws_ofi_plugin = f'/collab/usr/global/tools/rccl/{sys_type}/{rocm_ver}/install/lib'
+            if os.path.isdir(aws_ofi_plugin):
+                env_list.append(
+                    (
+                        "LD_LIBRARY_PATH",
+                        aws_ofi_plugin
+                        + ":${LD_LIBRARY_PATH}",
+                    )
+                )
 
         different_ofi_plugin = os.getenv("LBANN_USE_THIS_OFI_PLUGIN")
         if different_ofi_plugin is not None:
