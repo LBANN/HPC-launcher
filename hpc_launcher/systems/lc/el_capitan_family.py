@@ -16,6 +16,9 @@ from hpc_launcher.schedulers.flux import FluxScheduler
 from hpc_launcher.systems.system import System, SystemParams
 import os
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Known LC systems
 _mi250x_node = SystemParams(64, 8, "gfx90a", 64.0, 4, "flux")
@@ -87,14 +90,39 @@ class ElCapitan(System):
                     os.getenv("CRAY_LD_LIBRARY_PATH") + ":${LD_LIBRARY_PATH}",
                 )
             )
+
+        optimize_rccl_protocol = False
+        optimize_comm_protocol = ""
+        if self.job_comm_protocol:
+            optimize_comm_protocol = self.job_comm_protocol
+        if optimize_comm_protocol.upper() == "RCCL" or optimize_comm_protocol.upper() == "*CCL":
+            optimize_rccl_protocol = True
+
         if os.getenv("ROCM_PATH") is not None:
+            rocm_path = os.getenv("ROCM_PATH")
             env_list.append(
                 (
                     "LD_LIBRARY_PATH",
-                    os.path.join(os.getenv("ROCM_PATH"), "llvm", "lib")
+                    os.path.join(f"{rocm_path}", "llvm", "lib")
                     + ":${LD_LIBRARY_PATH}",
                 )
             )
+            if optimize_rccl_protocol:
+                rocm_ver = os.path.basename(rocm_path)
+                # Check for and include the AWS_OFI_PLUGIN if it exists
+                sys_type = os.getenv("SYS_TYPE")
+                aws_ofi_plugin = f'/collab/usr/global/tools/rccl/{sys_type}/{rocm_ver}/install/lib'
+                if os.path.isdir(aws_ofi_plugin):
+                    logger.info(f"Setting path to default AWS_OFI_RCCL plugin {aws_ofi_plugin} to accelerate RCCL communication protocol.")
+                    env_list.append(
+                        (
+                            "LD_LIBRARY_PATH",
+                            aws_ofi_plugin
+                            + ":${LD_LIBRARY_PATH}",
+                        )
+                    )
+                else:
+                    logger.warn(f"WARNING: using RCCL communication protocol and no default AWS_OFI_RCCL plugin was detected.  Checked {aws_ofi_plugin}. Ensure one is loaded or performance will be degraded.")
 
         different_ofi_plugin = os.getenv("LBANN_USE_THIS_OFI_PLUGIN")
         if different_ofi_plugin is not None:
@@ -102,10 +130,7 @@ class ElCapitan(System):
                 ("LD_LIBRARY_PATH", different_ofi_plugin + ":${LD_LIBRARY_PATH}")
             )
 
-        optimize_comm_protocol = ""
-        if self.job_comm_protocol:
-            optimize_comm_protocol = self.job_comm_protocol
-        if optimize_comm_protocol.upper() == "RCCL" or optimize_comm_protocol.upper() == "*CCL":
+        if optimize_rccl_protocol:
             # Performance tuning for HPE Slingshot Cassini NIC (Audited on 3/31/25) - Only use with RCCL
             msg = "Performance tuning for RCCL + HPE Slingshot Cassini NIC (Audited on 3/31/25)"
             env_list.append((f"\n# {msg}",))
