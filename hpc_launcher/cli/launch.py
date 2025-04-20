@@ -59,6 +59,7 @@ def main():
         script_file,
         args.command,
         args.args,
+        args.override_args,
         not args.bg,
         args.setup_only,
         args.color_stderr,

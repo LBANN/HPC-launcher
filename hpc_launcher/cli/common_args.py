@@ -309,6 +309,8 @@ def validate_arguments(args: argparse.Namespace):
 # See if the system can be autodetected and then process some special arguments
 # that can autoselect the number of ranks / GPUs
 def process_arguments(args: argparse.Namespace, logger: logging.Logger) -> System:
+    print(f'BVE here are the contents of the override args {args.override_args}')
+    print(f'BVE here are the contents of the system params {args.system_params}')
     validate_arguments(args)
 
     # Set system and launch configuration based on arguments

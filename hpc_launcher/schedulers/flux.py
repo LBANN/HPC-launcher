@@ -131,7 +131,18 @@ class FluxScheduler(Scheduler):
         if self.launcher_flags:
             for flag in self.launcher_flags:
                 # These flag should only be on the launcher commands not the batch commands
-                cmd_args += [flag]
+                # cmd_args += [flag]
+                # If an = exists, split on the first only
+                k = flag.split("=", 1)
+                print(f'BVE I have a flag {flag}')
+                if len(k) == 1:
+                    self.run_launch_args[k[0]] = None
+                elif len(k) == 2:
+                    print(f'BVE I have {k[0]}, {k[1]} from {flag}')
+                    self.run_launch_args[k[0]] = k[1]
+                else:
+                    logger.error(f"Unknown launcher flag {flag}")
+                    exit(1)
 
         if not blocking: # Only add batch script header items on non-blocking calls
             for k,v in self.batch_script_header.items():
@@ -153,14 +164,33 @@ class FluxScheduler(Scheduler):
         (header_lines, cmd_args) = self.build_command_string_and_batch_script(
             system, blocking
         )
+        print(f'BVE I have override args {self.override_launch_args}')
+        for k,v in self.override_launch_args.items():
+            print(f'BVE I have found {k}={v}')
+            if k in self.batch_script_header:
+                print(f'BVE I have found {k} in header {self.batch_script_header}')
+            if k in self.batch_submit_args:
+                print(f'BVE I have found {k} in batch_submit_args {self.batch_submit_args}')
+            if k in self.run_launch_args:
+                print(f'BVE I have found {k} in run {self.run_launch_args}')
+                self.run_launch_args[k] = v
+            else:
+                print(f'BVE adding unqiue override found {k} in run {self.run_launch_args}')
+                self.run_launch_args[k] = v
 
         if not blocking:
             for k,v in self.batch_submit_args.items():
-                cmd_args += [f"{k}={v}"]
+                if not v:
+                    cmd_args += [k]
+                else:
+                    cmd_args += [f"{k}={v}"]
             return ["flux", "batch"] + cmd_args
 
         for k,v in self.run_launch_args.items():
-            cmd_args += [f"{k}={v}"]
+            if not v:
+                cmd_args += [k]
+            else:
+                cmd_args += [f"{k}={v}"]
         return ["flux", "run"] + cmd_args
 
     def launcher_script(

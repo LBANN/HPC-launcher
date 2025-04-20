@@ -148,6 +148,7 @@ def main():
         script_file,
         command,
         launch_args,
+        args.override_args,
         not args.bg,
         # args.output_script,
         args.setup_only,

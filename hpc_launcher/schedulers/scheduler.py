@@ -76,6 +76,9 @@ class Scheduler:
     # Commands given to active run command
     run_launch_args = OrderedDict()
 
+    # CLI flags for override
+    override_launch_args: Optional[dict] = None
+
     def select_interactive_or_batch(
         self,
         tmp: list[str],
@@ -304,6 +307,7 @@ class Scheduler:
         filename: str,
         command: str,
         args: Optional[list[str]] = None,
+        override_launch_args: Optional[dict] = None,
         blocking: bool = True,
         setup_only: bool = False,
         color_stderr: bool = False,
@@ -326,6 +330,8 @@ class Scheduler:
         :params save_hostlist: Add local scripting to capture the list of hosts the command is launched on
         :return: The queued job ID as a string.
         """
+
+        self.override_launch_args = override_launch_args
 
         # If the command is run from a directory
         if run_from_launch_dir:
