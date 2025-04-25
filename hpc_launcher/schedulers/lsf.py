@@ -117,19 +117,29 @@ class LSFScheduler(Scheduler):
 
         return (header.getvalue(), cmd_args, parallel_run_args)
 
-    def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
-        # Launch command only use the cmd_args to construct the shell script to be launched
-        (header_lines, cmd_args, parallel_run_args) = (
-            self.build_command_string_and_batch_script(system, blocking)
-        )
 
-        if not blocking:
-            return ["bsub"] + cmd_args
+    def blocking_launch_command(self) -> list[str]:
+        if os.getenv("LSB_HOSTS"):
+            return ["jsrun"]
         else:
-            if os.getenv("LSB_HOSTS"):
-                return ["jsrun"] + parallel_run_args
-            else:
-                return ["bsub", "-Is"] + cmd_args
+            return ["bsub", "-Is"]
+
+    def nonblocking_launch_command(self) -> list[str]:
+        return ["bsub"]
+
+    # def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
+    #     # Launch command only use the cmd_args to construct the shell script to be launched
+    #     (header_lines, cmd_args, parallel_run_args) = (
+    #         self.build_command_string_and_batch_script(system, blocking)
+    #     )
+
+    #     if not blocking:
+    #         return ["bsub"] + cmd_args
+    #     else:
+    #         if os.getenv("LSB_HOSTS"):
+    #             return ["jsrun"] + parallel_run_args
+    #         else:
+    #             return ["bsub", "-Is"] + cmd_args
 
     def export_hostlist(self) -> str:
         return "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n"

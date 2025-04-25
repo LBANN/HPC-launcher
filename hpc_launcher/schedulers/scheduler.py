@@ -113,6 +113,20 @@ class Scheduler:
         """
         return ("", [])
 
+    def blocking_launch_command(self) -> list[str]:
+        """
+        Returns scheduler specific command for interactive (blocking) jobs
+        :return: scheduler specific command for interactive (blocking) jobs
+        """
+        raise NotImplementedError
+
+    def nonblocking_launch_command(self) -> list[str]:
+        """
+        Returns scheduler specific command for non-blocking batch jobs
+        :return: scheduler specific command for non-blocking batch jobs
+        """
+        raise NotImplementedError
+
     def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
         """
         Returns the launch command for this scheduler. Returns the
@@ -123,7 +137,40 @@ class Scheduler:
                          script that immediately returns (False).
         :return: The command prefix as a list of strings (one per argument).
         """
-        raise NotImplementedError
+        (header_lines, cmd_args) = self.build_command_string_and_batch_script(
+            system, blocking
+        )
+        print(f'BVE I have override args {self.override_launch_args}')
+        if self.override_launch_args:
+            for k,v in self.override_launch_args.items():
+                print(f'BVE I have found {k}={v}')
+                if k in self.batch_script_header:
+                    print(f'BVE I have found {k} in header {self.batch_script_header}')
+                if k in self.batch_submit_args:
+                    tmp = self.batch_submit_args[k]
+                    print(f'BVE I have found {k} in batch_submit_args {self.batch_submit_args}={tmp}')
+                if k in self.run_launch_args:
+                    tmp = self.run_launch_args[k]
+                    print(f'BVE I have found {k} in run {self.run_launch_args}={tmp}')
+                    self.run_launch_args[k] = v
+                else:
+                    print(f'BVE adding unqiue override found {k} in run {self.run_launch_args}')
+                    self.run_launch_args[k] = v
+
+        if not blocking:
+            for k,v in self.batch_submit_args.items():
+                if not v:
+                    cmd_args += [k]
+                else:
+                    cmd_args += [f"{k}={v}"]
+            return self.nonblocking_launch_command() + cmd_args
+
+        for k,v in self.run_launch_args.items():
+            if not v:
+                cmd_args += [k]
+            else:
+                cmd_args += [f"{k}={v}"]
+        return self.blocking_launch_command() + cmd_args
 
     def export_hostlist(self) -> str:
         """

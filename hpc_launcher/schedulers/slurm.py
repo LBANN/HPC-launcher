@@ -150,16 +150,11 @@ class SlurmScheduler(Scheduler):
 
         return (header.getvalue(), cmd_args)
 
-    def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
-        # Launch command only use the cmd_args to construct the shell script to be launched
-        (header_lines, cmd_args) = self.build_command_string_and_batch_script(
-            system, blocking
-        )
+    def blocking_launch_command(self) -> list[str]:
+        return ["srun"]
 
-        if not blocking:
-            return ["sbatch"] + cmd_args
-
-        return ["srun"] + cmd_args
+    def nonblocking_launch_command(self) -> list[str]:
+        return ["sbatch"]
 
     def export_hostlist(self) -> str:
         return "export HPC_LAUNCHER_HOSTLIST=${SLURM_JOB_NODELIST}\n"

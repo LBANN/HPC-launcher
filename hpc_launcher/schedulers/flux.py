@@ -159,39 +159,11 @@ class FluxScheduler(Scheduler):
 
         return (header.getvalue(), cmd_args)
 
-    def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
-        # Launch command only use the cmd_args to construct the shell script to be launched
-        (header_lines, cmd_args) = self.build_command_string_and_batch_script(
-            system, blocking
-        )
-        print(f'BVE I have override args {self.override_launch_args}')
-        for k,v in self.override_launch_args.items():
-            print(f'BVE I have found {k}={v}')
-            if k in self.batch_script_header:
-                print(f'BVE I have found {k} in header {self.batch_script_header}')
-            if k in self.batch_submit_args:
-                print(f'BVE I have found {k} in batch_submit_args {self.batch_submit_args}')
-            if k in self.run_launch_args:
-                print(f'BVE I have found {k} in run {self.run_launch_args}')
-                self.run_launch_args[k] = v
-            else:
-                print(f'BVE adding unqiue override found {k} in run {self.run_launch_args}')
-                self.run_launch_args[k] = v
+    def blocking_launch_command(self) -> list[str]:
+        return ["flux", "run"]
 
-        if not blocking:
-            for k,v in self.batch_submit_args.items():
-                if not v:
-                    cmd_args += [k]
-                else:
-                    cmd_args += [f"{k}={v}"]
-            return ["flux", "batch"] + cmd_args
-
-        for k,v in self.run_launch_args.items():
-            if not v:
-                cmd_args += [k]
-            else:
-                cmd_args += [f"{k}={v}"]
-        return ["flux", "run"] + cmd_args
+    def nonblocking_launch_command(self) -> list[str]:
+        return ["flux", "batch"]
 
     def export_hostlist(self) -> str:
         return "export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n"
