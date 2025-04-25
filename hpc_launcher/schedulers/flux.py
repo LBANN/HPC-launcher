@@ -193,45 +193,11 @@ class FluxScheduler(Scheduler):
                 cmd_args += [f"{k}={v}"]
         return ["flux", "run"] + cmd_args
 
-    def launcher_script(
-        self,
-        system: "System",
-        command: str,
-        args: Optional[list[str]] = None,
-        blocking: bool = True,
-        save_hostlist: bool = False,
-        launch_dir: str = "",
-    ) -> str:
+    def export_hostlist(self) -> str:
+        return "export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n"
 
-        script = ""
-        # Launcher script only use the header_lines to construct the shell script to be launched
-        (header_lines, cmd_string) = self.build_command_string_and_batch_script(
-            system, blocking
-        )
-        for k,v in self.run_launch_args.items():
-            cmd_string += [f"{k}={v}"]
-
-        script += header_lines
-        script += "\n"
-        if save_hostlist:
-            script += "export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n"
-            script += 'if [ "${RANK}" = "0" ]; then\n'
-            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
-            script += "fi\n\n"
-
-        if not blocking:
-            script += "flux run "
-            script += " ".join(cmd_string)
-            script += " "
-
-        script += f"{command}"
-
-        for arg in args:
-            script += f" {arg}"
-
-        script += "\n"
-
-        return script
+    def batch_script_run_command(self) -> str:
+        return "flux run "
 
     def get_job_id(self, output: str) -> Optional[str]:
         # The job ID is the only printout when calling flux batch

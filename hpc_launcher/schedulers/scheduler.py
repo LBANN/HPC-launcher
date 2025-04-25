@@ -125,6 +125,20 @@ class Scheduler:
         """
         raise NotImplementedError
 
+    def export_hostlist(self) -> str:
+        """
+        Returns a shell cmmand to set the hostlist of the job to an environment variable.
+        :return: string that exports hostlist to environment variable
+        """
+        raise NotImplementedError
+
+    def batch_script_run_command(self) -> str:
+        """
+        Returns scheduler specific command for use in a batch submitted script
+        :return: scheduler specific command for use in a batch submitted script
+        """
+        raise NotImplementedError
+
     def launcher_script(
         self,
         system: "System",
@@ -146,7 +160,39 @@ class Scheduler:
         :params save_hostlist: Add local scripting to capture the list of hosts the command is launched on
         :return: A shell script as a string.
         """
-        raise NotImplementedError
+        script = ""
+        # Launch command only use the cmd_args to construct the shell script to be launched
+        (header_lines, cmd_args) = self.build_command_string_and_batch_script(
+            system, blocking
+        )
+        for k,v in self.run_launch_args.items():
+            cmd_args += [f"{k}={v}"]
+
+        # Configure header and command line with scheduler job options
+        script += header_lines
+        script += "\n"
+        callee_directory = os.path.dirname(launch_dir)
+        logger.info(f"Callee directory: {callee_directory}")
+        script += f"export PYTHONPATH={callee_directory}:" + "${PYTHONPATH}\n"
+        if save_hostlist:
+            script += self.export_hostlist()
+            script += 'if [ "${RANK}" = "0" ]; then\n'
+            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
+            script += "fi\n\n"
+
+        if not blocking:
+            script += self.batch_script_run_command()
+            script += " ".join(cmd_args)
+            script += " "
+
+        script += f"{command}"
+
+        for arg in args:
+            script += f" {arg}"
+
+        script += "\n"
+
+        return script
 
     def internal_script(self, system: "System") -> Optional[str]:
         """

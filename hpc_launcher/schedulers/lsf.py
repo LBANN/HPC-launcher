@@ -131,42 +131,11 @@ class LSFScheduler(Scheduler):
             else:
                 return ["bsub", "-Is"] + cmd_args
 
-    def launcher_script(
-        self,
-        system: "System",
-        command: str,
-        args: Optional[list[str]] = None,
-        blocking: bool = True,
-        save_hostlist: bool = False,
-        launch_dir: str = "",
-    ) -> str:
+    def export_hostlist(self) -> str:
+        return "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n"
 
-        script = ""
-        # Launcher script only use the header_lines to construct the shell script to be launched
-        (header_lines, cmd_string, parallel_run_args) = (
-            self.build_command_string_and_batch_script(system, blocking)
-        )
-        script += header_lines
-        script += "\n"
-        if save_hostlist:
-            script += "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n"
-            script += 'if [ "${RANK}" = "0" ]; then\n'
-            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
-            script += "fi\n\n"
-
-        if not blocking or (blocking and not os.getenv("LSB_HOSTS")):
-            script += "jsrun "
-            script += " ".join(parallel_run_args)
-            script += " "
-
-        script += f"{command}"
-
-        for arg in args:
-            script += f" {arg}"
-
-        script += "\n"
-
-        return script
+    def batch_script_run_command(self) -> str:
+        return "jsrun "
 
     def get_job_id(self, output: str) -> Optional[str]:
         raise NotImplementedError

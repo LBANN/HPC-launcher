@@ -161,44 +161,11 @@ class SlurmScheduler(Scheduler):
 
         return ["srun"] + cmd_args
 
-    def launcher_script(
-        self,
-        system: "System",
-        command: str,
-        args: Optional[list[str]] = None,
-        blocking: bool = True,
-        save_hostlist: bool = False,
-        launch_dir: str = "",
-    ) -> str:
+    def export_hostlist(self) -> str:
+        return "export HPC_LAUNCHER_HOSTLIST=${SLURM_JOB_NODELIST}\n"
 
-        script = ""
-        # Launch command only use the cmd_args to construct the shell script to be launched
-        (header_lines, cmd_args) = self.build_command_string_and_batch_script(
-            system, blocking
-        )
-
-        # Configure header and command line with Slurm job options
-        script += header_lines
-        script += "\n"
-        if save_hostlist:
-            script += "export HPC_LAUNCHER_HOSTLIST=${SLURM_JOB_NODELIST}\n"
-            script += 'if [ "${RANK}" = "0" ]; then\n'
-            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
-            script += "fi\n\n"
-
-        if not blocking:
-            script += "srun -u "
-            script += " ".join(cmd_args)
-            script += " "
-
-        script += f"{command}"
-
-        for arg in args:
-            script += f" {arg}"
-
-        script += "\n"
-
-        return script
+    def batch_script_run_command(self) -> str:
+        return "srun -u "
 
     def get_job_id(self, output: str) -> Optional[str]:
         # The job ID is the last number in the printout
