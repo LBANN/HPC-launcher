@@ -40,7 +40,18 @@ networks with massive amounts of data.  LBANN is able to advantage of
 tightly-coupled accelerators, low-latency high-bandwidth networking,
 and high-bandwidth parallel file systems.
 
-![Block Diagram of LBANN v2.0](LBANN_2.0_Block_Diagram.png)
+![Block Diagram of LBANN v2.x](LBANN_2.0_Block_Diagram.png "Block
+Diagram of LBANN v2.x architecture")
+
+LBANN v2.x is composed of a custom backend LBANN device that is used
+to provide processor-centric optimizations such as copy-elision for
+AMD MI300A APUs.  Additionally, it is composed of Python, C++, CUDA,
+and ROCm custom kernels that extend PyTorch 2.4+.  Libraries such as
+DGraph, DistConv, and CheckMate, implement key algorithms using the
+PyTorch 2.x API.  Each of these libraries should be both composable as
+well as fully separable.  The suite of LBANN 2.x optimizations are
+found in the [LBANN](https://github.com/orgs/LBANN/repositories)
+GitHub group.
 
 ## Publications
 
