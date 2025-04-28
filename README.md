@@ -40,6 +40,8 @@ networks with massive amounts of data.  LBANN is able to advantage of
 tightly-coupled accelerators, low-latency high-bandwidth networking,
 and high-bandwidth parallel file systems.
 
+![Block Diagram of LBANN v2.0](LBANN_2.0_Block_Diagram.png)
+
 ## Publications
 
 A list of publications, presentations and posters are shown
