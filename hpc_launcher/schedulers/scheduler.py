@@ -20,6 +20,7 @@ import sys
 import time
 import subprocess
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
+from hpc_launcher.schedulers import parse_env_list
 
 import logging
 
@@ -70,11 +71,13 @@ class Scheduler:
 
     # Flags to be used for a batch scheduling call
     # written to the header of the batch script
-    batch_script_header = OrderedDict()
-    # Command line flags given to a batch submit command
-    batch_submit_args = OrderedDict()
+    # batch_script_header = OrderedDict()
+    # Command line flags given to a batch or interactive submit command
+    submit_only_args = OrderedDict()
     # Commands given to active run command
-    run_launch_args = OrderedDict()
+    run_only_args = OrderedDict()
+    # Flags given to both submit and run commands
+    common_launch_args = OrderedDict()
 
     # CLI flags for override
     override_launch_args: Optional[dict] = None
@@ -99,8 +102,13 @@ class Scheduler:
         """
         return None
 
+    def build_scheduler_specific_arguments(
+        self, blocking: bool = True
+    ):
+        return NotImplementedError
+
     def build_command_string_and_batch_script(
-        self, system: "System"
+        self, system: "System", blocking: bool = True
     ) -> (str, list[str]):
         """
         Returns the strings used for a launch command as well as a batch script
@@ -109,9 +117,91 @@ class Scheduler:
         This script usually performs node/resource allocation and manages I/O.
 
         :param system: The system to use.
+        :param blocking:
         :return: A tuple of (shell script as a string, list of command-line arguments).
         """
-        return ("", [])
+        env_vars = system.environment_variables()
+        passthrough_env_vars = system.passthrough_environment_variables()
+        # Enable the system to apply some customization to the scheduler instance
+        system.customize_scheduler(self)
+
+        header = StringIO()
+        header.write("#!/bin/sh\n")
+        cmd_args = []
+
+        self.build_scheduler_specific_arguments(blocking)
+        
+        if self.launcher_flags:
+            for flag in self.launcher_flags:
+                # These flag should only be on the launcher commands not the batch commands
+                # cmd_args += [flag]
+                # If an = exists, split on the last only
+                k = flag.rsplit("=", 1)
+                print(f'BVE I have a flag {flag}')
+                if len(k) == 1:
+                    self.common_launch_args[k[0]] = None
+                    # self.run_launch_args[k[0]] = None
+                elif len(k) == 2:
+                    print(f'BVE I have {k[0]}, {k[1]} from {flag}')
+                    self.common_launch_args[k[0]] = k[1]
+                    # self.run_launch_args[k[0]] = k[1]
+                else:
+                    logger.error(f"Unknown launcher flag {flag}")
+                    exit(1)
+
+        print(f'BVE I have override args {self.override_launch_args}')
+        if self.override_launch_args:
+            for k,v in self.override_launch_args.items():
+                print(f'BVE I have found {k}={v}')
+                # if k in self.batch_script_header:
+                #     print(f'BVE I have found {k} in header {self.batch_script_header}')
+                if k in self.common_launch_args:
+                    tmp = self.common_launch_args[k]
+                    print(f'BVE I have found {k} in common_launch_args {self.common_launch_args}={tmp}')
+                    self.common_launch_args[k] = v
+                elif k in self.run_only_args:
+                    tmp = self.run_only_args[k]
+                    print(f'BVE I have found {k} in run {self.run_only_args}={tmp}')
+                    self.run_only_args[k] = v
+                elif k in self.submit_only_args:
+                    tmp = self.submit_only_args[k]
+                    print(f'BVE I have found {k} in run {self.submit_only_args}={tmp}')
+                    self.submit_only_args[k] = v
+                else:
+                    print(f'BVE adding unqiue override found {k} in run {self.run_args}')
+                    self.common_launch_args[k] = v
+                    
+        if not blocking: # Only add batch script header items on non-blocking calls
+            # for k,v in self.batch_script_header.items():
+            for k,v in self.submit_only_args.items():
+                if not v:
+                    header.write(f"# FLUX: {k}\n")
+                else:
+                    header.write(f"# FLUX: {k}={v}\n")
+            for k,v in self.common_launch_args.items():
+                if not v:
+                    header.write(f"# FLUX: {k}\n")
+                else:
+                    header.write(f"# FLUX: {k}={v}\n")
+
+        for e in env_vars:
+            header.write(parse_env_list(*e))
+
+        for k, v in passthrough_env_vars:
+            if not blocking:
+                cmd_args += [f" --env={k}={v}"]
+            else:
+                header += f"export {k}={v}\n"
+
+        return (header.getvalue(), cmd_args)
+        # return ("", [])
+
+    def batch_script_prefix(self) -> str:
+        """
+        Returns scheduler specific prefix for batch scripts
+        :return: scheduler specific prefix for batch scripts
+        """
+        raise NotImplementedError
 
     def blocking_launch_command(self) -> list[str]:
         """
@@ -140,32 +230,23 @@ class Scheduler:
         (header_lines, cmd_args) = self.build_command_string_and_batch_script(
             system, blocking
         )
-        print(f'BVE I have override args {self.override_launch_args}')
-        if self.override_launch_args:
-            for k,v in self.override_launch_args.items():
-                print(f'BVE I have found {k}={v}')
-                if k in self.batch_script_header:
-                    print(f'BVE I have found {k} in header {self.batch_script_header}')
-                if k in self.batch_submit_args:
-                    tmp = self.batch_submit_args[k]
-                    print(f'BVE I have found {k} in batch_submit_args {self.batch_submit_args}={tmp}')
-                if k in self.run_launch_args:
-                    tmp = self.run_launch_args[k]
-                    print(f'BVE I have found {k} in run {self.run_launch_args}={tmp}')
-                    self.run_launch_args[k] = v
-                else:
-                    print(f'BVE adding unqiue override found {k} in run {self.run_launch_args}')
-                    self.run_launch_args[k] = v
 
+        # Both commands get the submit args
+        for k,v in self.common_launch_args.items():
+            if not v:
+                cmd_args += [k]
+            else:
+                cmd_args += [f"{k}={v}"]
         if not blocking:
-            for k,v in self.batch_submit_args.items():
+            for k,v in self.submit_only_args.items():
                 if not v:
                     cmd_args += [k]
                 else:
                     cmd_args += [f"{k}={v}"]
             return self.nonblocking_launch_command() + cmd_args
 
-        for k,v in self.run_launch_args.items():
+        # For interactive jobs add the run args
+        for k,v in self.run_only_args.items():
             if not v:
                 cmd_args += [k]
             else:
@@ -212,11 +293,23 @@ class Scheduler:
         (header_lines, cmd_args) = self.build_command_string_and_batch_script(
             system, blocking
         )
-        for k,v in self.run_launch_args.items():
-            cmd_args += [f"{k}={v}"]
+        # For batch jobs add any run args to the internal command
+        if not blocking:
+            for k,v in self.common_launch_args.items():
+                if not v:
+                    cmd_args += [k]
+                else:
+                    cmd_args += [f"{k}={v}"]
+            for k,v in self.run_only_args.items():
+                if not v:
+                    cmd_args += [k]
+                else:
+                    cmd_args += [f"{k}={v}"]
 
         # Configure header and command line with scheduler job options
         script += header_lines
+        # for k,v in self.batch_script_header.items():
+        #     script += f"{k}={v}\n"
         script += "\n"
         callee_directory = os.path.dirname(launch_dir)
         logger.info(f"Callee directory: {callee_directory}")

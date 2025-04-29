@@ -46,15 +46,20 @@ class SlurmScheduler(Scheduler):
 
     def select_interactive_or_batch(
         self,
-        tmp: list[str],
+#        tmp: list[str],
+        k: str,
+        v: str,            
         header: StringIO,
         cmd_args: list[str],
         blocking: bool = True,
     ) -> None:
         if blocking:
-            cmd_args += tmp
+            # cmd_args += tmp
+            self.run_launch_args[k] = v
         else:
-            header.write(f'#SBATCH {" ".join(tmp)}\n')
+            # header.write(f'#SBATCH {" ".join(tmp)}\n')
+            self.batch_script_header[k] = v
+            self.batch_submit_args[k] = v
         return
 
     def build_command_string_and_batch_script(
@@ -72,72 +77,93 @@ class SlurmScheduler(Scheduler):
 
         cmd_args = []
         if self.out_log_file and not blocking:
-            header.write(f"#SBATCH --output={self.out_log_file}\n")
+            self.submit_args["--output"] = f"{self.out_log_file}"
+            # header.write(f"#SBATCH --output={self.out_log_file}\n")
         if self.err_log_file and not blocking:
-            header.write(f"#SBATCH --error={self.err_log_file}\n")
+            self.submit_args["--error"] = f"{self.err_log_file}"
+            # header.write(f"#SBATCH --error={self.err_log_file}\n")
 
         # Unbuffered output - Only pass to srun
         if blocking and not isinstance(system, Sierra):
             # On Sierra family systems srun is a proxy to lrun and lacks this flag
-            cmd_args += ["-u"]
+            # cmd_args += ["-u"]
+            self.run_only_args["-u"] = None
 
         # Number of Nodes
-        tmp = f"--nodes={self.nodes}"
-        cmd_args += [tmp]
-        if not blocking:
-            header.write(f"#SBATCH {tmp}\n")
+        # tmp = f"--nodes={self.nodes}"
+        self.common_launch_args["--nodes"] = f"{self.nodes}"
+        # cmd_args += [tmp]
+        # if not blocking:
+        #     header.write(f"#SBATCH {tmp}\n")
 
         # Total number of Tasks / Processes
         tmp = f"--ntasks={self.nodes * self.procs_per_node}"
-        cmd_args += [tmp]
-        if not blocking:
-            header.write(f"#SBATCH {tmp}\n")
+        self.common_launch_args["--ntasks"] = f"{self.nodes * self.procs_per_node}"
+        # cmd_args += [tmp]
+        # if not blocking:
+        #     header.write(f"#SBATCH {tmp}\n")
 
         # Number of Tasks per node
         tmp = f"--ntasks-per-node={self.procs_per_node}"
-        cmd_args += [tmp]
-        if not blocking:
-            header.write(f"#SBATCH {tmp}\n")
+        self.common_launch_args["--ntasks-per-node"] = f"{self.procs_per_node}"
+        # cmd_args += [tmp]
+        # if not blocking:
+        #     header.write(f"#SBATCH {tmp}\n")
 
         # Set the Number of GPUs per task
         if self.gpus_per_proc > 0:
             tmp = f"--gpus-per-task={self.gpus_per_proc}"
-            cmd_args += [tmp]
-            if not blocking:
-                header.write(f"#SBATCH {tmp}\n")
+            self.common_launch_args["--gpus-per-task"] = f"{self.gpus_per_proc}"
+            # cmd_args += [tmp]
+            # if not blocking:
+            #     header.write(f"#SBATCH {tmp}\n")
 
         if self.work_dir:
-            tmp = [f"--chdir={os.path.abspath(self.work_dir)}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            # tmp = [f"--chdir={os.path.abspath(self.work_dir)}"]
+            self.submit_only_args["--chdir"] = f"{os.path.abspath(self.work_dir)}"
+            # self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.ld_preloads:
-            tmp = [f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}']
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args['--export=ALL,LD_PRELOAD'] = f'{",".join(self.ld_preloads)}'
+            # tmp = [f'--export=ALL,LD_PRELOAD={",".join(self.ld_preloads)}']
+            # self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.time_limit is not None:
-            tmp = [f"--time={_time_string(self.time_limit)}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args["--time"] = f"{_time_string(self.time_limit)}"
+            # tmp = [f"--time={_time_string(self.time_limit)}"]
+            # self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.job_name:
-            tmp = [f"--job-name={self.job_name}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args["--job-name"] = f"{self.job_name}"
+            # tmp = [f"--job-name={self.job_name}"]
+            # self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.queue:
-            tmp = [f"--partition={self.queue}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.submit_only_args["--partition"] = f"{self.queue}"
+            # tmp = [f"--partition={self.queue}"]
+            # self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.account:
-            tmp = [f"--account={self.account}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.submit_only_args["--account"] = f"{self.account}"
+            # tmp = [f"--account={self.account}"]
+            # self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.reservation:
-            tmp = [f"--reservation={self.reservation}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.submit_only_args["--reservation"] = f"{self.reservation}"
+            # tmp = [f"--reservation={self.reservation}"]
+            # self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
 
         if self.launcher_flags:
             for flag in self.launcher_flags:
                 # These flag should only be on the launcher commands not the batch commands
                 cmd_args += [flag]
+
+        if not blocking: # Only add batch script header items on non-blocking calls
+            for k,v in self.batch_script_header.items():
+                if not v:
+                    header.write(f"#SBATCH {k}\n")
+                else:
+                    header.write(f"#SBATCH {k}={v}\n")
 
         for e in env_vars:
             header.write(parse_env_list(*e))
@@ -150,6 +176,9 @@ class SlurmScheduler(Scheduler):
 
         return (header.getvalue(), cmd_args)
 
+    def batch_script_prefix(self) -> str:
+        return "#SBATCH"
+    
     def blocking_launch_command(self) -> list[str]:
         return ["srun"]
 
