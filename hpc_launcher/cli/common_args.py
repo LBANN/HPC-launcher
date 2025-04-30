@@ -200,6 +200,12 @@ def setup_arguments(parser: argparse.ArgumentParser):
     group = parser.add_argument_group("Script", "Batch scheduler script parameters")
 
     group.add_argument(
+        "--launch-dir-name",
+        default=None,
+        help="Use a custome name for the launch directory",
+    )
+
+    group.add_argument(
         "--run-from-launch-dir",
         action="store_true",
         default=False,
@@ -303,6 +309,10 @@ def validate_arguments(args: argparse.Namespace):
     if args.work_dir and args.run_from_launch_dir:
         raise ValueError(
             "The --work-dir and --run-from-launch-dir flags are mutually " "exclusive"
+        )
+    if args.launch_dir_name and args.no_launch_dir:
+        raise ValueError(
+            "The --launch-dir-name and --no-launch-dir flags are mutually " "exclusive"
         )
 
 

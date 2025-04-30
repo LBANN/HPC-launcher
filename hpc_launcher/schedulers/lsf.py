@@ -27,96 +27,59 @@ from hpc_launcher.schedulers import parse_env_list
 @dataclass
 class LSFScheduler(Scheduler):
 
-    def select_interactive_or_batch(
-        self,
-        tmp: list[str],
-        header: StringIO,
-        cmd_args: list[str],
-        blocking: bool = True,
-    ) -> None:
-        if blocking:
-            cmd_args += tmp
-        else:
-            header.write(f'#BSUB {" ".join(tmp)}\n')
-        return
-
-    def build_command_string_and_batch_script(
+    def build_scheduler_specific_arguments(
         self, system: "System", blocking: bool = True
-    ) -> (str, list[str], list[str]):
-
-        env_vars = system.environment_variables()
-        passthrough_env_vars = system.passthrough_environment_variables()
-        # Enable the system to apply some customization to the scheduler instance
-        system.customize_scheduler(self)
-
-        header = StringIO()
-        header.write("#!/bin/sh\n")
-        cmd_args = []
-        parallel_run_args = []
-
-        if blocking and os.getenv("LSB_HOSTS"):
-            header.write(
-                "\n# WARNING this script is constructed to run inside of a bsub -Is\n\n"
-            )
-
+    ):
         # Number of Nodes
-        parallel_run_args += [f"--nrs={self.nodes}"]
-        tmp = f"-nnodes {self.nodes}"
-        cmd_args += [tmp]
-        if not blocking:
-            header.write(f"#BSUB -nnodes {self.nodes}\n")
+        # parallel_run_args += [f"--nrs={self.nodes}"]
+        self.run_only_args["--nrs"] = f"{self.nodes}"
+        self.common_launch_args[f"-nnodes {self.nodes}"] = None
+        # tmp = f"-nnodes {self.nodes}"
+        # cmd_args += [tmp]
+        # if not blocking:
+        #     header.write(f"#BSUB -nnodes {self.nodes}\n")
 
-        cmd_args += ["--shared-launch"]
+        # cmd_args += ["--shared-launch"]
+        self.common_launch_args["--shared-launch"]
 
         # jsrun options
-        parallel_run_args += ["--rs_per_host", "1"]
-        parallel_run_args += [f"--tasks_per_rs={self.procs_per_node}"]
-        parallel_run_args += ["--launch_distribution", "packed"]
-        parallel_run_args += ["--cpu_per_rs", "ALL_CPUS"]
-        parallel_run_args += ["--gpu_per_rs", "ALL_GPUS"]
+        self.run_only_args["--rs_per_host"] = "1"
+        self.run_only_args["--tasks_per_rs"] = f"{self.procs_per_node}"
+        self.run_only_args["--launch_distribution"] = "packed"
+        self.run_only_args["--cpu_per_rs"] = "ALL_CPUS"
+        self.run_only_args["--gpu_per_rs"] = "ALL_GPUS"
 
         if self.out_log_file and not blocking:
-            header.write(f"#BSUB -o {self.out_log_file}\n")
+            self.submit_only_args[f"-o {self.out_log_file}"] = None
         if self.err_log_file and not blocking:
-            header.write(f"#BSUB -e {self.err_log_file}\n")
+            self.submit_only_args[f"-e {self.err_log_file}"] = None
 
         # Configure header with LSF job options
         if self.time_limit:
             minutes = int(round(max(self.time_limit, 0)))
             hours, minutes = divmod(minutes, 60)
-            header.write(f"#BSUB -W {hours}:{minutes:02}\n")
+            self.submit_only_args[f"#BSUB -W {hours}:{minutes:02}\n"] = None
         if self.job_name:
-            tmp = ["-J", f"{self.job_name}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args[f"-J {self.job_name}"]
         if self.queue:
-            tmp = ["-q", f"{self.queue}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args[f"-q {self.queue}"]
         if self.account:
-            tmp = ["-G", f"{self.account}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args[f"-G {self.account}"]
         if self.reservation:
-            header.write(f"#BSUB -U {self.reservation}\n")
+            self.submit_only_args[f"-U {self.reservation}"]
 
         if self.work_dir:
-            cmd_args += [f"--chdir={self.work_dir}"]
-            header.write(f"#BSUB -cwd {self.work_dir}\n")
-
-        if self.launcher_flags:
-            for flag in self.launcher_flags:
-                # Append these to the actual parallel run command
-                parallel_run_args.append(flag)
-
-        for e in env_vars:
-            header.write(parse_env_list(*e))
-
-        for k, v in passthrough_env_vars:
-            if not blocking:
-                cmd_args += [f" --env={k}={v}"]
+            if blocking:
+                # Use on the command line
+                self.submit_only_args["--chdir"] = f"{self.work_dir}"
             else:
-                header += f"export {k}={v}\n"
+                # Add to the batch script #BSUB
+                self.submit_only_args["-cwd"] = f"{self.work_dir}"
 
-        return (header.getvalue(), cmd_args, parallel_run_args)
+        return
 
+    def batch_script_prefix(self) -> str:
+        return "#BSUB"
 
     def blocking_launch_command(self) -> list[str]:
         if os.getenv("LSB_HOSTS"):

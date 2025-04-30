@@ -103,7 +103,7 @@ class Scheduler:
         return None
 
     def build_scheduler_specific_arguments(
-        self, blocking: bool = True
+        self, system: "System", blocking: bool = True
     ):
         return NotImplementedError
 
@@ -129,8 +129,13 @@ class Scheduler:
         header.write("#!/bin/sh\n")
         cmd_args = []
 
-        self.build_scheduler_specific_arguments(blocking)
-        
+        if blocking and this == LSFScheduler and  os.getenv("LSB_HOSTS"):
+            header.write(
+                "\n# WARNING this script is constructed to run inside of a bsub -Is\n\n"
+            )
+
+        self.build_scheduler_specific_arguments(system, blocking)
+
         if self.launcher_flags:
             for flag in self.launcher_flags:
                 # These flag should only be on the launcher commands not the batch commands
@@ -168,21 +173,22 @@ class Scheduler:
                     print(f'BVE I have found {k} in run {self.submit_only_args}={tmp}')
                     self.submit_only_args[k] = v
                 else:
-                    print(f'BVE adding unqiue override found {k} in run {self.run_args}')
+                    print(f'BVE adding unqiue override found {k} in run {self.run_only_args}')
                     self.common_launch_args[k] = v
-                    
+
         if not blocking: # Only add batch script header items on non-blocking calls
             # for k,v in self.batch_script_header.items():
+            prefix = self.batch_script_prefix()
             for k,v in self.submit_only_args.items():
                 if not v:
-                    header.write(f"# FLUX: {k}\n")
+                    header.write(f"{prefix} {k}\n")
                 else:
-                    header.write(f"# FLUX: {k}={v}\n")
+                    header.write(f"{prefix} {k}={v}\n")
             for k,v in self.common_launch_args.items():
                 if not v:
-                    header.write(f"# FLUX: {k}\n")
+                    header.write(f"{prefix} {k}\n")
                 else:
-                    header.write(f"# FLUX: {k}={v}\n")
+                    header.write(f"{prefix} {k}={v}\n")
 
         for e in env_vars:
             header.write(parse_env_list(*e))
@@ -194,7 +200,6 @@ class Scheduler:
                 header += f"export {k}={v}\n"
 
         return (header.getvalue(), cmd_args)
-        # return ("", [])
 
     def batch_script_prefix(self) -> str:
         """
@@ -420,6 +425,7 @@ class Scheduler:
         command: str,
         folder_prefix: str = "launch",
         no_launch_dir: bool = False,
+        launch_dir_name: Optional[str] = None,
     ) -> (str, str):
         """
         Create a folder name for the launcher based on the command.
@@ -432,13 +438,16 @@ class Scheduler:
         command_as_folder_name = (
             os.path.basename(command).replace(" ", "_").replace(";", "-")
         )
-        # Create a folder for the output and error logs
-        # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
-        if no_launch_dir:
-            folder_name = os.getcwd()
+        if launch_dir_name:
+            return (command_as_folder_name, launch_dir_name)
         else:
-            folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
-        return (command_as_folder_name, folder_name)
+            # Create a folder for the output and error logs
+            # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
+            if no_launch_dir:
+                folder_name = os.getcwd()
+            else:
+                folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
+            return (command_as_folder_name, folder_name)
 
     def create_launch_folder(
         self,
