@@ -63,8 +63,6 @@ class Scheduler:
     account: Optional[str] = None
     # The reservation to use for the scheduler
     reservation: Optional[str] = None
-    # Additional launcher flags
-    launcher_flags: Optional[list[str]] = None
     # Hijack preload commands into a scheduler
     ld_preloads: Optional[list[str]] = None
     # Capture the original command so that it can be added to the launch script
@@ -131,24 +129,6 @@ class Scheduler:
         cmd_args = []
 
         self.build_scheduler_specific_arguments(system, blocking)
-
-        if self.launcher_flags:
-            for flag in self.launcher_flags:
-                # These flag should only be on the launcher commands not the batch commands
-                # cmd_args += [flag]
-                # If an = exists, split on the last only
-                k = flag.rsplit("=", 1)
-                print(f'BVE I have a flag {flag}')
-                if len(k) == 1:
-                    self.common_launch_args[k[0]] = None
-                    # self.run_launch_args[k[0]] = None
-                elif len(k) == 2:
-                    print(f'BVE I have {k[0]}, {k[1]} from {flag}')
-                    self.common_launch_args[k[0]] = k[1]
-                    # self.run_launch_args[k[0]] = k[1]
-                else:
-                    logger.error(f"Unknown launcher flag {flag}")
-                    exit(1)
 
         print(f'BVE I have override args {self.override_launch_args}')
         if self.override_launch_args:
