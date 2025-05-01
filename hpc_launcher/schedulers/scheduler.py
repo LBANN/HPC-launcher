@@ -121,14 +121,15 @@ class Scheduler:
         """
         env_vars = system.environment_variables()
         passthrough_env_vars = system.passthrough_environment_variables()
-        # Enable the system to apply some customization to the scheduler instance
-        system.customize_scheduler(self)
 
         header = StringIO()
         header.write("#!/bin/sh\n")
         cmd_args = []
 
         self.build_scheduler_specific_arguments(system, blocking)
+
+        # Enable the system to apply some customization to the scheduler instance
+        system.customize_scheduler(self)
 
         print(f'BVE I have override args {self.override_launch_args}')
         if self.override_launch_args:

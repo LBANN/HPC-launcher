@@ -41,14 +41,14 @@ class FluxScheduler(Scheduler):
         if self.err_log_file and not blocking:
             self.submit_only_args[f"--error"] = f"{self.err_log_file}"
 
-        # Unbuffered output
-        self.common_launch_args["-u"] = None
-
         # Number of Nodes
         self.common_launch_args[f"-N{self.nodes}"] = None
 
         # Total number of Tasks / Processes
         self.common_launch_args[f"-n{self.nodes * self.procs_per_node}"] = None
+
+        # Unbuffered output
+        self.common_launch_args["-u"] = None
 
         # Set the Number of GPUs per task
         # There is a difference in option names between tasks and allocations
