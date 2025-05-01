@@ -18,6 +18,7 @@ from io import StringIO
 import os
 import sys
 import time
+import tempfile
 import subprocess
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
 from hpc_launcher.schedulers import parse_env_list
@@ -128,11 +129,6 @@ class Scheduler:
         header = StringIO()
         header.write("#!/bin/sh\n")
         cmd_args = []
-
-        if blocking and this == LSFScheduler and  os.getenv("LSB_HOSTS"):
-            header.write(
-                "\n# WARNING this script is constructed to run inside of a bsub -Is\n\n"
-            )
 
         self.build_scheduler_specific_arguments(system, blocking)
 
@@ -250,12 +246,13 @@ class Scheduler:
                     cmd_args += [f"{k}={v}"]
             return self.nonblocking_launch_command() + cmd_args
 
-        # For interactive jobs add the run args
-        for k,v in self.run_only_args.items():
-            if not v:
-                cmd_args += [k]
-            else:
-                cmd_args += [f"{k}={v}"]
+        # For interactive jobs add the run args (if the scheduler permits it)
+        if self.enable_run_args_on_launch_command():
+            for k,v in self.run_only_args.items():
+                if not v:
+                    cmd_args += [k]
+                else:
+                    cmd_args += [f"{k}={v}"]
         return self.blocking_launch_command() + cmd_args
 
     def export_hostlist(self) -> str:
@@ -265,10 +262,28 @@ class Scheduler:
         """
         raise NotImplementedError
 
-    def batch_script_run_command(self) -> str:
+    def require_parallel_internal_run_command(self, blocking: bool) -> bool:
         """
-        Returns scheduler specific command for use in a batch submitted script
-        :return: scheduler specific command for use in a batch submitted script
+        Returns scheduler specific command for use in a batch or interactive submitted script
+        :return: bool indicating if a special run command is required
+        """
+        if not blocking:
+            return True
+        else:
+            return False
+
+    def enable_run_args_on_launch_command(self) -> bool:
+        """
+        Allow scheduler to explicitly enable or disable appending the runtime
+        arguments to the launch command.
+        :return: bool indicating if run arguments are appended to launch command
+        """
+        return True
+
+    def internal_script_run_command(self) -> str:
+        """
+        Returns scheduler specific command for use in a batch or interactive submitted script
+        :return: string scheduler specific command for use in a batch or interactive submitted script
         """
         raise NotImplementedError
 
@@ -299,12 +314,14 @@ class Scheduler:
             system, blocking
         )
         # For batch jobs add any run args to the internal command
+        # if self.require_parallel_internal_run_command(blocking):
         if not blocking:
             for k,v in self.common_launch_args.items():
                 if not v:
                     cmd_args += [k]
                 else:
                     cmd_args += [f"{k}={v}"]
+        if self.require_parallel_internal_run_command(blocking):
             for k,v in self.run_only_args.items():
                 if not v:
                     cmd_args += [k]
@@ -313,8 +330,6 @@ class Scheduler:
 
         # Configure header and command line with scheduler job options
         script += header_lines
-        # for k,v in self.batch_script_header.items():
-        #     script += f"{k}={v}\n"
         script += "\n"
         callee_directory = os.path.dirname(launch_dir)
         logger.info(f"Callee directory: {callee_directory}")
@@ -325,8 +340,8 @@ class Scheduler:
             script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
             script += "fi\n\n"
 
-        if not blocking:
-            script += self.batch_script_run_command()
+        if self.require_parallel_internal_run_command(blocking):
+            script += self.internal_script_run_command()
             script += " ".join(cmd_args)
             script += " "
 
@@ -438,9 +453,14 @@ class Scheduler:
         command_as_folder_name = (
             os.path.basename(command).replace(" ", "_").replace(";", "-")
         )
+
         if launch_dir_name:
             return (command_as_folder_name, launch_dir_name)
         else:
+
+            # folder_name = tempfile.mkdtemp(suffix=None, prefix=f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}' + "_", dir=None)
+            # print(f"BVE I would make a temp folder {folder_name}")
+
             # Create a folder for the output and error logs
             # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
             if no_launch_dir:

@@ -104,7 +104,7 @@ class FluxScheduler(Scheduler):
     def export_hostlist(self) -> str:
         return "export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n"
 
-    def batch_script_run_command(self) -> str:
+    def internal_script_run_command(self) -> str:
         return "flux run "
 
     def get_job_id(self, output: str) -> Optional[str]:

@@ -31,18 +31,12 @@ class LSFScheduler(Scheduler):
         self, system: "System", blocking: bool = True
     ):
         # Number of Nodes
-        # parallel_run_args += [f"--nrs={self.nodes}"]
         self.run_only_args["--nrs"] = f"{self.nodes}"
         self.common_launch_args[f"-nnodes {self.nodes}"] = None
-        # tmp = f"-nnodes {self.nodes}"
-        # cmd_args += [tmp]
-        # if not blocking:
-        #     header.write(f"#BSUB -nnodes {self.nodes}\n")
 
-        # cmd_args += ["--shared-launch"]
-        self.common_launch_args["--shared-launch"]
+        self.common_launch_args["--shared-launch"] = None
 
-        # jsrun options
+        # jsrun options (do we need to guard this with something like if os.getenv("LSB_HOSTS"):
         self.run_only_args["--rs_per_host"] = "1"
         self.run_only_args["--tasks_per_rs"] = f"{self.procs_per_node}"
         self.run_only_args["--launch_distribution"] = "packed"
@@ -58,7 +52,7 @@ class LSFScheduler(Scheduler):
         if self.time_limit:
             minutes = int(round(max(self.time_limit, 0)))
             hours, minutes = divmod(minutes, 60)
-            self.submit_only_args[f"#BSUB -W {hours}:{minutes:02}\n"] = None
+            self.submit_only_args[f"-W {hours}:{minutes:02}\n"] = None
         if self.job_name:
             self.common_launch_args[f"-J {self.job_name}"]
         if self.queue:
@@ -90,24 +84,22 @@ class LSFScheduler(Scheduler):
     def nonblocking_launch_command(self) -> list[str]:
         return ["bsub"]
 
-    # def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
-    #     # Launch command only use the cmd_args to construct the shell script to be launched
-    #     (header_lines, cmd_args, parallel_run_args) = (
-    #         self.build_command_string_and_batch_script(system, blocking)
-    #     )
-
-    #     if not blocking:
-    #         return ["bsub"] + cmd_args
-    #     else:
-    #         if os.getenv("LSB_HOSTS"):
-    #             return ["jsrun"] + parallel_run_args
-    #         else:
-    #             return ["bsub", "-Is"] + cmd_args
-
     def export_hostlist(self) -> str:
         return "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n"
 
-    def batch_script_run_command(self) -> str:
+    def enable_run_args_on_launch_command(self) -> bool:
+        if os.getenv("LSB_HOSTS"):
+            return True
+        else:
+            return False
+
+    def require_parallel_internal_run_command(self, blocking: bool) -> bool:
+        if not blocking or (blocking and not os.getenv("LSB_HOSTS")):
+            return True
+        else:
+            return False
+
+    def internal_script_run_command(self) -> str:
         return "jsrun "
 
     def get_job_id(self, output: str) -> Optional[str]:

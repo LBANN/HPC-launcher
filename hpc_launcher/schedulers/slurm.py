@@ -105,7 +105,7 @@ class SlurmScheduler(Scheduler):
     def export_hostlist(self) -> str:
         return "export HPC_LAUNCHER_HOSTLIST=${SLURM_JOB_NODELIST}\n"
 
-    def batch_script_run_command(self) -> str:
+    def internal_script_run_command(self) -> str:
         return "srun -u "
 
     def get_job_id(self, output: str) -> Optional[str]:

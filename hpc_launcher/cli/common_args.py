@@ -199,6 +199,9 @@ def setup_arguments(parser: argparse.ArgumentParser):
 
     group = parser.add_argument_group("Script", "Batch scheduler script parameters")
 
+    # different behavior for interactive vs batch jobs
+    # Add an argument to pick the run directory: tmp, none, self labeled, auto labeled
+
     group.add_argument(
         "--launch-dir-name",
         default=None,
