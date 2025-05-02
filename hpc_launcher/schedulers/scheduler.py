@@ -81,26 +81,6 @@ class Scheduler:
     # CLI flags for override
     override_launch_args: Optional[dict] = None
 
-    def select_interactive_or_batch(
-        self,
-        tmp: list[str],
-        header: StringIO,
-        cmd_args: list[str],
-        blocking: bool = True,
-    ) -> type(None):
-        """
-        Given a specific string "tmp" write it either in a command line argument
-        or a batch shell argument.
-
-        :param tmp: String to package up
-        :param header: StringIO that will be prepended to the final script
-        :param cmd_args: Mutable list of strings that will be added to the command line
-        :param blocking: Flag to indicate if the temporary string is being wrapped for
-                         a batch or interactive command.
-        :return: None
-        """
-        return None
-
     def build_scheduler_specific_arguments(
         self, system: "System", blocking: bool = True
     ):
@@ -134,6 +114,7 @@ class Scheduler:
         print(f'BVE I have override args {self.override_launch_args}')
         if self.override_launch_args:
             for k,v in self.override_launch_args.items():
+                arg_overridden = False
                 print(f'BVE I have found {k}={v}')
                 # if k in self.batch_script_header:
                 #     print(f'BVE I have found {k} in header {self.batch_script_header}')
@@ -141,15 +122,21 @@ class Scheduler:
                     tmp = self.common_launch_args[k]
                     print(f'BVE I have found {k} in common_launch_args {self.common_launch_args}={tmp}')
                     self.common_launch_args[k] = v
-                elif k in self.run_only_args:
+                    arg_overridden = True
+
+                if k in self.run_only_args:
                     tmp = self.run_only_args[k]
                     print(f'BVE I have found {k} in run {self.run_only_args}={tmp}')
                     self.run_only_args[k] = v
-                elif k in self.submit_only_args:
+                    arg_overridden = True
+
+                if k in self.submit_only_args:
                     tmp = self.submit_only_args[k]
                     print(f'BVE I have found {k} in run {self.submit_only_args}={tmp}')
                     self.submit_only_args[k] = v
-                else:
+                    arg_overridden = True
+
+                if not arg_overridden:
                     print(f'BVE adding unqiue override found {k} in run {self.run_only_args}')
                     self.common_launch_args[k] = v
 
@@ -219,12 +206,12 @@ class Scheduler:
                 cmd_args += [k]
             else:
                 cmd_args += [f"{k}={v}"]
+        for k,v in self.submit_only_args.items():
+            if not v:
+                cmd_args += [k]
+            else:
+                cmd_args += [f"{k}={v}"]
         if not blocking:
-            for k,v in self.submit_only_args.items():
-                if not v:
-                    cmd_args += [k]
-                else:
-                    cmd_args += [f"{k}={v}"]
             return self.nonblocking_launch_command() + cmd_args
 
         # For interactive jobs add the run args (if the scheduler permits it)
@@ -294,14 +281,14 @@ class Scheduler:
         (header_lines, cmd_args) = self.build_command_string_and_batch_script(
             system, blocking
         )
-        # For batch jobs add any run args to the internal command
-        # if self.require_parallel_internal_run_command(blocking):
+        # For batch jobs add any common args to the internal command
         if not blocking:
             for k,v in self.common_launch_args.items():
                 if not v:
                     cmd_args += [k]
                 else:
                     cmd_args += [f"{k}={v}"]
+        # For jobs that require a parallel internal command add any run args
         if self.require_parallel_internal_run_command(blocking):
             for k,v in self.run_only_args.items():
                 if not v:

@@ -54,13 +54,13 @@ class LSFScheduler(Scheduler):
             hours, minutes = divmod(minutes, 60)
             self.submit_only_args[f"-W {hours}:{minutes:02}\n"] = None
         if self.job_name:
-            self.common_launch_args[f"-J {self.job_name}"]
+            self.common_launch_args[f"-J {self.job_name}"] = None
         if self.queue:
-            self.common_launch_args[f"-q {self.queue}"]
+            self.common_launch_args[f"-q {self.queue}"] = None
         if self.account:
-            self.common_launch_args[f"-G {self.account}"]
+            self.common_launch_args[f"-G {self.account}"] = None
         if self.reservation:
-            self.submit_only_args[f"-U {self.reservation}"]
+            self.submit_only_args[f"-U {self.reservation}"] = None
 
         if self.work_dir:
             if blocking:
