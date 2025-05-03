@@ -12,9 +12,6 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 import pytest
-#import argparse
-#from hpc_launcher.systems.system import System, SystemParams
-#from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.systems.configure import autodetect
 from hpc_launcher.cli import common_args, launch_helpers
 from unittest.mock import MagicMock, patch
