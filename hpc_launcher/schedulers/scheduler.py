@@ -111,37 +111,41 @@ class Scheduler:
         # Enable the system to apply some customization to the scheduler instance
         system.customize_scheduler(self)
 
-        print(f'BVE I have override args {self.override_launch_args}')
         if self.override_launch_args:
             for k,v in self.override_launch_args.items():
                 arg_overridden = False
-                print(f'BVE I have found {k}={v}')
-                # if k in self.batch_script_header:
-                #     print(f'BVE I have found {k} in header {self.batch_script_header}')
+                remove_arg = False
+                if "~" in k:
+                    k = k.replace("~", "")
+                    remove_arg = True
                 if k in self.common_launch_args:
-                    tmp = self.common_launch_args[k]
-                    print(f'BVE I have found {k} in common_launch_args {self.common_launch_args}={tmp}')
-                    self.common_launch_args[k] = v
-                    arg_overridden = True
+                    if remove_arg:
+                        self.common_launch_args.pop(k, None)
+                    else:
+                        tmp = self.common_launch_args[k]
+                        self.common_launch_args[k] = v
+                        arg_overridden = True
 
                 if k in self.run_only_args:
-                    tmp = self.run_only_args[k]
-                    print(f'BVE I have found {k} in run {self.run_only_args}={tmp}')
-                    self.run_only_args[k] = v
-                    arg_overridden = True
+                    if remove_arg:
+                        self.run_only_args.pop(k, None)
+                    else:
+                        tmp = self.run_only_args[k]
+                        self.run_only_args[k] = v
+                        arg_overridden = True
 
                 if k in self.submit_only_args:
-                    tmp = self.submit_only_args[k]
-                    print(f'BVE I have found {k} in run {self.submit_only_args}={tmp}')
-                    self.submit_only_args[k] = v
-                    arg_overridden = True
+                    if remove_arg:
+                        self.submit_only_args.pop(k, None)
+                    else:
+                        tmp = self.submit_only_args[k]
+                        self.submit_only_args[k] = v
+                        arg_overridden = True
 
-                if not arg_overridden:
-                    print(f'BVE adding unqiue override found {k} in run {self.run_only_args}')
+                if not arg_overridden and not remove_arg:
                     self.common_launch_args[k] = v
 
         if not blocking: # Only add batch script header items on non-blocking calls
-            # for k,v in self.batch_script_header.items():
             prefix = self.batch_script_prefix()
             for k,v in self.submit_only_args.items():
                 if not v:

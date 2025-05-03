@@ -132,7 +132,7 @@ def setup_arguments(parser: argparse.ArgumentParser):
         dest="override_args",
         nargs='+',
         action=ParseKVAction,
-        help="Specifies scheduler and launch arguments (note it will override any known key): --xargs k1=v1 k2=v2 \n or --xargs k1=v1 --xargs k2=v2 \n Also note that a double dash -- is need if this is the last argument",
+        help="Specifies scheduler and launch arguments (note it will override any known key): --xargs k1=v1 k2=v2 \n or --xargs k1=v1 --xargs k2=v2 \n Also note that a double dash -- is need if this is the last argument. \n Arguments with a leading tilda ~ will be removed if found",
         metavar="KEY1=VALUE1",
     )
 
@@ -322,8 +322,6 @@ def validate_arguments(args: argparse.Namespace):
 # See if the system can be autodetected and then process some special arguments
 # that can autoselect the number of ranks / GPUs
 def process_arguments(args: argparse.Namespace, logger: logging.Logger) -> System:
-    print(f'BVE here are the contents of the override args {args.override_args}')
-    print(f'BVE here are the contents of the system params {args.system_params}')
     validate_arguments(args)
 
     # Set system and launch configuration based on arguments
