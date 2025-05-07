@@ -70,7 +70,6 @@ class Scheduler:
 
     # Flags to be used for a batch scheduling call
     # written to the header of the batch script
-    # batch_script_header = OrderedDict()
     # Command line flags given to a batch or interactive submit command
     submit_only_args = OrderedDict()
     # Commands given to active run command
@@ -430,8 +429,6 @@ class Scheduler:
             return (command_as_folder_name, launch_dir_name)
         else:
 
-            # folder_name = tempfile.mkdtemp(suffix=None, prefix=f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}' + "_", dir=None)
-            # print(f"BVE I would make a temp folder {folder_name}")
 
             # Create a folder for the output and error logs
             # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs

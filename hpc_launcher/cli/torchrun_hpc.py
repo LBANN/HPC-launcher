@@ -132,7 +132,6 @@ def main():
             copied_trampoline_file,
         )
 
-    print(f"BVE I am here with {args.command} and folder name {folder_name}")
     command = sys.executable
     launch_args = [
         "-u",
