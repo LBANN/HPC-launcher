@@ -481,9 +481,18 @@ class Scheduler:
         if self.out_log_file is None:
             self.out_log_file = os.path.abspath(os.path.join(folder_name, "out.log"))
             should_make_folder = True
+        else:
+            if not os.path.isabs(self.out_log_file):
+                log_file = os.path.abspath(os.path.join(folder_name, self.out_log_file))
+                self.out_log_file = log_file
+
         if self.err_log_file is None:
             self.err_log_file = os.path.abspath(os.path.join(folder_name, "err.log"))
             should_make_folder = True
+        else:
+            if not os.path.isabs(self.err_log_file):
+                log_file = os.path.abspath(os.path.join(folder_name, self.err_log_file))
+                self.err_log_file = log_file
 
         stub_file = ""
         if should_make_folder:
@@ -560,8 +569,8 @@ class Scheduler:
         logger.info(f'Launching {" ".join(full_cmdline)}')
 
         if blocking:  # Launch job and trace outputs live
-            with open(os.path.join(folder_name, "out.log"), "wb") as out_file:
-                with open(os.path.join(folder_name, "err.log"), "wb") as err_file:
+            with open(self.out_log_file, "wb") as out_file:
+                with open(self.err_log_file, "wb") as err_file:
 
                     run_process_with_live_output(
                         full_cmdline,
