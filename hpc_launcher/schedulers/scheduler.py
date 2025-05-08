@@ -18,8 +18,10 @@ from io import StringIO
 import os
 import sys
 import time
+import tempfile
 import subprocess
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
+from hpc_launcher.schedulers import parse_env_list
 
 import logging
 
@@ -61,43 +63,28 @@ class Scheduler:
     account: Optional[str] = None
     # The reservation to use for the scheduler
     reservation: Optional[str] = None
-    # Additional launcher flags
-    launcher_flags: Optional[list[str]] = None
     # Hijack preload commands into a scheduler
     ld_preloads: Optional[list[str]] = None
     # Capture the original command so that it can be added to the launch script
     command_line: Optional[list[str]] = None
 
-    # Flags to be used for a batch scheduling call
-    # written to the header of the batch script
-    batch_script_header = OrderedDict()
-    # Command line flags given to a batch submit command
-    batch_submit_args = OrderedDict()
+    # Command line flags given to a batch or interactive submit command
+    submit_only_args = OrderedDict()
     # Commands given to active run command
-    run_launch_args = OrderedDict()
+    run_only_args = OrderedDict()
+    # Flags given to both submit and run commands
+    common_launch_args = OrderedDict()
 
-    def select_interactive_or_batch(
-        self,
-        tmp: list[str],
-        header: StringIO,
-        cmd_args: list[str],
-        blocking: bool = True,
-    ) -> type(None):
-        """
-        Given a specific string "tmp" write it either in a command line argument
-        or a batch shell argument.
+    # CLI flags for override
+    override_launch_args: Optional[dict] = None
 
-        :param tmp: String to package up
-        :param header: StringIO that will be prepended to the final script
-        :param cmd_args: Mutable list of strings that will be added to the command line
-        :param blocking: Flag to indicate if the temporary string is being wrapped for
-                         a batch or interactive command.
-        :return: None
-        """
-        return None
+    def build_scheduler_specific_arguments(
+        self, system: "System", blocking: bool = True
+    ):
+        return NotImplementedError
 
     def build_command_string_and_batch_script(
-        self, system: "System"
+        self, system: "System", blocking: bool = True
     ) -> (str, list[str]):
         """
         Returns the strings used for a launch command as well as a batch script
@@ -106,9 +93,108 @@ class Scheduler:
         This script usually performs node/resource allocation and manages I/O.
 
         :param system: The system to use.
+        :param blocking:
         :return: A tuple of (shell script as a string, list of command-line arguments).
         """
-        return ("", [])
+        env_vars = system.environment_variables()
+        passthrough_env_vars = system.passthrough_environment_variables()
+
+        header = StringIO()
+        header.write("#!/bin/sh\n")
+        cmd_args = []
+
+        self.build_scheduler_specific_arguments(system, blocking)
+
+        # Enable the system to apply some customization to the scheduler instance
+        system.customize_scheduler(self)
+
+        if self.override_launch_args:
+            for k,v in self.override_launch_args.items():
+                arg_overridden = False
+                remove_arg = False
+                if "~" in k:
+                    k = k.replace("~", "")
+                    remove_arg = True
+                if k in self.common_launch_args:
+                    if remove_arg:
+                        self.common_launch_args.pop(k, None)
+                    else:
+                        tmp = self.common_launch_args[k]
+                        self.common_launch_args[k] = v
+                        arg_overridden = True
+
+                if k in self.run_only_args:
+                    if remove_arg:
+                        self.run_only_args.pop(k, None)
+                    else:
+                        tmp = self.run_only_args[k]
+                        self.run_only_args[k] = v
+                        arg_overridden = True
+
+                if k in self.submit_only_args:
+                    if remove_arg:
+                        self.submit_only_args.pop(k, None)
+                    else:
+                        tmp = self.submit_only_args[k]
+                        self.submit_only_args[k] = v
+                        arg_overridden = True
+
+                if not arg_overridden and not remove_arg:
+                    self.common_launch_args[k] = v
+
+        if not blocking: # Only add batch script header items on non-blocking calls
+            prefix = self.batch_script_prefix()
+            for k,v in self.submit_only_args.items():
+                if not v:
+                    header.write(f"{prefix} {k}\n")
+                else:
+                    header.write(f"{prefix} {k}={v}\n")
+            for k,v in self.common_launch_args.items():
+                if not v:
+                    header.write(f"{prefix} {k}\n")
+                else:
+                    header.write(f"{prefix} {k}={v}\n")
+
+        for e in env_vars:
+            header.write(parse_env_list(*e))
+
+        if len(passthrough_env_vars):
+            if blocking:
+                self.cli_passthrough_env_arg(passthrough_env_vars)
+            else:
+                for k, v in passthrough_env_vars:
+                    header.write(f"export {k}={v}\n")
+
+        return (header.getvalue(), cmd_args)
+
+    def batch_script_prefix(self) -> str:
+        """
+        Returns scheduler specific prefix for batch scripts
+        :return: scheduler specific prefix for batch scripts
+        """
+        raise NotImplementedError
+
+    def blocking_launch_command(self) -> list[str]:
+        """
+        Returns scheduler specific command for interactive (blocking) jobs
+        :return: scheduler specific command for interactive (blocking) jobs
+        """
+        raise NotImplementedError
+
+    def nonblocking_launch_command(self) -> list[str]:
+        """
+        Returns scheduler specific command for non-blocking batch jobs
+        :return: scheduler specific command for non-blocking batch jobs
+        """
+        raise NotImplementedError
+
+    def cli_passthrough_env_arg(self, env_list: list[tuple[str,str]]) -> None:
+        """
+        How should environment variables be passed to launched command.
+        Append them the to the submit_only_args
+        :return: None
+        """
+        raise NotImplementedError
 
     def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
         """
@@ -119,6 +205,63 @@ class Scheduler:
                          command to finish (True), or launch a batch
                          script that immediately returns (False).
         :return: The command prefix as a list of strings (one per argument).
+        """
+        (header_lines, cmd_args) = self.build_command_string_and_batch_script(
+            system, blocking
+        )
+
+        # Both commands get the submit args
+        for k,v in self.common_launch_args.items():
+            if not v:
+                cmd_args += [k]
+            else:
+                cmd_args += [f"{k}={v}"]
+        for k,v in self.submit_only_args.items():
+            if not v:
+                cmd_args += [k]
+            else:
+                cmd_args += [f"{k}={v}"]
+        if not blocking:
+            return self.nonblocking_launch_command() + cmd_args
+
+        # For interactive jobs add the run args (if the scheduler permits it)
+        if self.enable_run_args_on_launch_command():
+            for k,v in self.run_only_args.items():
+                if not v:
+                    cmd_args += [k]
+                else:
+                    cmd_args += [f"{k}={v}"]
+        return self.blocking_launch_command() + cmd_args
+
+    def export_hostlist(self) -> str:
+        """
+        Returns a shell cmmand to set the hostlist of the job to an environment variable.
+        :return: string that exports hostlist to environment variable
+        """
+        raise NotImplementedError
+
+    def require_parallel_internal_run_command(self, blocking: bool) -> bool:
+        """
+        Returns scheduler specific command for use in a batch or interactive submitted script
+        :return: bool indicating if a special run command is required
+        """
+        if not blocking:
+            return True
+        else:
+            return False
+
+    def enable_run_args_on_launch_command(self) -> bool:
+        """
+        Allow scheduler to explicitly enable or disable appending the runtime
+        arguments to the launch command.
+        :return: bool indicating if run arguments are appended to launch command
+        """
+        return True
+
+    def internal_script_run_command(self) -> str:
+        """
+        Returns scheduler specific command for use in a batch or interactive submitted script
+        :return: string scheduler specific command for use in a batch or interactive submitted script
         """
         raise NotImplementedError
 
@@ -143,7 +286,51 @@ class Scheduler:
         :params save_hostlist: Add local scripting to capture the list of hosts the command is launched on
         :return: A shell script as a string.
         """
-        raise NotImplementedError
+        script = ""
+        # Launch command only use the cmd_args to construct the shell script to be launched
+        (header_lines, cmd_args) = self.build_command_string_and_batch_script(
+            system, blocking
+        )
+        # For batch jobs add any common args to the internal command
+        if not blocking:
+            for k,v in self.common_launch_args.items():
+                if not v:
+                    cmd_args += [k]
+                else:
+                    cmd_args += [f"{k}={v}"]
+        # For jobs that require a parallel internal command add any run args
+        if self.require_parallel_internal_run_command(blocking):
+            for k,v in self.run_only_args.items():
+                if not v:
+                    cmd_args += [k]
+                else:
+                    cmd_args += [f"{k}={v}"]
+
+        # Configure header and command line with scheduler job options
+        script += header_lines
+        script += "\n"
+        callee_directory = os.path.dirname(launch_dir)
+        logger.info(f"Callee directory: {callee_directory}")
+        script += f"export PYTHONPATH={callee_directory}:" + "${PYTHONPATH}\n"
+        if save_hostlist:
+            script += self.export_hostlist()
+            script += 'if [ "${RANK}" = "0" ]; then\n'
+            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
+            script += "fi\n\n"
+
+        if self.require_parallel_internal_run_command(blocking):
+            script += self.internal_script_run_command()
+            script += " ".join(cmd_args)
+            script += " "
+
+        script += f"{command}"
+
+        for arg in args:
+            script += f" {arg}"
+
+        script += "\n"
+
+        return script
 
     def internal_script(self, system: "System") -> Optional[str]:
         """
@@ -231,6 +418,7 @@ class Scheduler:
         command: str,
         folder_prefix: str = "launch",
         no_launch_dir: bool = False,
+        launch_dir_name: Optional[str] = None,
     ) -> (str, str):
         """
         Create a folder name for the launcher based on the command.
@@ -243,13 +431,19 @@ class Scheduler:
         command_as_folder_name = (
             os.path.basename(command).replace(" ", "_").replace(";", "-")
         )
-        # Create a folder for the output and error logs
-        # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
-        if no_launch_dir:
-            folder_name = os.getcwd()
+
+        if launch_dir_name:
+            return (command_as_folder_name, launch_dir_name)
         else:
-            folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
-        return (command_as_folder_name, folder_name)
+
+
+            # Create a folder for the output and error logs
+            # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
+            if no_launch_dir:
+                folder_name = os.getcwd()
+            else:
+                folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
+            return (command_as_folder_name, folder_name)
 
     def create_launch_folder(
         self,
@@ -304,6 +498,7 @@ class Scheduler:
         filename: str,
         command: str,
         args: Optional[list[str]] = None,
+        override_launch_args: Optional[dict] = None,
         blocking: bool = True,
         setup_only: bool = False,
         color_stderr: bool = False,
@@ -326,6 +521,8 @@ class Scheduler:
         :params save_hostlist: Add local scripting to capture the list of hosts the command is launched on
         :return: The queued job ID as a string.
         """
+
+        self.override_launch_args = override_launch_args
 
         # If the command is run from a directory
         if run_from_launch_dir:

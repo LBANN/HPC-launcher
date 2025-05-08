@@ -46,7 +46,7 @@ def main():
     scheduler = launch_helpers.select_scheduler(args, logger, system)
 
     _, folder_name = scheduler.create_launch_folder_name(
-        args.command, "launch", args.no_launch_dir
+        args.command, "launch", args.no_launch_dir, args.launch_dir_name
     )
 
     script_file = scheduler.create_launch_folder(
@@ -59,6 +59,7 @@ def main():
         script_file,
         args.command,
         args.args,
+        args.override_args,
         not args.bg,
         args.setup_only,
         args.color_stderr,

@@ -76,10 +76,8 @@ class Sierra(System):
         procs_per_socket = (procs_per_node + 1) // 2
         cores_per_proc = cores_per_socket // procs_per_socket
         if isinstance(scheduler, LSFScheduler):
-            scheduler.launcher_flags = [
-                "--bind=packed:{}".format(cores_per_proc),
-                '--smpiargs="-gpu"',
-            ]
+            scheduler.run_only_args["--bind"] = "packed:{}".format(cores_per_proc)
+            scheduler.run_only_args["--smpiargs"] = '"-gpu"'
         return
 
     @property

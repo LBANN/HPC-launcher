@@ -27,146 +27,87 @@ from hpc_launcher.schedulers import parse_env_list
 @dataclass
 class LSFScheduler(Scheduler):
 
-    def select_interactive_or_batch(
-        self,
-        tmp: list[str],
-        header: StringIO,
-        cmd_args: list[str],
-        blocking: bool = True,
-    ) -> None:
-        if blocking:
-            cmd_args += tmp
-        else:
-            header.write(f'#BSUB {" ".join(tmp)}\n')
-        return
-
-    def build_command_string_and_batch_script(
+    def build_scheduler_specific_arguments(
         self, system: "System", blocking: bool = True
-    ) -> (str, list[str], list[str]):
-
-        env_vars = system.environment_variables()
-        passthrough_env_vars = system.passthrough_environment_variables()
-        # Enable the system to apply some customization to the scheduler instance
-        system.customize_scheduler(self)
-
-        header = StringIO()
-        header.write("#!/bin/sh\n")
-        cmd_args = []
-        parallel_run_args = []
-
-        if blocking and os.getenv("LSB_HOSTS"):
-            header.write(
-                "\n# WARNING this script is constructed to run inside of a bsub -Is\n\n"
-            )
-
+    ):
         # Number of Nodes
-        parallel_run_args += [f"--nrs={self.nodes}"]
-        tmp = f"-nnodes {self.nodes}"
-        cmd_args += [tmp]
-        if not blocking:
-            header.write(f"#BSUB -nnodes {self.nodes}\n")
+        self.run_only_args["--nrs"] = f"{self.nodes}"
+        self.common_launch_args[f"-nnodes {self.nodes}"] = None
 
-        cmd_args += ["--shared-launch"]
+        self.common_launch_args["--shared-launch"] = None
 
-        # jsrun options
-        parallel_run_args += ["--rs_per_host", "1"]
-        parallel_run_args += [f"--tasks_per_rs={self.procs_per_node}"]
-        parallel_run_args += ["--launch_distribution", "packed"]
-        parallel_run_args += ["--cpu_per_rs", "ALL_CPUS"]
-        parallel_run_args += ["--gpu_per_rs", "ALL_GPUS"]
+        # jsrun options (do we need to guard this with something like if os.getenv("LSB_HOSTS"):
+        self.run_only_args["--rs_per_host"] = "1"
+        self.run_only_args["--tasks_per_rs"] = f"{self.procs_per_node}"
+        self.run_only_args["--launch_distribution"] = "packed"
+        self.run_only_args["--cpu_per_rs"] = "ALL_CPUS"
+        self.run_only_args["--gpu_per_rs"] = "ALL_GPUS"
 
         if self.out_log_file and not blocking:
-            header.write(f"#BSUB -o {self.out_log_file}\n")
+            self.submit_only_args[f"-o {self.out_log_file}"] = None
         if self.err_log_file and not blocking:
-            header.write(f"#BSUB -e {self.err_log_file}\n")
+            self.submit_only_args[f"-e {self.err_log_file}"] = None
 
         # Configure header with LSF job options
         if self.time_limit:
             minutes = int(round(max(self.time_limit, 0)))
             hours, minutes = divmod(minutes, 60)
-            header.write(f"#BSUB -W {hours}:{minutes:02}\n")
+            self.submit_only_args[f"-W {hours}:{minutes:02}\n"] = None
         if self.job_name:
-            tmp = ["-J", f"{self.job_name}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args[f"-J {self.job_name}"] = None
         if self.queue:
-            tmp = ["-q", f"{self.queue}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args[f"-q {self.queue}"] = None
         if self.account:
-            tmp = ["-G", f"{self.account}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args[f"-G {self.account}"] = None
         if self.reservation:
-            header.write(f"#BSUB -U {self.reservation}\n")
+            self.submit_only_args[f"-U {self.reservation}"] = None
 
         if self.work_dir:
-            cmd_args += [f"--chdir={self.work_dir}"]
-            header.write(f"#BSUB -cwd {self.work_dir}\n")
-
-        if self.launcher_flags:
-            for flag in self.launcher_flags:
-                # Append these to the actual parallel run command
-                parallel_run_args.append(flag)
-
-        for e in env_vars:
-            header.write(parse_env_list(*e))
-
-        for k, v in passthrough_env_vars:
-            if not blocking:
-                cmd_args += [f" --env={k}={v}"]
+            if blocking:
+                # Use on the command line
+                self.submit_only_args["--chdir"] = f"{self.work_dir}"
             else:
-                header += f"export {k}={v}\n"
+                # Add to the batch script #BSUB
+                self.submit_only_args["-cwd"] = f"{self.work_dir}"
 
-        return (header.getvalue(), cmd_args, parallel_run_args)
+        return
 
-    def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
-        # Launch command only use the cmd_args to construct the shell script to be launched
-        (header_lines, cmd_args, parallel_run_args) = (
-            self.build_command_string_and_batch_script(system, blocking)
-        )
+    def batch_script_prefix(self) -> str:
+        return "#BSUB"
 
-        if not blocking:
-            return ["bsub"] + cmd_args
+    def blocking_launch_command(self) -> list[str]:
+        if os.getenv("LSB_HOSTS"):
+            return ["jsrun"]
         else:
-            if os.getenv("LSB_HOSTS"):
-                return ["jsrun"] + parallel_run_args
-            else:
-                return ["bsub", "-Is"] + cmd_args
+            return ["bsub", "-Is"]
 
-    def launcher_script(
-        self,
-        system: "System",
-        command: str,
-        args: Optional[list[str]] = None,
-        blocking: bool = True,
-        save_hostlist: bool = False,
-        launch_dir: str = "",
-    ) -> str:
+    def nonblocking_launch_command(self) -> list[str]:
+        return ["bsub"]
 
-        script = ""
-        # Launcher script only use the header_lines to construct the shell script to be launched
-        (header_lines, cmd_string, parallel_run_args) = (
-            self.build_command_string_and_batch_script(system, blocking)
-        )
-        script += header_lines
-        script += "\n"
-        if save_hostlist:
-            script += "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n"
-            script += 'if [ "${RANK}" = "0" ]; then\n'
-            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
-            script += "fi\n\n"
+    def cli_passthrough_env_arg(self, passthrough_env_vars) -> None:
+        env_vars = []
+        for k, v in passthrough_env_vars:
+            env_vars += [f"{k}={v}"]
+        self.submit_only_args['--env "ALL, ' + ", ".join(env_vars) + '"'] = None
+        return
 
+    def export_hostlist(self) -> str:
+        return "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n"
+
+    def enable_run_args_on_launch_command(self) -> bool:
+        if os.getenv("LSB_HOSTS"):
+            return True
+        else:
+            return False
+
+    def require_parallel_internal_run_command(self, blocking: bool) -> bool:
         if not blocking or (blocking and not os.getenv("LSB_HOSTS")):
-            script += "jsrun "
-            script += " ".join(parallel_run_args)
-            script += " "
+            return True
+        else:
+            return False
 
-        script += f"{command}"
-
-        for arg in args:
-            script += f" {arg}"
-
-        script += "\n"
-
-        return script
+    def internal_script_run_command(self) -> str:
+        return "jsrun "
 
     def get_job_id(self, output: str) -> Optional[str]:
         raise NotImplementedError

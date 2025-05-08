@@ -33,82 +33,46 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FluxScheduler(Scheduler):
 
-    def select_interactive_or_batch(
-        self,
-        tmp: list[str],
-        header: StringIO,
-        cmd_args: list[str],
-        blocking: bool = True,
-    ) -> None:
-        if blocking:
-            cmd_args += tmp
-        else:
-            header.write(f'# FLUX: {" ".join(tmp)}\n')
-        return
-
-    def build_command_string_and_batch_script(
+    def build_scheduler_specific_arguments(
         self, system: "System", blocking: bool = True
-    ) -> (str, list[str]):
-
-        env_vars = system.environment_variables()
-        passthrough_env_vars = system.passthrough_environment_variables()
-        # Enable the system to apply some customization to the scheduler instance
-        system.customize_scheduler(self)
-
-        header = StringIO()
-        header.write("#!/bin/sh\n")
-        cmd_args = []
+    ):
         if self.out_log_file and not blocking:
-            header.write(f"# FLUX: --output={self.out_log_file}\n")
+            self.submit_only_args[f"--output"] = f"{self.out_log_file}"
         if self.err_log_file and not blocking:
-            header.write(f"# FLUX: --error={self.err_log_file}\n")
-
-        # Unbuffered output
-        tmp = "-u"
-        cmd_args += [tmp]
-        if not blocking:
-            header.write(f"# FLUX: {tmp}\n")
+            self.submit_only_args[f"--error"] = f"{self.err_log_file}"
 
         # Number of Nodes
-        tmp = f"-N{self.nodes}"
-        cmd_args += [tmp]
-        if not blocking:
-            header.write(f"# FLUX: {tmp}\n")
+        self.common_launch_args[f"-N{self.nodes}"] = None
 
         # Total number of Tasks / Processes
-        tmp = f"-n{self.nodes * self.procs_per_node}"
-        cmd_args += [tmp]
-        if not blocking:
-            header.write(f"# FLUX: {tmp}\n")
+        self.common_launch_args[f"-n{self.nodes * self.procs_per_node}"] = None
+
+        # Unbuffered output
+        self.common_launch_args["-u"] = None
 
         # Set the Number of GPUs per task
         # There is a difference in option names between tasks and allocations
         if self.gpus_per_proc > 0:
             tmp = f"{self.gpus_per_proc}"
             # command line flag for a task
-            self.run_launch_args["--gpus-per-task"] = tmp
+            self.run_only_args["--gpus-per-task"] = tmp
             # command and shell flags for an allocation
-            self.batch_submit_args["--gpus-per-slot"] = tmp
-            self.batch_script_header["# FLUX: --gpus-per-slot"] = tmp
+            if not blocking:
+                self.submit_only_args["--gpus-per-slot"] = tmp
 
         if self.work_dir:
-            tmp = [f"--setattr=system.cwd={os.path.abspath(self.work_dir)}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.submit_only_args["--setattr=system.cwd"] = f"{os.path.abspath(self.work_dir)}"
 
-        tmp = ["-onosetpgrp"]
-        self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+        self.common_launch_args["-onosetpgrp"] = None
 
         if self.ld_preloads:
-            tmp = [f'--env=LD_PRELOAD={",".join(self.ld_preloads)}']
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args['--env=LD_PRELOAD'] = f'{",".join(self.ld_preloads)}'
 
         if self.time_limit is not None:
-            tmp = [f"--time={self.time_limit}m"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args["--time"] = f"{self.time_limit}m"
 
         if self.job_name:
-            tmp = [f"--job-name={self.job_name}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.common_launch_args["--job-name"] = f"{self.job_name}"
 
         if self.queue:
             if os.getenv("FLUX_URI"):
@@ -116,92 +80,37 @@ class FluxScheduler(Scheduler):
                     f"WARNING: Dropping unsupported option requested when running inside of an allocation: --queue={self.queue}"
                 )
             else:
-                tmp = [f"--queue={self.queue}"]
-                self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+                self.submit_only_args["--queue"] = f"{self.queue}"
 
         if self.account:
-            tmp = [f"--account={self.account}"]
-            self.select_interactive_or_batch(tmp, header, cmd_args, blocking)
+            self.submit_only_args["--account"] = f"{self.account}"
 
         if self.reservation:
             logger.warning(
                 f"WARNING: Unsupported option requested: --reservation={self.reservation}"
             )
 
-        if self.launcher_flags:
-            for flag in self.launcher_flags:
-                # These flag should only be on the launcher commands not the batch commands
-                cmd_args += [flag]
+        return
 
-        if not blocking: # Only add batch script header items on non-blocking calls
-            for k,v in self.batch_script_header.items():
-                header.write(f"{k}={v}\n")
+    def batch_script_prefix(self) -> str:
+        return "# FLUX:"
 
-        for e in env_vars:
-            header.write(parse_env_list(*e))
+    def blocking_launch_command(self) -> list[str]:
+        return ["flux", "run"]
 
+    def nonblocking_launch_command(self) -> list[str]:
+        return ["flux", "batch"]
+
+    def cli_passthrough_env_arg(self, passthrough_env_vars) -> None:
         for k, v in passthrough_env_vars:
-            if not blocking:
-                cmd_args += [f" --env={k}={v}"]
-            else:
-                header += f"export {k}={v}\n"
+            self.submit_only_args[f"--env={k}"] = f"{v}"
+        return
 
-        return (header.getvalue(), cmd_args)
+    def export_hostlist(self) -> str:
+        return "export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n"
 
-    def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
-        # Launch command only use the cmd_args to construct the shell script to be launched
-        (header_lines, cmd_args) = self.build_command_string_and_batch_script(
-            system, blocking
-        )
-
-        if not blocking:
-            for k,v in self.batch_submit_args.items():
-                cmd_args += [f"{k}={v}"]
-            return ["flux", "batch"] + cmd_args
-
-        for k,v in self.run_launch_args.items():
-            cmd_args += [f"{k}={v}"]
-        return ["flux", "run"] + cmd_args
-
-    def launcher_script(
-        self,
-        system: "System",
-        command: str,
-        args: Optional[list[str]] = None,
-        blocking: bool = True,
-        save_hostlist: bool = False,
-        launch_dir: str = "",
-    ) -> str:
-
-        script = ""
-        # Launcher script only use the header_lines to construct the shell script to be launched
-        (header_lines, cmd_string) = self.build_command_string_and_batch_script(
-            system, blocking
-        )
-        for k,v in self.run_launch_args.items():
-            cmd_string += [f"{k}={v}"]
-
-        script += header_lines
-        script += "\n"
-        if save_hostlist:
-            script += "export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n"
-            script += 'if [ "${RANK}" = "0" ]; then\n'
-            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
-            script += "fi\n\n"
-
-        if not blocking:
-            script += "flux run "
-            script += " ".join(cmd_string)
-            script += " "
-
-        script += f"{command}"
-
-        for arg in args:
-            script += f" {arg}"
-
-        script += "\n"
-
-        return script
+    def internal_script_run_command(self) -> str:
+        return "flux run "
 
     def get_job_id(self, output: str) -> Optional[str]:
         # The job ID is the only printout when calling flux batch

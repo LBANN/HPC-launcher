@@ -167,15 +167,18 @@ class ElCapitan(System):
 
     def customize_scheduler(self, scheduler):
         use_this_rccl = os.getenv("LBANN_USE_THIS_RCCL")
-        scheduler.launcher_flags = ["--exclusive"]
         if type(scheduler) is FluxScheduler:
+            scheduler.common_launch_args["--exclusive"] = None # This is an alloc only on slurm and alloc or run on flux
             # Note that options cannot have a space after the -o flag, e.g. -o<option>
             # Performance tuning for HPE Slingshot Cassini NIC
-            scheduler.launcher_flags.append("-ofastload=on")
-            scheduler.launcher_flags.append("--setattr=rdzv_get_en=0")
+            scheduler.common_launch_args["-ofastload"] = "on"
+            scheduler.common_launch_args["--setattr=rdzv_get_en"] = "0"
             # Avoid bug in OMP that ruins the CPU_SET
-            scheduler.launcher_flags.append("-ompibind=omp_proc_bind,omp_places")
+            scheduler.common_launch_args["-ompibind"] = "omp_proc_bind,omp_places"
 
+        # if type(scheduler) is SlurmScheduler:
+        #     scheduler.submit_args["--exclusive"] = None # This is an alloc only on slurm and alloc or run on flux
+            
         if use_this_rccl is not None:
             scheduler.ld_preloads = [f"{use_this_rccl}"]
 

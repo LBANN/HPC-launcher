@@ -115,7 +115,7 @@ def main():
         exit(1)
 
     _, folder_name = scheduler.create_launch_folder_name(
-        args.command, "torchrun_hpc", args.no_launch_dir
+        args.command, "torchrun_hpc", args.no_launch_dir, args.launch_dir_name
     )
 
     script_file = scheduler.create_launch_folder(
@@ -148,6 +148,7 @@ def main():
         script_file,
         command,
         launch_args,
+        args.override_args,
         not args.bg,
         # args.output_script,
         args.setup_only,
