@@ -55,7 +55,7 @@ async def _run_process(
     # Create the subprocess
     args = [] if len(command) == 1 else command[1:]
     process = await asyncio.create_subprocess_exec(
-        command[0], *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        command[0], *args, bufsize=0, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
 
     # Read the stdout and stderr concurrently
