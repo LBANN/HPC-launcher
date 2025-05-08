@@ -101,6 +101,11 @@ class FluxScheduler(Scheduler):
     def nonblocking_launch_command(self) -> list[str]:
         return ["flux", "batch"]
 
+    def cli_passthrough_env_arg(self, passthrough_env_vars) -> None:
+        for k, v in passthrough_env_vars:
+            self.submit_only_args[f"--env={k}"] = f"{v}"
+        return
+
     def export_hostlist(self) -> str:
         return "export HPC_LAUNCHER_HOSTLIST=$(flux hostlist local)\n"
 

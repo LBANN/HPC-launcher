@@ -84,6 +84,13 @@ class LSFScheduler(Scheduler):
     def nonblocking_launch_command(self) -> list[str]:
         return ["bsub"]
 
+    def cli_passthrough_env_arg(self, passthrough_env_vars) -> None:
+        env_vars = []
+        for k, v in passthrough_env_vars:
+            env_vars += [f"{k}={v}"]
+        self.submit_only_args['--env "ALL, ' + ", ".join(env_vars) + '"'] = None
+        return
+
     def export_hostlist(self) -> str:
         return "export HPC_LAUNCHER_HOSTLIST=$(echo $LSB_HOSTS | tr ' ' '\\n' | sort -u)\n"
 

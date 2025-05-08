@@ -68,8 +68,6 @@ class Scheduler:
     # Capture the original command so that it can be added to the launch script
     command_line: Optional[list[str]] = None
 
-    # Flags to be used for a batch scheduling call
-    # written to the header of the batch script
     # Command line flags given to a batch or interactive submit command
     submit_only_args = OrderedDict()
     # Commands given to active run command
@@ -160,11 +158,12 @@ class Scheduler:
         for e in env_vars:
             header.write(parse_env_list(*e))
 
-        for k, v in passthrough_env_vars:
-            if not blocking:
-                cmd_args += [f" --env={k}={v}"]
+        if len(passthrough_env_vars):
+            if blocking:
+                self.cli_passthrough_env_arg(passthrough_env_vars)
             else:
-                header += f"export {k}={v}\n"
+                for k, v in passthrough_env_vars:
+                    header.write(f"export {k}={v}\n")
 
         return (header.getvalue(), cmd_args)
 
@@ -186,6 +185,14 @@ class Scheduler:
         """
         Returns scheduler specific command for non-blocking batch jobs
         :return: scheduler specific command for non-blocking batch jobs
+        """
+        raise NotImplementedError
+
+    def cli_passthrough_env_arg(self, env_list: list[tuple[str,str]]) -> None:
+        """
+        How should environment variables be passed to launched command.
+        Append them the to the submit_only_args
+        :return: None
         """
         raise NotImplementedError
 
