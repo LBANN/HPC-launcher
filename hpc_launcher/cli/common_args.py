@@ -203,25 +203,19 @@ def setup_arguments(parser: argparse.ArgumentParser):
     # Add an argument to pick the run directory: tmp, none, self labeled, auto labeled
 
     group.add_argument(
-        "--launch-dir-name",
+        "-l",
+        "--launch-dir",
+        dest="launch_dir",
+        nargs="?",
+        const="",
+        # action="store_true",
         default=None,
-        help="Use a custome name for the launch directory",
-    )
-
-    group.add_argument(
-        "--run-from-launch-dir",
-        action="store_true",
-        default=False,
-        help="If set, the launcher will run the command from the timestamped "
-        "launch directory",
-    )
-
-    group.add_argument(
-        "--no-launch-dir",
-        action="store_true",
-        default=False,
-        help="If set, the launcher will not create a timestamped launch directory. "
-        "Instead, it will create the launch file and logs in the current working "
+        help="If set without argument, the launcher will create a timestamped launch directory. "
+        "If set with an argument, the launcher will create a directory named [LAUNCH_DIR]. "
+        "If set with argument == \".\", the launcher will create a launch script in the <cwd>. "
+        "If not set, it will either run the command without creating any files if "
+        "the job is blocking and if it is non-blocking it will create the launch "
+        "file and logs in the current working "
         "directory",
     )
 
@@ -241,10 +235,12 @@ def setup_arguments(parser: argparse.ArgumentParser):
     )
 
     group.add_argument(
-        "--work-dir",
-        default=None,
-        help="Working directory used to run the command.  If not given run from the cwd",
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="If set, output the results of the launcher without any side-effects."
     )
+
     group.add_argument(
         "--account",
         default=None,
@@ -309,14 +305,6 @@ def validate_arguments(args: argparse.Namespace):
         raise ValueError('"--local" jobs cannot be run in the background')
     if args.local and args.scheduler:
         raise ValueError("The --local and --scheduler flags are mutually " "exclusive")
-    if args.work_dir and args.run_from_launch_dir:
-        raise ValueError(
-            "The --work-dir and --run-from-launch-dir flags are mutually " "exclusive"
-        )
-    if args.launch_dir_name and args.no_launch_dir:
-        raise ValueError(
-            "The --launch-dir-name and --no-launch-dir flags are mutually " "exclusive"
-        )
 
 
 # See if the system can be autodetected and then process some special arguments

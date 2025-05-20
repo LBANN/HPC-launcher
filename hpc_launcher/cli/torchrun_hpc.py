@@ -158,7 +158,9 @@ def main():
     )
 
     if jobid:
-        logger.info(f"Job ID: {jobid}")
+        logger.info(f"Job ID: {jobid} launched from {folder_name}")
+        if not args.verbose:
+            print(f"Job ID: {jobid} launched from {folder_name}")
 
 
 if __name__ == "__main__":

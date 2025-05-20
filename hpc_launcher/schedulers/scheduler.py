@@ -155,12 +155,16 @@ class Scheduler:
                 else:
                     header.write(f"{prefix} {k}={v}\n")
 
-        for e in env_vars:
-            header.write(parse_env_list(*e))
+        if len(env_vars):
+            if blocking:
+                self.cli_env_arg(env_vars)
+            else:
+                for e in env_vars:
+                    header.write(parse_env_list(*e))
 
         if len(passthrough_env_vars):
             if blocking:
-                self.cli_passthrough_env_arg(passthrough_env_vars)
+                self.cli_env_arg(passthrough_env_vars)
             else:
                 for k, v in passthrough_env_vars:
                     header.write(f"export {k}={v}\n")
@@ -188,7 +192,7 @@ class Scheduler:
         """
         raise NotImplementedError
 
-    def cli_passthrough_env_arg(self, env_list: list[tuple[str,str]]) -> None:
+    def cli_env_arg(self, env_list: list[tuple[str,str]]) -> None:
         """
         How should environment variables be passed to launched command.
         Append them the to the submit_only_args
@@ -284,6 +288,7 @@ class Scheduler:
         :param args: Optional list of argument for the command to launch
         :param blocking: Launch the comamnd interactively if true, else in a batch job
         :params save_hostlist: Add local scripting to capture the list of hosts the command is launched on
+        :params launch_dir: Folder used for running the command
         :return: A shell script as a string.
         """
         script = ""
@@ -309,9 +314,10 @@ class Scheduler:
         # Configure header and command line with scheduler job options
         script += header_lines
         script += "\n"
-        callee_directory = os.path.dirname(launch_dir)
-        logger.info(f"Callee directory: {callee_directory}")
-        script += f"export PYTHONPATH={callee_directory}:" + "${PYTHONPATH}\n"
+        if launch_dir != os.getcwd():
+            callee_directory = os.path.dirname(launch_dir)
+            logger.info(f"Callee directory: {callee_directory} - and {launch_dir}")
+            script += f"export PYTHONPATH={callee_directory}:" + "${PYTHONPATH}\n"
         if save_hostlist:
             script += self.export_hostlist()
             script += 'if [ "${RANK}" = "0" ]; then\n'
@@ -417,14 +423,14 @@ class Scheduler:
         self,
         command: str,
         folder_prefix: str = "launch",
-        no_launch_dir: bool = False,
-        launch_dir_name: Optional[str] = None,
+        launch_dir: Optional[str] = None,
     ) -> (str, str):
         """
         Create a folder name for the launcher based on the command.
 
         :param command: The command line to run.
         :param folder_prefix: Specializable prefix for the folder name
+        :param launch_dir: [Optional] Name of launch directory, None, or "." for <cwd>
         :return: A tuple of strings with the the command as a possible folder name, and the folder name.
         """
         # Remove spaces and semi-colons from the command sequence
@@ -432,25 +438,23 @@ class Scheduler:
             os.path.basename(command).replace(" ", "_").replace(";", "-")
         )
 
-        if launch_dir_name:
-            return (command_as_folder_name, launch_dir_name)
-        else:
-
-
+        if launch_dir == ".":
+            folder_name = os.getcwd()
+        elif launch_dir == "":
             # Create a folder for the output and error logs
             # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
-            if no_launch_dir:
-                folder_name = os.getcwd()
-            else:
-                folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
-            return (command_as_folder_name, folder_name)
+            folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
+        else:
+            folder_name = launch_dir
+
+        return (command_as_folder_name, folder_name)
 
     def create_launch_folder(
         self,
         folder_name: str,
         blocking: bool = True,
         script_file: Optional[str] = None,
-        run_from_launch_dir: bool = False,
+        dry_run: bool = False,
     ) -> (str, str):
         """
         Create a folder and associated launch script if approrpiate.
@@ -458,15 +462,15 @@ class Scheduler:
         :param folder_name: The name of the folder for containing all of the launch artifacts.
         :param blocking: If True, the job should run from the launch folder.
         :param script_file: If given, saves the output script to this file.
-        :param run_from_launch_dir: If True, runs the command from the launch folder.
+        :param dry_run: If True, only sets up the job and does not launch it.
         :return: The filename for the launch script as a string.
         """
 
-        should_make_folder = blocking or run_from_launch_dir
+        should_make_folder = folder_name != None
 
         # Create a temporary file or a script file, if given
         if script_file is not None:
-            if os.path.dirname(script_file):
+            if os.path.dirname(script_file) and not dry_run:
                 os.makedirs(os.path.dirname(script_file), exist_ok=True)
 
             # Warn if this file exists
@@ -475,12 +479,10 @@ class Scheduler:
 
             filename = os.path.abspath(script_file)
         else:
-            should_make_folder = True
             filename = os.path.abspath(os.path.join(folder_name, "launch.sh"))
 
         if self.out_log_file is None:
             self.out_log_file = os.path.abspath(os.path.join(folder_name, "out.log"))
-            should_make_folder = True
         else:
             if not os.path.isabs(self.out_log_file):
                 log_file = os.path.abspath(os.path.join(folder_name, self.out_log_file))
@@ -488,14 +490,13 @@ class Scheduler:
 
         if self.err_log_file is None:
             self.err_log_file = os.path.abspath(os.path.join(folder_name, "err.log"))
-            should_make_folder = True
         else:
             if not os.path.isabs(self.err_log_file):
                 log_file = os.path.abspath(os.path.join(folder_name, self.err_log_file))
                 self.err_log_file = log_file
 
         stub_file = ""
-        if should_make_folder:
+        if should_make_folder and not dry_run:
             os.makedirs(folder_name, exist_ok=True)
 
         return filename
@@ -503,15 +504,15 @@ class Scheduler:
     def launch(
         self,
         system: "System",
-        folder_name: str,
-        filename: str,
+        folder_name: Optional[str],
+        filename: Optional[str],
         command: str,
         args: Optional[list[str]] = None,
         override_launch_args: Optional[dict] = None,
         blocking: bool = True,
         setup_only: bool = False,
         color_stderr: bool = False,
-        run_from_launch_dir: bool = False,
+        dry_run: bool = False,
         save_hostlist: bool = False,
     ) -> str:
         """
@@ -534,7 +535,7 @@ class Scheduler:
         self.override_launch_args = override_launch_args
 
         # If the command is run from a directory
-        if run_from_launch_dir:
+        if folder_name:
             # Change the working directory to the launch folder
             if not self.work_dir:
                 self.work_dir = os.path.abspath(folder_name)
@@ -547,46 +548,68 @@ class Scheduler:
             command = os.path.abspath(command)
 
         cmd = self.launch_command(system, blocking)
-        full_cmdline = cmd + [filename]
+        if not folder_name and not filename:  # Launch job and trace outputs live
+            # Run interactive script
+            full_cmdline = cmd + [command]
+            if setup_only:
+                logger.warning(f'To launch, run: {" ".join(full_cmdline)}')
+                return ""
 
-        logger.info(f"Script filename: {filename}")
-        with open(filename, "w") as fp:
-            fp.write(
-                self.launcher_script(system, command, args, blocking, save_hostlist, os.path.dirname(filename))
-            )
+            logger.info(f'Launching {" ".join(full_cmdline)}')
 
-            fp.write(f"\n# Launch command: " + " ".join(full_cmdline) + "\n")
-            if self.command_line:
-                fp.write(
-                    f"# User command invoked: " + " ".join(self.command_line) + "\n"
-                )
-        os.chmod(filename, 0o700)
-
-        if setup_only:
-            logger.warning(f'To launch, run: {" ".join(full_cmdline)}')
-            return ""
-
-        logger.info(f'Launching {" ".join(full_cmdline)}')
-
-        if blocking:  # Launch job and trace outputs live
-            with open(self.out_log_file, "wb") as out_file:
-                with open(self.err_log_file, "wb") as err_file:
-
-                    run_process_with_live_output(
-                        full_cmdline,
-                        out_file=out_file,
-                        err_file=err_file,
-                        color_stderr=color_stderr,
+            if not dry_run:
+                process = subprocess.run(full_cmdline, capture_output=True)
+                sys.stdout.buffer.write(process.stdout)
+                sys.stderr.buffer.write(process.stderr)
+                if process.returncode or process.stderr:
+                    logging.error(
+                        f"Interactive scheduler exited with error code {process.returncode}"
                     )
-            # In this mode, there is no job ID
             return None
         else:
-            # Run batch script and get job ID
-            process = subprocess.run(full_cmdline, capture_output=True)
-            if process.returncode or process.stderr:
-                logging.error(
-                    f"Batch scheduler exited with error code {process.returncode}"
-                )
-                sys.stderr.buffer.write(process.stderr)
+            full_cmdline = cmd + [filename]
+            logger.info(f"Script filename: {filename}")
+            if not dry_run:
+                with open(filename, "w") as fp:
+                    fp.write(
+                        self.launcher_script(system, command, args, blocking, save_hostlist, os.path.dirname(filename))
+                    )
+
+                    fp.write(f"\n# Launch command: " + " ".join(full_cmdline) + "\n")
+                    if self.command_line:
+                        fp.write(
+                            f"# User command invoked: " + " ".join(self.command_line) + "\n"
+                        )
+                os.chmod(filename, 0o700)
+
+            if setup_only:
+                logger.warning(f'To launch, run: {" ".join(full_cmdline)}')
+                return ""
+
+            logger.info(f'Launching {" ".join(full_cmdline)}')
+
+            if dry_run:
                 return None
-            return self.get_job_id(process.stdout.decode())
+
+            if blocking:  # Launch job and trace outputs live
+               with open(self.out_log_file, "wb") as out_file:
+                   with open(self.err_log_file, "wb") as err_file:
+
+                       run_process_with_live_output(
+                           full_cmdline,
+                           out_file=out_file,
+                           err_file=err_file,
+                           color_stderr=color_stderr,
+                       )
+               # In this mode, there is no job ID
+               return None
+            else:
+                # Run batch script and get job ID
+                process = subprocess.run(full_cmdline, capture_output=True)
+                if process.returncode or process.stderr:
+                    logging.error(
+                        f"Batch scheduler exited with error code {process.returncode}"
+                    )
+                    sys.stderr.buffer.write(process.stderr)
+                    return None
+                return self.get_job_id(process.stdout.decode())
