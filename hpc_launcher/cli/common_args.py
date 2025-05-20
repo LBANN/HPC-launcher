@@ -148,7 +148,8 @@ def setup_arguments(parser: argparse.ArgumentParser):
         default=False,
         help="If set, the job will be run in the background. Otherwise, the "
         "launcher will wait for the job to start and forward the outputs to "
-        "the console",
+        "the console.  Additionally, by default, it will run from a generated "
+        "timestamped directory (which can be overridden by the -l flag).",
     )
 
     group.add_argument(

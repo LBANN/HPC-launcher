@@ -48,8 +48,9 @@ def main():
     folder_name = None
     script_file = None
     if args.bg and args.launch_dir is None: # or args.batch_script
-        # If running a batch job with no launch directory, run in the <cwd>
-        args.launch_dir = "."
+        # If running a batch job with no launch directory argument,
+        # run in the generated timestamped directory
+        args.launch_dir = ""
     print(f"I think that the launch dir is {args.launch_dir}")
     if args.launch_dir is not None:
         _, folder_name = scheduler.create_launch_folder_name(
