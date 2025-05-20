@@ -82,6 +82,10 @@ def test_output_capture_scheduler(scheduler_class, processes):
         None, 1, processes, 1, None, None
     )
     scheduler = scheduler_class(nodes, procs_per_node, gpus_per_proc)
+    # Reset class
+    scheduler.submit_only_args.clear()
+    scheduler.run_only_args.clear()
+    scheduler.common_launch_args.clear()
 
     command = sys.executable
     _, launch_dir = scheduler.create_launch_folder_name(command, "launch", "")

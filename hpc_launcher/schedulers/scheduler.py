@@ -79,12 +79,12 @@ class Scheduler:
     override_launch_args: Optional[dict] = None
 
     def build_scheduler_specific_arguments(
-        self, system: "System", blocking: bool = True
+            self, system: "System", blocking: bool = True
     ):
         return NotImplementedError
 
     def build_command_string_and_batch_script(
-        self, system: "System", blocking: bool = True
+            self, system: "System", blocking: bool = True, cli_env_only: bool = False,
     ) -> (str, list[str]):
         """
         Returns the strings used for a launch command as well as a batch script
@@ -94,6 +94,7 @@ class Scheduler:
 
         :param system: The system to use.
         :param blocking:
+        :param cli_env_only:
         :return: A tuple of (shell script as a string, list of command-line arguments).
         """
         env_vars = system.environment_variables()
@@ -156,14 +157,14 @@ class Scheduler:
                     header.write(f"{prefix} {k}={v}\n")
 
         if len(env_vars):
-            if blocking:
+            if blocking and cli_env_only:
                 self.cli_env_arg(env_vars)
             else:
                 for e in env_vars:
                     header.write(parse_env_list(*e))
 
         if len(passthrough_env_vars):
-            if blocking:
+            if blocking and cli_env_only:
                 self.cli_env_arg(passthrough_env_vars)
             else:
                 for k, v in passthrough_env_vars:
@@ -200,7 +201,9 @@ class Scheduler:
         """
         raise NotImplementedError
 
-    def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
+    def launch_command(
+            self, system: "System", blocking: bool = True, cli_env_only: bool = False
+    ) -> list[str]:
         """
         Returns the launch command for this scheduler. Returns the
         command prefix before the program to run.
@@ -211,7 +214,7 @@ class Scheduler:
         :return: The command prefix as a list of strings (one per argument).
         """
         (header_lines, cmd_args) = self.build_command_string_and_batch_script(
-            system, blocking
+            system, blocking, cli_env_only,
         )
 
         # Both commands get the submit args
@@ -294,7 +297,7 @@ class Scheduler:
         script = ""
         # Launch command only use the cmd_args to construct the shell script to be launched
         (header_lines, cmd_args) = self.build_command_string_and_batch_script(
-            system, blocking
+            system, blocking, False,
         )
         # For batch jobs add any common args to the internal command
         if not blocking:
@@ -547,8 +550,9 @@ class Scheduler:
         if os.path.isfile(command):
             command = os.path.abspath(command)
 
-        cmd = self.launch_command(system, blocking)
-        if not folder_name and not filename:  # Launch job and trace outputs live
+        use_launch_folder = folder_name or filename
+        cmd = self.launch_command(system, blocking, not use_launch_folder)
+        if not use_launch_folder: # Launch job and trace outputs live
             # Run interactive script
             full_cmdline = cmd + [command]
             if setup_only:

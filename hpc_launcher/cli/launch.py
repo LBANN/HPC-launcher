@@ -51,7 +51,6 @@ def main():
         # If running a batch job with no launch directory argument,
         # run in the generated timestamped directory
         args.launch_dir = ""
-    print(f"I think that the launch dir is {args.launch_dir}")
     if args.launch_dir is not None:
         _, folder_name = scheduler.create_launch_folder_name(
             args.command, "launch", args.launch_dir
