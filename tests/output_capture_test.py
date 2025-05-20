@@ -32,8 +32,9 @@ def test_output_capture_local(no_launch_dir: bool):
 
     command = sys.executable
     script = "output_capture.py"
+    # Set the request for the launch dir to the empty string to use a auto-generated folder
     _, launch_dir = scheduler.create_launch_folder_name(
-        command, "launch", no_launch_dir
+        command, "launch", ""
     )
 
     script_file = scheduler.create_launch_folder(launch_dir, True)
@@ -83,7 +84,7 @@ def test_output_capture_scheduler(scheduler_class, processes):
     scheduler = scheduler_class(nodes, procs_per_node, gpus_per_proc)
 
     command = sys.executable
-    _, launch_dir = scheduler.create_launch_folder_name(command, "launch")
+    _, launch_dir = scheduler.create_launch_folder_name(command, "launch", "")
 
     script_file = scheduler.create_launch_folder(launch_dir, True)
 
