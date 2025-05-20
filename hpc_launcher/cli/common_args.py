@@ -132,8 +132,8 @@ def setup_arguments(parser: argparse.ArgumentParser):
         dest="override_args",
         nargs='+',
         action=ParseKVAction,
-        help="Specifies scheduler and launch arguments (note it will override any known key): --xargs k1=v1 k2=v2 \n or --xargs k1=v1 --xargs k2=v2 \n Also note that a double dash -- is needed if this is the last argument. \n Arguments with a leading tilde ~ will be removed if found",
-        metavar="KEY1=VALUE1",
+        help="Specifies scheduler and launch arguments (note it will override any known key): --xargs k1=v1 k2=v2 \n or --xargs k1=v1 --xargs k2=v2. \n Also note that a double dash -- is needed if this is the last argument. \n Arguments with a leading tilde ~ will be removed if found",
+        metavar="KEY=VALUE",
     )
 
     # System
@@ -147,8 +147,8 @@ def setup_arguments(parser: argparse.ArgumentParser):
         dest="system_params",
         nargs='+',
         action=ParseKVAction,
-        help="Specifies some or all of the parameters of a system as a dictionary (note it will override any known or autodetected parameters): -p cores_per_node=<int> gpus_per_node=<int> gpu_arch=<str> mem_per_gpu=<float> numa_domains=<int> scheduler=<str>\n -p cores_per_node=<int> gpus_per_node=<int> \n Also note that a double dash -- is need if this is the last argument",
-        metavar="KEY1=VALUE1",
+        help="Specifies some or all of the parameters of a system as a dictionary (note it will override any known or autodetected parameters): -p cores_per_node=<int> gpus_per_node=<int> gpu_arch=<str> mem_per_gpu=<float> numa_domains=<int> scheduler=<str>\n -p cores_per_node=<int> gpus_per_node=<int>. \n Also note that a double dash -- is need if this is the last argument",
+        metavar="KEY=VALUE",
     )
 
     # Schedule
@@ -216,7 +216,7 @@ def setup_arguments(parser: argparse.ArgumentParser):
         "If not set, it will either run the command without creating any files if "
         "the job is blocking and if it is non-blocking it will create the launch "
         "file and logs in the current working "
-        "directory",
+        "directory. Also note that a double dash -- is need if this is the last argument",
     )
 
     group.add_argument(
