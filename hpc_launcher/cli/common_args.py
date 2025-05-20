@@ -136,21 +136,6 @@ def setup_arguments(parser: argparse.ArgumentParser):
         metavar="KEY=VALUE",
     )
 
-    # System
-    group = parser.add_argument_group(
-        "System",
-        "Provide system parameters from the CLI -- overrides built-in system descriptions and autodetection",
-    )
-    group.add_argument(
-        "-p",
-        "--system-params",
-        dest="system_params",
-        nargs='+',
-        action=ParseKVAction,
-        help="Specifies some or all of the parameters of a system as a dictionary (note it will override any known or autodetected parameters): -p cores_per_node=<int> gpus_per_node=<int> gpu_arch=<str> mem_per_gpu=<float> numa_domains=<int> scheduler=<str>\n -p cores_per_node=<int> gpus_per_node=<int>. \n Also note that a double dash -- is need if this is the last argument",
-        metavar="KEY=VALUE",
-    )
-
     # Schedule
     group = parser.add_argument_group(
         "Schedule", "Arguments that determine when a job will run"
@@ -172,29 +157,6 @@ def setup_arguments(parser: argparse.ArgumentParser):
         default=None,
         choices=get_schedulers().keys(),
         help="If set, overrides the default batch scheduler",
-    )
-
-    group = parser.add_argument_group("Logging", "Logging parameters")
-    group.add_argument(
-        "--out",
-        default=None,
-        dest="out_log_file",
-        help="Capture standard output to a log file. If not given, only prints "
-        "out logs to the console",
-    )
-    group.add_argument(
-        "--err",
-        default=None,
-        dest="err_log_file",
-        help="Capture standard error to a log file. If not given, only prints "
-        "out logs to the console",
-    )
-    group.add_argument(
-        "--color-stderr",
-        action="store_true",
-        default=False,
-        help="If True, uses terminal colors to color the standard error "
-        "outputs in red. This does not affect the output files",
     )
 
     group = parser.add_argument_group("Script", "Batch scheduler script parameters")
@@ -259,6 +221,44 @@ def setup_arguments(parser: argparse.ArgumentParser):
         action="store_true",
         default=False,
         help="Write the hostlist to a file: hpc_launcher_hostlist.txt.",
+    )
+
+    # System
+    group = parser.add_argument_group(
+        "System",
+        "Provide system parameters from the CLI -- overrides built-in system descriptions and autodetection",
+    )
+    group.add_argument(
+        "-p",
+        "--system-params",
+        dest="system_params",
+        nargs='+',
+        action=ParseKVAction,
+        help="Specifies some or all of the parameters of a system as a dictionary (note it will override any known or autodetected parameters): -p cores_per_node=<int> gpus_per_node=<int> gpu_arch=<str> mem_per_gpu=<float> numa_domains=<int> scheduler=<str>\n -p cores_per_node=<int> gpus_per_node=<int>. \n Also note that a double dash -- is need if this is the last argument",
+        metavar="KEY=VALUE",
+    )
+
+    group = parser.add_argument_group("Logging", "Logging parameters")
+    group.add_argument(
+        "--out",
+        default=None,
+        dest="out_log_file",
+        help="Capture standard output to a log file. If not given, only prints "
+        "out logs to the console",
+    )
+    group.add_argument(
+        "--err",
+        default=None,
+        dest="err_log_file",
+        help="Capture standard error to a log file. If not given, only prints "
+        "out logs to the console",
+    )
+    group.add_argument(
+        "--color-stderr",
+        action="store_true",
+        default=False,
+        help="If True, uses terminal colors to color the standard error "
+        "outputs in red. This does not affect the output files",
     )
 
 
