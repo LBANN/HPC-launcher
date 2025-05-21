@@ -56,7 +56,3 @@ def test_validate_arguments():
     with pytest.raises(ValueError):
         args = parser.parse_args(["--local", "--scheduler", "flux"])
         validate_arguments(args)
-
-    with pytest.raises(ValueError):
-        args = parser.parse_args(["--work-dir", "/tmp", "--run-from-launch-dir"])
-        validate_arguments(args)

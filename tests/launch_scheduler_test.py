@@ -72,7 +72,7 @@ def test_cli_argument_override(sys: MagicMock, env: MagicMock, nodes, procs_per_
     scheduler.override_launch_args = None
     scheduler.override_launch_args = override_launch_args
 
-    cmd = scheduler.launch_command(system, blocking)
+    cmd = scheduler.launch_command(system, blocking, False)
     assert len(override_launch_args.items()) > 0
     for k,v in override_launch_args.items():
         if "~" in k:

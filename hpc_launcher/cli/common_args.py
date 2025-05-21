@@ -132,23 +132,8 @@ def setup_arguments(parser: argparse.ArgumentParser):
         dest="override_args",
         nargs='+',
         action=ParseKVAction,
-        help="Specifies scheduler and launch arguments (note it will override any known key): --xargs k1=v1 k2=v2 \n or --xargs k1=v1 --xargs k2=v2 \n Also note that a double dash -- is needed if this is the last argument. \n Arguments with a leading tilde ~ will be removed if found",
-        metavar="KEY1=VALUE1",
-    )
-
-    # System
-    group = parser.add_argument_group(
-        "System",
-        "Provide system parameters from the CLI -- overrides built-in system descriptions and autodetection",
-    )
-    group.add_argument(
-        "-p",
-        "--system-params",
-        dest="system_params",
-        nargs='+',
-        action=ParseKVAction,
-        help="Specifies some or all of the parameters of a system as a dictionary (note it will override any known or autodetected parameters): -p cores_per_node=<int> gpus_per_node=<int> gpu_arch=<str> mem_per_gpu=<float> numa_domains=<int> scheduler=<str>\n -p cores_per_node=<int> gpus_per_node=<int> \n Also note that a double dash -- is need if this is the last argument",
-        metavar="KEY1=VALUE1",
+        help="Specifies scheduler and launch arguments (note it will override any known key): --xargs k1=v1 k2=v2 \n or --xargs k1=v1 --xargs k2=v2. \n Also note that a double dash -- is needed if this is the last argument. \n Arguments with a leading tilde ~ will be removed if found",
+        metavar="KEY=VALUE",
     )
 
     # Schedule
@@ -163,7 +148,8 @@ def setup_arguments(parser: argparse.ArgumentParser):
         default=False,
         help="If set, the job will be run in the background. Otherwise, the "
         "launcher will wait for the job to start and forward the outputs to "
-        "the console",
+        "the console.  Additionally, by default, it will run from a generated "
+        "timestamped directory (which can be overridden by the -l flag).",
     )
 
     group.add_argument(
@@ -172,6 +158,85 @@ def setup_arguments(parser: argparse.ArgumentParser):
         default=None,
         choices=get_schedulers().keys(),
         help="If set, overrides the default batch scheduler",
+    )
+
+    group = parser.add_argument_group("Script", "Batch scheduler script parameters")
+
+    # different behavior for interactive vs batch jobs
+    # Add an argument to pick the run directory: tmp, none, self labeled, auto labeled
+
+    group.add_argument(
+        "-l",
+        "--launch-dir",
+        dest="launch_dir",
+        nargs="?",
+        const="",
+        # action="store_true",
+        default=None,
+        help="If set without argument, the launcher will create a timestamped launch directory. "
+        "If set with an argument, the launcher will create a directory named [LAUNCH_DIR]. "
+        "If set with argument == \".\", the launcher will create a launch script in the <cwd>. "
+        "If not set, it will either run the command without creating any files if "
+        "the job is blocking and if it is non-blocking it will create the launch "
+        "file and logs in the current working "
+        "directory. Also note that a double dash -- is need if this is the last argument",
+    )
+
+    group.add_argument(
+        "-o",
+        "--output-script",
+        default=None,
+        help="Output job setup script file. If not given, uses a temporary file",
+    )
+
+    group.add_argument(
+        "--setup-only",
+        action="store_true",
+        default=False,
+        help="If set, the launcher will only write the job setup script file, "
+        "without scheduling it.",
+    )
+
+    group.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="If set, output the results of the launcher without any side-effects."
+    )
+
+    group.add_argument(
+        "--account",
+        default=None,
+        help="Specify the account (or bank) to use fo the job",
+    )
+
+    group.add_argument(
+        "--reservation",
+        default=None,
+        help="Add a reservation arguement to scheduler.  "
+        "Typically used for Dedecated Application Time runs (DATs)",
+    )
+
+    group.add_argument(
+        "--save-hostlist",
+        action="store_true",
+        default=False,
+        help="Write the hostlist to a file: hpc_launcher_hostlist.txt.",
+    )
+
+    # System
+    group = parser.add_argument_group(
+        "System",
+        "Provide system parameters from the CLI -- overrides built-in system descriptions and autodetection",
+    )
+    group.add_argument(
+        "-p",
+        "--system-params",
+        dest="system_params",
+        nargs='+',
+        action=ParseKVAction,
+        help="Specifies some or all of the parameters of a system as a dictionary (note it will override any known or autodetected parameters): -p cores_per_node=<int> gpus_per_node=<int> gpu_arch=<str> mem_per_gpu=<float> numa_domains=<int> scheduler=<str>\n -p cores_per_node=<int> gpus_per_node=<int>. \n Also note that a double dash -- is need if this is the last argument",
+        metavar="KEY=VALUE",
     )
 
     group = parser.add_argument_group("Logging", "Logging parameters")
@@ -195,74 +260,6 @@ def setup_arguments(parser: argparse.ArgumentParser):
         default=False,
         help="If True, uses terminal colors to color the standard error "
         "outputs in red. This does not affect the output files",
-    )
-
-    group = parser.add_argument_group("Script", "Batch scheduler script parameters")
-
-    # different behavior for interactive vs batch jobs
-    # Add an argument to pick the run directory: tmp, none, self labeled, auto labeled
-
-    group.add_argument(
-        "--launch-dir-name",
-        default=None,
-        help="Use a custome name for the launch directory",
-    )
-
-    group.add_argument(
-        "--run-from-launch-dir",
-        action="store_true",
-        default=False,
-        help="If set, the launcher will run the command from the timestamped "
-        "launch directory",
-    )
-
-    group.add_argument(
-        "--no-launch-dir",
-        action="store_true",
-        default=False,
-        help="If set, the launcher will not create a timestamped launch directory. "
-        "Instead, it will create the launch file and logs in the current working "
-        "directory",
-    )
-
-    group.add_argument(
-        "-o",
-        "--output-script",
-        default=None,
-        help="Output job setup script file. If not given, uses a temporary file",
-    )
-
-    group.add_argument(
-        "--setup-only",
-        action="store_true",
-        default=False,
-        help="If set, the launcher will only write the job setup script file, "
-        "without scheduling it.",
-    )
-
-    group.add_argument(
-        "--work-dir",
-        default=None,
-        help="Working directory used to run the command.  If not given run from the cwd",
-    )
-    group.add_argument(
-        "--account",
-        default=None,
-        help="Specify the account (or bank) to use fo the job",
-    )
-
-    group.add_argument(
-        "--reservation",
-        default=None,
-        help="Add a reservation arguement to scheduler.  "
-        "Typically used for Dedecated Application Time runs (DATs)",
-    )
-
-    group.add_argument(
-        "--save-hostlist",
-        action="store_true",
-        default=False,
-        help="Write the hostlist to a file: hpc_launcher_hostlist.txt.",
     )
 
 
@@ -309,14 +306,6 @@ def validate_arguments(args: argparse.Namespace):
         raise ValueError('"--local" jobs cannot be run in the background')
     if args.local and args.scheduler:
         raise ValueError("The --local and --scheduler flags are mutually " "exclusive")
-    if args.work_dir and args.run_from_launch_dir:
-        raise ValueError(
-            "The --work-dir and --run-from-launch-dir flags are mutually " "exclusive"
-        )
-    if args.launch_dir_name and args.no_launch_dir:
-        raise ValueError(
-            "The --launch-dir-name and --no-launch-dir flags are mutually " "exclusive"
-        )
 
 
 # See if the system can be autodetected and then process some special arguments

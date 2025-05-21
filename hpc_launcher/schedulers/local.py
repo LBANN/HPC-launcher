@@ -33,7 +33,7 @@ class LocalScheduler(Scheduler):
     in ``--local`` jobs.
     """
 
-    def launch_command(self, system: "System", blocking: bool = True) -> list[str]:
+    def launch_command(self, system: "System", blocking: bool = True, cli_env_only: bool = False) -> list[str]:
         return []
 
     def launcher_script(
