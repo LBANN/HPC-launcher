@@ -164,7 +164,7 @@ class Scheduler:
                     header.write(parse_env_list(*e))
 
         if len(passthrough_env_vars):
-            if blocking and cli_env_only:
+            if blocking:
                 self.cli_env_arg(passthrough_env_vars)
             else:
                 for k, v in passthrough_env_vars:
