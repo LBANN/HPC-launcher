@@ -95,7 +95,22 @@ class LSFScheduler(Scheduler):
             elif len(e) == 3:
                 k,v,m = e
                 env_vars += [f"{k}={v}"]
-        self.submit_only_args['--env "ALL, ' + ", ".join(env_vars) + '"'] = None
+
+        key_found = False
+        for key in self.submit_only_args:
+            if key.startswith("--env"):
+                existing_env = key.split(" ")
+                new_env = existing_env[2:]
+                stripped_env = [s.strip(",") for s in new_env]
+                cleaned_env = [s.strip('"') for s in stripped_env]
+                revised_env = cleaned_env + env_vars
+                new_key = '--env "ALL, ' + ", ".join(revised_env) + '"'
+                self.submit_only_args[new_key] = None
+                del self.submit_only_args[key]
+                key_found = True
+
+        if not key_found:
+            self.submit_only_args['--env "ALL, ' + ", ".join(env_vars) + '"'] = None
         return
 
     def export_hostlist(self) -> str:

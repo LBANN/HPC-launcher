@@ -113,7 +113,10 @@ class SlurmScheduler(Scheduler):
             elif len(e) == 3:
                 k,v,m = e
                 env_vars += [f"{k}={v}"]
-        self.submit_only_args["--export"] = "ALL," + ",".join(env_vars)
+        if "--export" in self.submit_only_args:
+            self.submit_only_args["--export"] += "," + ",".join(env_vars)
+        else:
+            self.submit_only_args["--export"] = "ALL," + ",".join(env_vars)
         return
 
     def export_hostlist(self) -> str:
