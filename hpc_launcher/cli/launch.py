@@ -75,9 +75,10 @@ def main():
     )
 
     if jobid:
-        logger.info(f"Job ID: {jobid} launched from {folder_name}")
+        msg = f"Job ID: {jobid} launched from {folder_name}"
+        logger.info(msg)
         if not args.verbose:
-            print(f"Job ID: {jobid} launched from {folder_name}")
+            print(msg)
 
 if __name__ == "__main__":
     main()

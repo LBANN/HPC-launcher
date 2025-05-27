@@ -52,7 +52,7 @@ def test_output_capture_local(launch_dir: bool):
     assert os.path.isfile(os.path.join(launch_dir, "err.log"))
     assert open(os.path.join(launch_dir, "out.log"), "r").read() == "output\n"
     assert open(os.path.join(launch_dir, "err.log"), "r").read() == "error\n"
-    if launch_dir == "":
+    if launch_dir != "" or launch_dir != ".":
         shutil.rmtree(launch_dir, ignore_errors=True)
     else:
         os.unlink(f"{launch_dir}/out.log")
