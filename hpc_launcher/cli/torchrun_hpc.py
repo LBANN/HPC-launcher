@@ -120,7 +120,7 @@ def main():
         args.launch_dir = ""
     if args.launch_dir is None and not args.bg:
         args.launch_dir = ""
-        logger.info(f"torchrun-hpc needs to run jobs from a launch directory -- automagically setting the -l (--launch-dir) CLI argument")
+        logger.info(f"torchrun-hpc needs to run jobs from a launch directory -- automatically setting the -l (--launch-dir) CLI argument")
 
     _, folder_name = scheduler.create_launch_folder_name(
         args.command, "torchrun_hpc", args.launch_dir
