@@ -81,6 +81,11 @@ def test_output_capture_scheduler(scheduler_class, processes):
     if scheduler_class is LSFScheduler and not shutil.which("jsrun"):
         pytest.skip("LSF not available")
 
+    if scheduler_class is SlurmScheduler and (
+        shutil.which("jsrun")
+    ):
+        pytest.skip("Emulated SLURM on LSF system - don't test - output redirect is bad")
+
     # Configure scheduler
     system, nodes, procs_per_node, gpus_per_proc = configure.configure_launch(
         None, 1, processes, 1, None, None
