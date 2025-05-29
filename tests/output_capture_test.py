@@ -61,9 +61,8 @@ def test_output_capture_local(launch_dir: bool):
 
 
 @pytest.mark.parametrize(
-    "scheduler_class", [SlurmScheduler]
+    "scheduler_class", (SlurmScheduler, FluxScheduler, LSFScheduler)
 )
-#    "scheduler_class", (SlurmScheduler, FluxScheduler, LSFScheduler)
 @pytest.mark.parametrize("processes", [1, 2])
 def test_output_capture_scheduler(scheduler_class, processes):
     if scheduler_class is SlurmScheduler and not shutil.which("srun"):
@@ -73,6 +72,11 @@ def test_output_capture_scheduler(scheduler_class, processes):
         not shutil.which("flux") or not os.path.exists("/run/flux/local")
     ):
         pytest.skip("FLUX not available")
+
+    if scheduler_class is SlurmScheduler and (
+        shutil.which("flux") and os.path.exists("/run/flux/local")
+    ):
+        pytest.skip("Emulated SLURM on FLUX system - don't test - output redirect is bad")
 
     if scheduler_class is LSFScheduler and not shutil.which("jsrun"):
         pytest.skip("LSF not available")
