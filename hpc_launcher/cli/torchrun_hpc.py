@@ -114,12 +114,20 @@ def main():
         )
         exit(1)
 
+    if args.bg and args.launch_dir is None: # or args.batch_script
+        # If running a batch job with no launch directory argument,
+        # run in the generated timestamped directory
+        args.launch_dir = ""
+    if args.launch_dir is None and not args.bg:
+        args.launch_dir = ""
+        logger.info(f"torchrun-hpc needs to run jobs from a launch directory -- automatically setting the -l (--launch-dir) CLI argument")
+
     _, folder_name = scheduler.create_launch_folder_name(
-        args.command, "torchrun_hpc", args.no_launch_dir, args.launch_dir_name
+        args.command, "torchrun_hpc", args.launch_dir
     )
 
     script_file = scheduler.create_launch_folder(
-        folder_name, not args.bg, args.output_script, args.run_from_launch_dir
+        folder_name, not args.bg, args.output_script, args.dry_run
     )
 
     trampoline_file = "torchrun_hpc_trampoline.py"
@@ -153,12 +161,15 @@ def main():
         # args.output_script,
         args.setup_only,
         args.color_stderr,
-        args.run_from_launch_dir,
-        (args.save_hostlist or args.verbose),
+        args.dry_run,
+        args.launch_dir != None and (args.save_hostlist or args.verbose),
     )
 
     if jobid:
-        logger.info(f"Job ID: {jobid}")
+        msg = f"Job ID: {jobid} launched from {folder_name}"
+        logger.info(msg)
+        if not args.verbose:
+            print(msg)
 
 
 if __name__ == "__main__":

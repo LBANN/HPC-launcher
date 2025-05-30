@@ -45,13 +45,20 @@ def main():
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
 
-    _, folder_name = scheduler.create_launch_folder_name(
-        args.command, "launch", args.no_launch_dir, args.launch_dir_name
-    )
+    folder_name = None
+    script_file = None
+    if args.bg and args.launch_dir is None: # or args.batch_script
+        # If running a batch job with no launch directory argument,
+        # run in the generated timestamped directory
+        args.launch_dir = ""
+    if args.launch_dir is not None:
+        _, folder_name = scheduler.create_launch_folder_name(
+            args.command, "launch", args.launch_dir
+        )
 
-    script_file = scheduler.create_launch_folder(
-        folder_name, not args.bg, args.output_script, args.run_from_launch_dir
-    )
+        script_file = scheduler.create_launch_folder(
+            folder_name, not args.bg, args.output_script, args.dry_run
+        )
 
     jobid = scheduler.launch(
         system,
@@ -63,13 +70,15 @@ def main():
         not args.bg,
         args.setup_only,
         args.color_stderr,
-        args.run_from_launch_dir,
-        (args.save_hostlist or args.verbose),
+        args.dry_run,
+        args.launch_dir != None and (args.save_hostlist or args.verbose),
     )
 
     if jobid:
-        logger.info(f"Job ID: {jobid}")
-
+        msg = f"Job ID: {jobid} launched from {folder_name}"
+        logger.info(msg)
+        if not args.verbose:
+            print(msg)
 
 if __name__ == "__main__":
     main()

@@ -23,17 +23,17 @@ from hpc_launcher.schedulers.lsf import LSFScheduler
 from hpc_launcher.systems import autodetect, configure
 from hpc_launcher.systems.lc.sierra_family import Sierra
 
-
-@pytest.mark.parametrize("no_launch_dir", [False, True])
-def test_output_capture_local(no_launch_dir: bool):
+@pytest.mark.parametrize("launch_dir", ["", "."])
+def test_output_capture_local(launch_dir: bool):
     # Configure scheduler
     system, nodes, procs_per_node, gpus_per_proc = configure.configure_launch(None, 1, 1, 1, None, None)
     scheduler = LocalScheduler(nodes, procs_per_node, gpus_per_proc)
 
     command = sys.executable
     script = "output_capture.py"
+    # Set the request for the launch dir to the empty string to use a auto-generated folder
     _, launch_dir = scheduler.create_launch_folder_name(
-        command, "launch", no_launch_dir
+        command, "launch", ""
     )
 
     script_file = scheduler.create_launch_folder(launch_dir, True)
@@ -52,7 +52,7 @@ def test_output_capture_local(no_launch_dir: bool):
     assert os.path.isfile(os.path.join(launch_dir, "err.log"))
     assert open(os.path.join(launch_dir, "out.log"), "r").read() == "output\n"
     assert open(os.path.join(launch_dir, "err.log"), "r").read() == "error\n"
-    if not no_launch_dir:
+    if launch_dir != "" or launch_dir != ".":
         shutil.rmtree(launch_dir, ignore_errors=True)
     else:
         os.unlink(f"{launch_dir}/out.log")
@@ -73,17 +73,31 @@ def test_output_capture_scheduler(scheduler_class, processes):
     ):
         pytest.skip("FLUX not available")
 
+    if scheduler_class is SlurmScheduler and (
+        shutil.which("flux") and os.path.exists("/run/flux/local")
+    ):
+        pytest.skip("Emulated SLURM on FLUX system - don't test - output redirect is bad")
+
     if scheduler_class is LSFScheduler and not shutil.which("jsrun"):
         pytest.skip("LSF not available")
+
+    if scheduler_class is SlurmScheduler and (
+        shutil.which("jsrun")
+    ):
+        pytest.skip("Emulated SLURM on LSF system - don't test - output redirect is bad")
 
     # Configure scheduler
     system, nodes, procs_per_node, gpus_per_proc = configure.configure_launch(
         None, 1, processes, 1, None, None
     )
     scheduler = scheduler_class(nodes, procs_per_node, gpus_per_proc)
+    # Reset class
+    scheduler.submit_only_args.clear()
+    scheduler.run_only_args.clear()
+    scheduler.common_launch_args.clear()
 
     command = sys.executable
-    _, launch_dir = scheduler.create_launch_folder_name(command, "launch")
+    _, launch_dir = scheduler.create_launch_folder_name(command, "launch", "")
 
     script_file = scheduler.create_launch_folder(launch_dir, True)
 

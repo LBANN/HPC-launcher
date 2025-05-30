@@ -23,6 +23,8 @@ from hpc_launcher.schedulers.flux import FluxScheduler
 from hpc_launcher.schedulers.slurm import SlurmScheduler
 from hpc_launcher.schedulers.lsf import LSFScheduler
 
+import re
+
 # Instantiate a system
 
 # Get an mock el cap system
@@ -47,6 +49,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize("gpus_per_proc", [1])
 @pytest.mark.parametrize("blocking", [True, False])
 @pytest.mark.parametrize("select_scheduler", ["slurm", "flux", "lsf"])
+
 @pytest.mark.parametrize("override_launch_args", (OrderedDict([("-ofastload", "off")]),
                                                   OrderedDict([("-ompibind", "off")]),
                                                   OrderedDict([("~--exclusive", None)]),
@@ -55,7 +58,8 @@ logger = logging.getLogger(__name__)
                                                   OrderedDict([("-ofastload", "off"),
                                                                ("-ompibind", "off"),
                                                                ("~--exclusive", None)])))
-def test_cli_argument_override(sys: MagicMock, env: MagicMock, nodes, procs_per_node, gpus_per_proc, blocking, select_scheduler, override_launch_args:OrderedDict[str, str], *xargs):
+@pytest.mark.parametrize("cli_env_only", [True, False])
+def test_cli_argument_override(sys: MagicMock, env: MagicMock, nodes, procs_per_node, gpus_per_proc, blocking, select_scheduler, override_launch_args:OrderedDict[str, str], cli_env_only, *xargs):
     system = autodetect.autodetect_current_system()
     scheduler_keys = get_schedulers()
     scheduler_class = scheduler_keys[select_scheduler]
@@ -72,7 +76,7 @@ def test_cli_argument_override(sys: MagicMock, env: MagicMock, nodes, procs_per_
     scheduler.override_launch_args = None
     scheduler.override_launch_args = override_launch_args
 
-    cmd = scheduler.launch_command(system, blocking)
+    cmd = scheduler.launch_command(system, blocking, cli_env_only)
     assert len(override_launch_args.items()) > 0
     for k,v in override_launch_args.items():
         if "~" in k:
@@ -89,32 +93,38 @@ def test_cli_argument_override(sys: MagicMock, env: MagicMock, nodes, procs_per_
                 assert f"{k}={v}" in cmd
 
     if type(scheduler) is SlurmScheduler and blocking:
-        assert "--export=ALL,foo=bar,baz=deadbeef" in cmd
+        for c in cmd:
+            if c.startswith("--export"):
+                pattern = r'--export=ALL,.*foo=bar,baz=deadbeef'
+                assert re.search(pattern, c)
     if type(scheduler) is FluxScheduler and blocking:
         assert '--env=foo=bar' in cmd
         assert '--env=baz=deadbeef' in cmd
     if type(scheduler) is LSFScheduler and blocking:
-        assert '--env "ALL, foo=bar, baz=deadbeef"' in cmd
+        for c in cmd:
+            if c.startswith("--env"):
+                pattern = r'--env "ALL,.*foo=bar, baz=deadbeef"'
+                assert re.search(pattern, c)
 
     print(f"Overriden command line: {cmd}")
 
 if __name__ == "__main__":
     test_cli_argument_override(MagicMock(), MagicMock(), 2, 2, 1, False, "slurm",
-                               OrderedDict([("-ofastload", "off")]))
+                               OrderedDict([("-ofastload", "off")]), False)
     test_cli_argument_override(MagicMock(), MagicMock(), 2, 2, 1, False, "flux",
-                               OrderedDict([("-ompibind", "off")]))
+                               OrderedDict([("-ompibind", "off")]), False)
     test_cli_argument_override(MagicMock(), MagicMock(), 2, 2, 1, False, "slurm",
-                               OrderedDict([("~--exclusive", None)]))
+                               OrderedDict([("~--exclusive", None)]), False)
     test_cli_argument_override(MagicMock(), MagicMock(), 2, 2, 1, False, "flux",
                                OrderedDict([("-ofastload", "off"),
-                                            ("-ompibind", "off")]))
+                                            ("-ompibind", "off")]), False)
     test_cli_argument_override(MagicMock(), MagicMock(), 2, 2, 1, False, "slurm",
                                OrderedDict([("-ofastload", "off"),
                                             ("-ompibind", "off"),
-                                            ("~--exclusive", None)]))
+                                            ("~--exclusive", None)]), False)
     test_cli_argument_override(MagicMock(), MagicMock(), 2, 2, 1, True, "slurm",
-                               OrderedDict([("-ofastload", "off")]))
+                               OrderedDict([("-ofastload", "off")]), False)
     test_cli_argument_override(MagicMock(), MagicMock(), 2, 2, 1, True, "lsf",
-                               OrderedDict([("-ofastload", "off")]))
+                               OrderedDict([("-ofastload", "off")]), False)
 
 

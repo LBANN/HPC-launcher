@@ -101,9 +101,16 @@ class FluxScheduler(Scheduler):
     def nonblocking_launch_command(self) -> list[str]:
         return ["flux", "batch"]
 
-    def cli_passthrough_env_arg(self, passthrough_env_vars) -> None:
-        for k, v in passthrough_env_vars:
-            self.submit_only_args[f"--env={k}"] = f"{v}"
+    def cli_env_arg(self, env_list) -> None:
+        for e in env_list:
+            if len(e) == 1:
+                continue
+            elif len(e) == 2:
+                k,v = e
+                self.submit_only_args[f"--env={k}"] = f"{v}"
+            elif len(e) == 3:
+                k,v,m = e
+                self.submit_only_args[f"--env={k}"] = f"{v}"
         return
 
     def export_hostlist(self) -> str:

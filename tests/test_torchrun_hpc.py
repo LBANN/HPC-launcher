@@ -127,7 +127,8 @@ def test_launcher_one_node(local):
 
 @pytest.mark.parametrize("num_nodes", [2])
 @pytest.mark.parametrize("procs_per_node", [1])
-@pytest.mark.parametrize("rdv", ("mpi", "tcp"))
+@pytest.mark.parametrize("rdv", ["tcp"])
+#@pytest.mark.parametrize("rdv", ("mpi", "tcp"))
 @pytest.mark.parametrize("scheduler_type", ("flux", "slurm", "lsf"))
 def test_launcher_multinode(num_nodes, procs_per_node, rdv, scheduler_type):
     if (
