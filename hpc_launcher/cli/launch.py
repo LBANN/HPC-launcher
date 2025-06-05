@@ -28,7 +28,10 @@ def main():
     common_args.setup_arguments(parser)
 
     # Grab the rest of the command line to launch
-    parser.add_argument("command", help="Command to be executed")
+    parser.add_argument("command",
+                        nargs='?',
+                        default=None,
+                        help="Command to be executed")
     parser.add_argument(
         "args",
         nargs=argparse.REMAINDER,
@@ -47,17 +50,21 @@ def main():
 
     folder_name = None
     script_file = None
+    if args.output_script:
+        script_file = args.output_script
+    elif args.batch_script:
+        script_file = args.batch_script
     if args.bg and args.launch_dir is None: # or args.batch_script
         # If running a batch job with no launch directory argument,
         # run in the generated timestamped directory
         args.launch_dir = ""
     if args.launch_dir is not None:
         _, folder_name = scheduler.create_launch_folder_name(
-            args.command, "launch", args.launch_dir
+            args.command or args.batch_script.rsplit('.', 1)[0], "launch", args.launch_dir
         )
 
         script_file = scheduler.create_launch_folder(
-            folder_name, not args.bg, args.output_script, args.dry_run
+            folder_name, not args.bg, script_file, args.dry_run
         )
 
     jobid = scheduler.launch(
@@ -72,6 +79,7 @@ def main():
         args.color_stderr,
         args.dry_run,
         args.launch_dir != None and (args.save_hostlist or args.verbose),
+        args.batch_script != "", # If a batch script is provided don't allow it to be modified
     )
 
     if jobid:
