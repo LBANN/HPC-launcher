@@ -284,13 +284,15 @@ def validate_arguments(args: argparse.Namespace):
     # 3. The user specifies a minimum number of GPUs
     # 4. The user specifies a minimum amount of GPU memory
 
-    if not args.command and not args.batch_script:
-        raise ValueError(
-            "Either a command or a batch script has to be provided"
-        )
+    args_dict = vars(args)
+    if args_dict.get('command') is not None:
+        if not args.command and not args.batch_script:
+            raise ValueError(
+                "Either a command or a batch script has to be provided"
+            )
 
-    if args.batch_script and args.command:
-        raise ValueError(f"A pre-generated batch script file name was provided and an explicit command {args.command} - invalid combination.")
+        if args.batch_script and args.command:
+            raise ValueError(f"A pre-generated batch script file name was provided and an explicit command {args.command} - invalid combination.")
 
     # TODO(later): Convert some mutual exclusive behavior to constraints on
     #              number of nodes/ranks
