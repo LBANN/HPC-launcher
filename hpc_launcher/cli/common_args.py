@@ -334,8 +334,8 @@ def validate_arguments(args: argparse.Namespace):
     if args.output_script and args.batch_script:
         raise ValueError("Cannot specify both an output script name: {args.output_script} and a pre-generated batch script {args.batch_script}.")
 
-    if args.batch_script and args.launch_dir == None and not args.bg:
-        raise ValueError(f"A pre-generated batch script file name was provided for a ephemeral interative job.")
+    # if args.batch_script and args.launch_dir == None and not args.bg:
+    #     raise ValueError(f"A pre-generated batch script file name was provided for a ephemeral interative job.")
 
     if args.batch_script and not os.path.exists(args.batch_script):
         raise ValueError(f"A pre-generated batch script file name was provided but the file does not exist.")
