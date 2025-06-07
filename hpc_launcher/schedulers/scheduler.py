@@ -20,6 +20,7 @@ import sys
 import time
 import tempfile
 import subprocess
+import shutil
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
 from hpc_launcher.schedulers import parse_env_list
 
@@ -93,8 +94,8 @@ class Scheduler:
         This script usually performs node/resource allocation and manages I/O.
 
         :param system: The system to use.
-        :param blocking:
-        :param cli_env_only:
+        :param blocking: Is the job interactive of blocking
+        :param cli_env_only: Append environment variables to CLI not a launch script
         :return: A tuple of (shell script as a string, list of command-line arguments).
         """
         env_vars = system.environment_variables()
@@ -437,6 +438,8 @@ class Scheduler:
         :return: A tuple of strings with the the command as a possible folder name, and the folder name.
         """
         # Remove spaces and semi-colons from the command sequence
+        # command_as_folder_name = "batch_script"
+        # if command:
         command_as_folder_name = (
             os.path.basename(command).replace(" ", "_").replace(";", "-")
         )
@@ -470,17 +473,27 @@ class Scheduler:
         """
 
         should_make_folder = folder_name != None
+        copy_script_to_filename = False
 
         # Create a temporary file or a script file, if given
         if script_file is not None:
-            if os.path.dirname(script_file) and not dry_run:
-                os.makedirs(os.path.dirname(script_file), exist_ok=True)
+            if os.path.exists(script_file):
+                # A batch file was provided
+                filename = os.path.abspath(os.path.join(folder_name, os.path.basename(script_file)))
+                # Plan to copy provided file into the launch directory
+                copy_script_to_filename = True
+            else:
+                # Create a new batch file with the provided name
+                if os.path.dirname(script_file) and not dry_run:
+                    msg = f"Unsupported script_file {script_file} - cannot be a full path"
+                    raise Exception(msg)
+                else:
+                    filename = os.path.abspath(os.path.join(folder_name, script_file))
 
             # Warn if this file exists
-            if os.path.exists(script_file):
-                logger.warning(f"Overwriting existing file {script_file}")
+            if os.path.exists(filename):
+                logger.warning(f"Overwriting existing file {filename}")
 
-            filename = os.path.abspath(script_file)
         else:
             filename = os.path.abspath(os.path.join(folder_name, "launch.sh"))
 
@@ -501,6 +514,8 @@ class Scheduler:
         stub_file = ""
         if should_make_folder and not dry_run:
             os.makedirs(folder_name, exist_ok=True)
+            if copy_script_to_filename:
+                shutil.copy(script_file, filename)
 
         return filename
 
@@ -517,6 +532,7 @@ class Scheduler:
         color_stderr: bool = False,
         dry_run: bool = False,
         save_hostlist: bool = False,
+        immutable_launch_script: bool = False,
     ) -> str:
         """
         Launches the given command and arguments uaing this launcher.
@@ -532,6 +548,7 @@ class Scheduler:
         :param color_stderr: If True, colors stderr terminal outputs in red.
         :param run_from_launch_dir: If True, runs the command from the launch directory.
         :params save_hostlist: Add local scripting to capture the list of hosts the command is launched on
+        :params immutable_launch_script: It True, do not modify the script and put any system env arguments on the CLI command
         :return: The queued job ID as a string.
         """
 
@@ -547,11 +564,12 @@ class Scheduler:
             #     command = os.path.abspath(shutil.which(command))
 
         # If the command exists as a file, use its absolute path
-        if os.path.isfile(command):
+        if command and os.path.isfile(command):
             command = os.path.abspath(command)
 
         use_launch_folder = folder_name or filename
-        cmd = self.launch_command(system, blocking, not use_launch_folder)
+        cmd = self.launch_command(system, blocking, not use_launch_folder or immutable_launch_script)
+
         if not use_launch_folder: # Launch job and trace outputs live
             # Run interactive script
             full_cmdline = cmd + [command]
@@ -573,7 +591,7 @@ class Scheduler:
         else:
             full_cmdline = cmd + [filename]
             logger.info(f"Script filename: {filename}")
-            if not dry_run:
+            if not dry_run and not immutable_launch_script:
                 with open(filename, "w") as fp:
                     fp.write(
                         self.launcher_script(system, command, args, blocking, save_hostlist, os.path.dirname(filename))

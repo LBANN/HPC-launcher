@@ -53,6 +53,7 @@ def main():
     )
 
     # Grab the rest of the command line to launch
+    # torchrun-hpc does not support running with a pre-generated batch script file
     parser.add_argument("command", help="Command to be executed")
     parser.add_argument(
         "args",

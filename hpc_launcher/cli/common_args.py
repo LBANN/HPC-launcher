@@ -20,6 +20,7 @@ from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.systems.system import System, GenericSystem
 from hpc_launcher.systems import autodetect, configure
 import logging
+import os
 
 from dataclasses import fields
 
@@ -153,6 +154,13 @@ def setup_arguments(parser: argparse.ArgumentParser):
     )
 
     group.add_argument(
+        "--batch-script",
+        type=str,
+        default="",
+        help="Launch a user provided batch script",
+    )
+
+    group.add_argument(
         "--scheduler",
         type=str,
         default=None,
@@ -276,6 +284,16 @@ def validate_arguments(args: argparse.Namespace):
     # 3. The user specifies a minimum number of GPUs
     # 4. The user specifies a minimum amount of GPU memory
 
+    args_dict = vars(args)
+    if args_dict.get('command') is not None:
+        if not args.command and not args.batch_script:
+            raise ValueError(
+                "Either a command or a batch script has to be provided"
+            )
+
+        if args.batch_script and args.command:
+            raise ValueError(f"A pre-generated batch script file name was provided and an explicit command {args.command} - invalid combination.")
+
     # TODO(later): Convert some mutual exclusive behavior to constraints on
     #              number of nodes/ranks
     if not args.nodes and not args.gpus_at_least and not args.gpumem_at_least:
@@ -307,6 +325,19 @@ def validate_arguments(args: argparse.Namespace):
     if args.local and args.scheduler:
         raise ValueError("The --local and --scheduler flags are mutually " "exclusive")
 
+    if args.output_script:
+        output_script = args.output_script
+        if os.path.dirname(output_script):
+            raise ValueError(f"User provided output script filename cannot be a absolute or relative path: {output_script}")
+
+    if args.output_script and not args.launch_dir and not args.bg:
+        raise ValueError("A output script file name was provided for a ephemeral interative job.")
+
+    if args.output_script and args.batch_script:
+        raise ValueError("Cannot specify both an output script name: {args.output_script} and a pre-generated batch script {args.batch_script}.")
+
+    if args.batch_script and not os.path.exists(args.batch_script):
+        raise ValueError(f"A pre-generated batch script file name was provided but the file does not exist.")
 
 # See if the system can be autodetected and then process some special arguments
 # that can autoselect the number of ranks / GPUs
