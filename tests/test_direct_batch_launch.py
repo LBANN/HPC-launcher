@@ -34,9 +34,9 @@ def check_num_lines(stdout_buffer, num_ranks):
 
 def check_num_hosts(stdout_buffer, num_ranks):
         hostname = socket.gethostname()
-        if not re.search(r'[A-Za-z]+\d+', hostname): # Check to see if this is a standard hostnameXXXX style
+        if not re.search(r'^[A-Za-z]+\d+$', hostname): # Check to see if this is a standard hostnameXXXX style
             return
-
+        
         host = re.sub(r'\d+', '', hostname)
         regex = re.compile(
             ".*({}\\d+).*".format(host),
