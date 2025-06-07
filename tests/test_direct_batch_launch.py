@@ -25,12 +25,21 @@ from hpc_launcher.systems import autodetect
 from hpc_launcher.systems.lc.sierra_family import Sierra
 from hpc_launcher.schedulers import get_schedulers
 
+def check_num_lines(stdout_buffer, num_ranks):
+    count = sum(1 for line in stdout_buffer.splitlines() if line.strip())
+    assert (
+        count == num_ranks
+    ), f"Incorrect number of ranks reported, required {num_ranks} -- matched: {count}"
+
 
 def check_num_hosts(stdout_buffer, num_ranks):
         hostname = socket.gethostname()
+        if not re.search(r'\S+\d+', hostname): # Check to see if this is a standard hostnameXXXX style
+            return
+
         host = re.sub(r'\d+', '', hostname)
         regex = re.compile(
-            ".*({}\d+).*".format(host),
+            ".*({}\\d+).*".format(host),
             re.MULTILINE,
         )
         matches = regex.findall(stdout_buffer)
@@ -64,12 +73,13 @@ def test_launcher_one_node(local):
         driver_file,
     ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
+    check_num_lines(proc.stdout, 1)
+    check_num_hosts(proc.stdout, 1)
     exp_dir = None
     m = re.search(r"^.*Script filename: (\S+)$", proc.stderr, re.MULTILINE | re.DOTALL)
     if m:
         script = m.group(1)
         exp_dir = os.path.dirname(script)
-        check_num_hosts(proc.stdout, 1)
     else:
         assert False, f"Unable to find expected launch directory"
 
@@ -113,12 +123,13 @@ def test_launcher_multinode(num_nodes, procs_per_node, scheduler_type):
         driver_file,
     ]
     proc = subprocess.run(cmd, universal_newlines=True, capture_output=True)
+    check_num_lines(proc.stdout, num_nodes)
+    check_num_hosts(proc.stdout, num_nodes)
     exp_dir = None
     m = re.search(r"^.*Script filename: (\S+)$", proc.stderr, re.MULTILINE | re.DOTALL)
     if m:
         script = m.group(1)
         exp_dir = os.path.dirname(script)
-        check_num_hosts(proc.stdout, num_nodes)
     else:
         assert False, f"Unable to find expected launch directory: {proc.stderr}"
 
@@ -126,7 +137,8 @@ def test_launcher_multinode(num_nodes, procs_per_node, scheduler_type):
         shutil.rmtree(exp_dir, ignore_errors=True)
 
 if __name__ == "__main__":
-    test_launcher_one_node(False)    
+    test_launcher_one_node(True)
+    test_launcher_one_node(False)
     test_launcher_multinode(2, 1, "slurm")
     test_launcher_multinode(2, 1, "flux")
     test_launcher_multinode(2, 1, "lsf")
