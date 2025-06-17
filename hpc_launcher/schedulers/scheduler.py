@@ -573,6 +573,10 @@ class Scheduler:
         if not use_launch_folder: # Launch job and trace outputs live
             # Run interactive script
             full_cmdline = cmd + [command]
+
+            for arg in args:
+                full_cmdline += [arg]
+
             if setup_only:
                 logger.warning(f'To launch, run: {" ".join(full_cmdline)}')
                 return ""
