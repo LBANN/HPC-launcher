@@ -73,7 +73,16 @@ class FluxScheduler(Scheduler):
             self.common_launch_args['--env=LD_PRELOAD'] = f'{",".join(self.ld_preloads)}'
 
         if self.time_limit is not None:
-            self.common_launch_args["--time"] = f"{self.time_limit}m"
+            if blocking:
+                self.common_launch_args["--time"] = f"{self.time_limit}m"
+            else:
+                self.submit_only_args["--time"] = f"{self.time_limit}m"
+
+        dependency = self.common_launch_args.get('--dependency', None)
+        if dependency and not blocking:
+            del self.common_launch_args['--dependency']
+            del self.override_launch_args['--dependency']
+            self.submit_only_args["--dependency"] = dependency
 
         if self.job_name:
             self.common_launch_args["--job-name"] = f"{self.job_name}"
