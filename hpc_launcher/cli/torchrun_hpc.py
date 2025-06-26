@@ -52,6 +52,16 @@ def main():
         "to limit how much GPU memory can be allocated.",
     )
 
+    parser.add_argument(
+        "-u",
+        "--unswap-rocr-hip-vis-dev",
+        action="store_true",
+        default=False,
+        help="Undo moving ROCR_VISIBLE_DEVICES into the HIP_VISIBLE_DEVICES env variable. "
+        "In PyTorch codes HIP_VISIBLE_DEVICES is most similar to CUDA_VISIBLE_DEVICES. "
+        "Ensureing that HIP vs ROCR can improve behavior of HF Accelerate and TorchTitan.",
+    )
+
     # Grab the rest of the command line to launch
     # torchrun-hpc does not support running with a pre-generated batch script file
     parser.add_argument("command", help="Command to be executed")
@@ -104,6 +114,9 @@ def main():
                     system.active_system_params.fraction_max_gpu_mem,
                 )
             )
+
+    if args.unswap_rocr_hip_vis_dev:
+        env_list.append(("TORCHRUN_HPC_UNSWAP_ROCR_HIP_VIS_DEV", "TRUE"))
 
     system.extend_environment_variables(env_list)
 
