@@ -13,6 +13,24 @@
 # SPDX-License-Identifier: (Apache-2.0)
 from psutil import Process
 import inspect
+import os
+
+# Optionally explicitly override HIP_VISIBLE_DEVICES with ROCR_VISIBLE_DEVICES before torch is imported
+# ROCR_VISIBLE_DEVICES - controls which GPUs a process can see
+# HIP_VISIBLE_DEVICES - controls which GPUs a process can use
+# PyTorch - behaves better when it can see all of the devices on a node, but knows which it should use
+unswap_rocr_hip_vis_dev_env = os.getenv("TORCHRUN_HPC_UNSWAP_ROCR_HIP_VIS_DEV", "False")
+# Convert to boolean
+unswap_rocr_hip_vis_dev = False
+if unswap_rocr_hip_vis_dev_env.lower() in ("true", "1", "yes", "on"):
+    unswap_rocr_hip_vis_dev = True
+
+if os.getenv("ROCR_VISIBLE_DEVICES") and not unswap_rocr_hip_vis_dev:
+    if os.getenv("HIP_VISIBLE_DEVICES"):
+        print(f'WARNING: overwriting HIP_VISIBLE_DEVICES {os.getenv("HIP_VISIBLE_DEVICES")} with ROCR_VISIBLE_DEVICES {os.getenv("ROCR_VISIBLE_DEVICES")}')
+
+    os.environ["HIP_VISIBLE_DEVICES"] = os.getenv("ROCR_VISIBLE_DEVICES")
+    del os.environ["ROCR_VISIBLE_DEVICES"]
 
 affinity = None
 if hasattr(Process, "cpu_affinity") and inspect.isfunction(Process.cpu_affinity):
