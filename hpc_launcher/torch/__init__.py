@@ -27,7 +27,7 @@ if unswap_rocr_hip_vis_dev_env.lower() in ("true", "1", "yes", "on"):
 
 if os.getenv("ROCR_VISIBLE_DEVICES") and not unswap_rocr_hip_vis_dev:
     if os.getenv("HIP_VISIBLE_DEVICES"):
-        print(f'WARNING: overwritting HIP_VISIBLE_DEICES {os.getenv("HIP_VISIBLE_DEVICES")} with ROCR_VISIBLE_DEVICES {os.getenv("ROCR_VISIBLE_DEVICES")}')
+        print(f'WARNING: overwriting HIP_VISIBLE_DEVICES {os.getenv("HIP_VISIBLE_DEVICES")} with ROCR_VISIBLE_DEVICES {os.getenv("ROCR_VISIBLE_DEVICES")}')
 
     os.environ["HIP_VISIBLE_DEVICES"] = os.getenv("ROCR_VISIBLE_DEVICES")
     del os.environ["ROCR_VISIBLE_DEVICES"]
