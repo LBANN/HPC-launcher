@@ -66,7 +66,7 @@ class Scheduler:
     account: Optional[str] = None
     # The reservation to use for the scheduler
     reservation: Optional[str] = None
-    # Time limit (in minutes), default is no limit
+    # Dependency str
     dependency: Optional[str] = None
     # Hijack preload commands into a scheduler
     ld_preloads: Optional[list[str]] = None
