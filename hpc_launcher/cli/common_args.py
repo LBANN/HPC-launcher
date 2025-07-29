@@ -113,6 +113,13 @@ def setup_arguments(parser: argparse.ArgumentParser):
     )
 
     group.add_argument(
+        "--exclusive",
+        action="store_true",
+        default=False,
+        help="Request exclusive access from the scheduler",
+    )
+
+    group.add_argument(
         "--local",
         action="store_true",
         default=False,

@@ -70,6 +70,10 @@ class SlurmScheduler(Scheduler):
         if self.gpus_per_proc > 0:
             self.common_launch_args["--gpus-per-task"] = f"{self.gpus_per_proc}"
 
+        # Request for node exclusivity
+        if self.exclusive:
+            self.submit_only_args["--exclusive"] = ""
+
         if self.work_dir:
             self.submit_only_args["--chdir"] = f"{os.path.abspath(self.work_dir)}"
 

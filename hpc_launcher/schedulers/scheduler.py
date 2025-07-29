@@ -48,6 +48,8 @@ class Scheduler:
     procs_per_node: int
     # GPUs per Process (or task) if any
     gpus_per_proc: int
+    # Request exclusive access to the resources
+    exclusive: Optional[bool] = None
     # Job name
     job_name: Optional[str] = None
     # Working directory (by default, uses current working directory)

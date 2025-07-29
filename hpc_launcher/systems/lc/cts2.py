@@ -57,6 +57,13 @@ class CTS2(System):
 
         return env_list
 
+    def customize_scheduler(self, scheduler):
+        if type(scheduler) is SlurmScheduler:
+            scheduler.common_launch_args["--mpibind"] = "off"
+            scheduler.common_launch_args["--gpu-bind"] = "none"
+
+        return
+
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
         return SlurmScheduler
