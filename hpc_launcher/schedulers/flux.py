@@ -60,6 +60,10 @@ class FluxScheduler(Scheduler):
             if not blocking:
                 self.submit_only_args["--gpus-per-slot"] = tmp
 
+        # Request for node exclusivity
+        if self.exclusive:
+            self.submit_only_args["--exclusive"] = ""
+
         if self.work_dir:
             self.submit_only_args["--setattr=system.cwd"] = f"{os.path.abspath(self.work_dir)}"
 
