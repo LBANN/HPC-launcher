@@ -66,6 +66,8 @@ class Scheduler:
     account: Optional[str] = None
     # The reservation to use for the scheduler
     reservation: Optional[str] = None
+    # Dependency str
+    dependency: Optional[str] = None
     # Hijack preload commands into a scheduler
     ld_preloads: Optional[list[str]] = None
     # Capture the original command so that it can be added to the launch script
@@ -88,6 +90,7 @@ class Scheduler:
 
     def build_command_string_and_batch_script(
             self, system: "System", blocking: bool = True, cli_env_only: bool = False,
+            for_launch_cmd: bool = True,
     ) -> (str, list[str]):
         """
         Returns the strings used for a launch command as well as a batch script
@@ -98,6 +101,7 @@ class Scheduler:
         :param system: The system to use.
         :param blocking: Is the job interactive of blocking
         :param cli_env_only: Append environment variables to CLI not a launch script
+        :param for_launch_cmd:  Some args should not be in both the header and launch cmnd. Ex: flux --dependency=afterany:XXX
         :return: A tuple of (shell script as a string, list of command-line arguments).
         """
         env_vars = system.environment_variables()
@@ -149,11 +153,15 @@ class Scheduler:
         if not blocking: # Only add batch script header items on non-blocking calls
             prefix = self.batch_script_prefix()
             for k,v in self.submit_only_args.items():
+                if not for_launch_cmd and k == '--dependency':
+                    continue
                 if not v:
                     header.write(f"{prefix} {k}\n")
                 else:
                     header.write(f"{prefix} {k}={v}\n")
             for k,v in self.common_launch_args.items():
+                if not for_launch_cmd and k == '--dependency':
+                    continue
                 if not v:
                     header.write(f"{prefix} {k}\n")
                 else:
@@ -300,7 +308,7 @@ class Scheduler:
         script = ""
         # Launch command only use the cmd_args to construct the shell script to be launched
         (header_lines, cmd_args) = self.build_command_string_and_batch_script(
-            system, blocking, False,
+            system, blocking, False, for_launch_cmd=False
         )
         # For batch jobs add any common args to the internal command
         if not blocking:

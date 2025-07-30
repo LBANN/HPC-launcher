@@ -91,6 +91,14 @@ def setup_arguments(parser: argparse.ArgumentParser):
 
     group.add_argument("-q", "--queue", default=None, help="Specifies the queue to use")
 
+    group.add_argument(
+        "-t",
+        "--time-limit",
+        type=int,
+        default=None,
+        help="Set a time limit for the job in minutes",
+    )
+
     # Constraints
     group.add_argument(
         "-g",
@@ -223,6 +231,19 @@ def setup_arguments(parser: argparse.ArgumentParser):
         "--account",
         default=None,
         help="Specify the account (or bank) to use fo the job",
+    )
+
+    group.add_argument(
+        "--dependency",
+        default=None,
+        help="Specify a scheduler dependency of the submitted job.",
+    )
+
+    group.add_argument(
+        "-J",
+        "--job-name",
+        default=None,
+        help="Specify a name to use fo the job",
     )
 
     group.add_argument(
