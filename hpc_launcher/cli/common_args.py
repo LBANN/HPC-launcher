@@ -240,6 +240,13 @@ def setup_arguments(parser: argparse.ArgumentParser):
     )
 
     group.add_argument(
+        "-J",
+        "--job-name",
+        default=None,
+        help="Specify a name to use fo the job",
+    )
+
+    group.add_argument(
         "--reservation",
         default=None,
         help="Add a reservation arguement to scheduler.  "
