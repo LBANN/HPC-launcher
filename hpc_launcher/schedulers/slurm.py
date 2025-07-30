@@ -83,6 +83,23 @@ class SlurmScheduler(Scheduler):
         if self.time_limit is not None:
             self.common_launch_args["--time"] = f"{_time_string(self.time_limit)}"
 
+        if self.dependency is not None:
+            self.common_launch_args["--dependency"] = f"{self.dependency}"
+        dependency = self.common_launch_args.get('--dependency', None)
+        if self.override_launch_args and self.override_launch_args.get('--dependency', None):
+            dependency = self.override_launch_args['--dependency']
+        if dependency and not blocking:
+            try:
+                del self.common_launch_args['--dependency']
+            except KeyError:
+                pass
+            try:
+                if self.override_launch_args:
+                    del self.override_launch_args['--dependency']
+            except KeyError:
+                pass
+            self.submit_only_args["--dependency"] = dependency
+
         if self.job_name:
             self.common_launch_args["--job-name"] = f"{self.job_name}"
 

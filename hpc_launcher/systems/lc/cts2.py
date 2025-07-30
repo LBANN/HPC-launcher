@@ -59,8 +59,8 @@ class CTS2(System):
 
     def customize_scheduler(self, scheduler):
         if self.system_name == "matrix" and type(scheduler) is SlurmScheduler:
-            scheduler.common_launch_args["--mpibind"] = "off"
-            scheduler.common_launch_args["--gpu-bind"] = "none"
+            scheduler.run_only_args["--mpibind"] = "off"
+            scheduler.run_only_args["--gpu-bind"] = "none"
 
         return
 
