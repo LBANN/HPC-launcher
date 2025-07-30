@@ -78,10 +78,21 @@ class FluxScheduler(Scheduler):
             else:
                 self.submit_only_args["--time"] = f"{self.time_limit}m"
 
+        if self.dependency is not None:
+            self.common_launch_args["--dependency"] = f"{self.dependency}"
         dependency = self.common_launch_args.get('--dependency', None)
+        if self.override_launch_args and self.override_launch_args.get('--dependency', None):
+            dependency = self.override_launch_args['--dependency']
         if dependency and not blocking:
-            del self.common_launch_args['--dependency']
-            del self.override_launch_args['--dependency']
+            try:
+                del self.common_launch_args['--dependency']
+            except KeyError:
+                pass
+            try:
+                if self.override_launch_args:
+                    del self.override_launch_args['--dependency']
+            except KeyError:
+                pass
             self.submit_only_args["--dependency"] = dependency
 
         if self.job_name:
