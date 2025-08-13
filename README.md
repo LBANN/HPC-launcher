@@ -1,13 +1,20 @@
 # HPC-launcher Repository
 
 The HPC launcher repository contains a set of helpful scripts and
-Python bindings for launching LBANN 2.0 (PyTorch-core) on multiple
-leadership-class HPC systems.  There are optimized routines for FLUX,
-SLURM, and LSF launchers.  Currently there are supported systems at:
+Python bindings for launching PyTorch (torchrun), LBANN 2.0
+(PyTorch-core), or generic scripts on multiple leadership-class HPC
+systems.  There are optimized routines for FLUX, SLURM, and LSF
+launchers.  Additionally, there are optimized environments for systems
+at known compute centers.  Currently there are supported systems at:
  - LLNL Livermore Computing (LC)
  - LBL NERSC (Pending)
  - ORNL OLCF (Pending)
  - RIKEN (Pending)
+
+There are two main entry points into HPC-Launcher from the cli:
+`launch` and `torchrun-hpc`.  `torchrun-hpc` is intended as a
+replacement for `torchrun`, while `launch` is a generic interface for
+launching parallel jobs.
 
 ## Example Usage
 

@@ -1,6 +1,6 @@
-# Contributing Guidelines for LBANN
+# Contributing Guidelines for HPC-Launcher
 
-We welcome any contributions to LBANN in the form of Pull Requests.
+We welcome any contributions to HPC-Launcher and LBANN in the form of Pull Requests.
 Please follow the guidelines below for more information.
 
 ## Attribution
