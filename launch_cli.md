@@ -141,10 +141,10 @@ Control output and error logging.
 launch -N 1 -n 1 hostname
 
 # Multi-node MPI job
-launch -N 4 -n 8 ./mpi_application
+launch -N 4 -n 2 ./mpi_application
 
 # GPU job with 2 GPUs per process
-launch -N 2 -n 4 --gpus-per-proc 2 ./gpu_application
+launch -N 2 -n 2 --gpus-per-proc 2 ./gpu_application
 ```
 
 ### Resource Specification Examples

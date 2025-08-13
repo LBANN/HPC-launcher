@@ -156,8 +156,8 @@ Control output and error logging.
 # Single node, 4 GPUs
 torchrun-hpc -N 1 -n 4 train.py --epochs 100
 
-# Multi-node training (2 nodes, 8 GPUs each)
-torchrun-hpc -N 2 -n 8 train.py --batch-size 256
+# Multi-node training (2 nodes, 4 GPUs each)
+torchrun-hpc -N 2 -n 4 train.py --batch-size 256
 
 # Local testing without scheduler
 torchrun-hpc --local -n 2 test_script.py
