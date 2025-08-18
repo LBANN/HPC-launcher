@@ -107,7 +107,7 @@ class FluxScheduler(Scheduler):
                 self.submit_only_args["--queue"] = f"{self.queue}"
 
         if self.account:
-            self.submit_only_args["--account"] = f"{self.account}"
+            self.submit_only_args["--bank"] = f"{self.account}"
 
         if self.reservation:
             logger.warning(
