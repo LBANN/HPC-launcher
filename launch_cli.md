@@ -153,8 +153,8 @@ launch -N 2 -n 2 --gpus-per-proc 2 ./gpu_application
 # Request specific number of GPUs total
 launch -g 16 ./gpu_application
 
-# Request nodes with at least 80GB GPU memory
-launch --gpumem-at-least 80 -n 4 ./memory_intensive_app
+# Request allocation with at least 80GB GPU memory
+launch --gpumem-at-least 80 ./memory_intensive_app
 
 # Exclusive node access
 launch -N 2 --exclusive ./exclusive_app
