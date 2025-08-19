@@ -205,7 +205,7 @@ launch -l . -N 2 ./my_job
 launch --setup-only -l -o job_script.sh -N 4 ./my_application
 
 # Dry run to see what would be executed
-launch --dry-run -N 4 -n 8 ./my_application
+launch --dry-run -N 4 -n 4 ./my_application
 ```
 
 ### System Override Examples
@@ -215,7 +215,7 @@ launch --dry-run -N 4 -n 8 ./my_application
 launch -p cores_per_node=64 gpus_per_node=4 -N 2 ./custom_job
 
 # Multiple system parameters
-launch -p gpu_arch=v100 mem_per_gpu=32 scheduler=slurm -N 2 ./gpu_job
+launch -p gpu_arch=sm_90 mem_per_gpu=32 scheduler=slurm -N 2 ./gpu_job
 ```
 
 ### Scheduler-Specific Arguments

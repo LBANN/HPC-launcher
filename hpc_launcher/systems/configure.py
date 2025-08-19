@@ -63,7 +63,9 @@ def configure_launch(
     system_params = system.system_parameters(queue)
 
     # If any system parameters were provided on the command line, potentially overriding any known or discovered system parameters
+    msg = ""
     if cli_system_params:
+        msg = " (CLI Override) "
         if not system_params: # Use a default set of system parameters
             system_params = SystemParams()
         _cli_system_params_dict = asdict(system_params)
@@ -72,6 +74,10 @@ def configure_launch(
                 _cli_system_params_dict[field.name] = convert_to_type_of_another(cli_system_params[field.name], _cli_system_params_dict[field.name])
         # Create a new system_params with the proper fields overwritten
         system_params = SystemParams(**_cli_system_params_dict)
+
+    logger.info(
+        f"System Parameters{msg}: {system_params.prettyprint()}"
+    )
 
     if not gpus_per_proc:
         gpus_per_proc = 0

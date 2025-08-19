@@ -61,6 +61,15 @@ class SystemParams:
             # Assign one rank / process to each NUMA domain to play nice with OPENMP
             return self.numa_domains
 
+    def prettyprint(self):
+        if self.fraction_max_gpu_mem != 1.0:
+            effective_gpu_mem = self.fraction_max_gpu_mem * self.mem_per_gpu
+            max_gpu_mem = f" ({self.mem_per_gpu} GB max)"
+        else:
+            effective_gpu_mem = self.mem_per_gpu
+            max_gpu_mem = ""
+
+        return f"{self.scheduler} scheduled system with {self.cores_per_node} cores in {self.numa_domains} NUMA domains with {self.gpus_per_node} x {effective_gpu_mem}GB {self.gpu_arch} GPUs{max_gpu_mem}"
 
 class System:
     """
