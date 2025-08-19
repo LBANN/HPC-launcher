@@ -221,12 +221,6 @@ launch -p gpu_arch=sm_90 mem_per_gpu=32 scheduler=slurm -N 2 ./gpu_job
 ### Scheduler-Specific Arguments
 
 ```bash
-# Pass additional scheduler arguments
-launch -x partition=debug -x qos=high -N 2 ./debug_job
-
-# Remove specific arguments (leading tilde)
-launch -x ~constraint -N 2 ./unconstrained_job
-
 # Multiple xargs
 launch --xargs key1=val1 --xargs key2=val2 -N 2 ./job
 ```
@@ -235,7 +229,7 @@ launch --xargs key1=val1 --xargs key2=val2 -N 2 ./job
 
 ```bash
 # Capture output and error to files
-launch --out output.log --err error.log -N 2 ./my_job
+launch -l --out output.log --err error.log -N 2 ./my_job
 
 # Colored error output in terminal
 launch --color-stderr -N 1 ./verbose_job

@@ -358,8 +358,14 @@ def validate_arguments(args: argparse.Namespace):
         if os.path.dirname(output_script):
             raise ValueError(f"User provided output script filename cannot be a absolute or relative path: {output_script}")
 
-    if args.output_script and args.launch_dir == None and args.bg == None:
+    if args.output_script and args.launch_dir == None and not args.bg:
         raise ValueError("A output script file name was provided for a ephemeral interative job.")
+
+    if args.out_log_file and args.launch_dir == None and not args.bg:
+        raise ValueError("A output log file name was provided for a ephemeral interative job.")
+
+    if args.err_log_file and args.launch_dir == None and not args.bg:
+        raise ValueError("A error log file name was provided for a ephemeral interative job.")
 
     if args.output_script and args.batch_script:
         raise ValueError("Cannot specify both an output script name: {args.output_script} and a pre-generated batch script {args.batch_script}.")
