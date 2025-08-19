@@ -160,7 +160,7 @@ launch --gpumem-at-least 80 ./memory_intensive_app
 launch -N 2 --exclusive ./exclusive_app
 
 # Local execution without scheduler
-launch --local ./test_script.py
+launch -N 1 --local ./test_script.py
 ```
 
 ### Job Scheduling Examples
@@ -183,10 +183,10 @@ launch --account project123 -N 2 ./billable_job
 
 ```bash
 # MPI backend
-launch --comm-backend MPI -N 4 -n 8 ./mpi_app
+launch --comm-backend MPI -N 4 -n 4 ./mpi_app
 
 # NCCL backend for GPU communication
-launch --comm-backend NCCL -N 2 -n 4 --gpus-per-proc 2 ./gpu_training
+launch --comm-backend NCCL -N 2 -n 2 --gpus-per-proc 2 ./gpu_training
 ```
 
 ### Script and Directory Management
@@ -202,7 +202,7 @@ launch -l experiment_001 -N 2 ./my_job
 launch -l . -N 2 ./my_job
 
 # Generate script without running
-launch --setup-only -o job_script.sh -N 4 ./my_application
+launch --setup-only -l -o job_script.sh -N 4 ./my_application
 
 # Dry run to see what would be executed
 launch --dry-run -N 4 -n 8 ./my_application
