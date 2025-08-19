@@ -176,7 +176,7 @@ def main():
         args.setup_only,
         args.color_stderr,
         args.dry_run,
-        args.launch_dir != None and (args.save_hostlist or args.verbose),
+        args.launch_dir != None and args.save_hostlist,
     )
 
     if jobid:

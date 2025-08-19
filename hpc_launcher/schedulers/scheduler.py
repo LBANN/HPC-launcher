@@ -106,7 +106,7 @@ class Scheduler:
         """
         env_vars = system.environment_variables()
         passthrough_env_vars = system.passthrough_environment_variables()
-
+                        
         header = StringIO()
         header.write("#!/bin/sh\n")
         cmd_args = []
@@ -333,6 +333,8 @@ class Scheduler:
             logger.info(f"Callee directory: {callee_directory} - and {launch_dir}")
             script += f"export PYTHONPATH={callee_directory}:" + "${PYTHONPATH}\n"
         if save_hostlist:
+            print(f"BVE I have a save hostlist value {save_hostlist}")
+            script += f'export RANK={self.get_parallel_rank_env_variable()}\n'
             script += self.export_hostlist()
             script += 'if [ "${RANK}" = "0" ]; then\n'
             script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
@@ -383,6 +385,15 @@ class Scheduler:
         When running under an allocation, check how many nodes are available
 
         :return: Number of nodes in an allocation
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def get_parallel_rank_env_variable(cls) -> str:
+        """
+        When running under an allocation, return the environment variable to get the current rank
+
+        :return: environment variable for rank in an allocation
         """
         raise NotImplementedError
 

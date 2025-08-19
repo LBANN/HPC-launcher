@@ -235,7 +235,7 @@ launch -l --out output.log --err error.log -N 2 ./my_job
 launch --color-stderr -N 1 ./verbose_job
 
 # Verbose mode with saved hostlist
-launch --verbose --save-hostlist -N 4 ./debug_job
+launch -l --verbose --save-hostlist -N 4 ./debug_job
 ```
 
 ### Complex Example
