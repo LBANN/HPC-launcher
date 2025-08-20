@@ -106,7 +106,7 @@ class Scheduler:
         """
         env_vars = system.environment_variables()
         passthrough_env_vars = system.passthrough_environment_variables()
-                        
+
         header = StringIO()
         header.write("#!/bin/sh\n")
         cmd_args = []
@@ -333,7 +333,6 @@ class Scheduler:
             logger.info(f"Callee directory: {callee_directory} - and {launch_dir}")
             script += f"export PYTHONPATH={callee_directory}:" + "${PYTHONPATH}\n"
         if save_hostlist:
-            print(f"BVE I have a save hostlist value {save_hostlist}")
             script += f'export RANK={self.get_parallel_rank_env_variable()}\n'
             script += self.export_hostlist()
             script += 'if [ "${RANK}" = "0" ]; then\n'
