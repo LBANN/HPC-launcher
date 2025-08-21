@@ -17,7 +17,7 @@ launch [-h] [--verbose] [-N NODES] [-n PROCS_PER_NODE] [--gpus-per-proc GPUS_PER
        [-q QUEUE] [-t TIME_LIMIT] [-g GPUS_AT_LEAST] [--gpumem-at-least GPUMEM_AT_LEAST]
        [--exclusive] [--local] [--comm-backend JOB_COMM_PROTOCOL]
        [-x KEY=VALUE [KEY=VALUE ...]] [--bg] [--batch-script BATCH_SCRIPT]
-       [--scheduler {None,local,LocalScheduler,flux,FluxScheduler,slurm,SlurmScheduler,lsf,LSFScheduler}]
+       [--scheduler {local,flux,slurm,lsf}]
        [-l [LAUNCH_DIR]] [-o OUTPUT_SCRIPT] [--setup-only] [--dry-run]
        [--account ACCOUNT] [--dependency DEPENDENCY] [-J JOB_NAME]
        [--reservation RESERVATION] [--save-hostlist]

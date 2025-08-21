@@ -339,6 +339,11 @@ class Scheduler:
             script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
             script += "fi\n\n"
 
+        if system.active_system_params:
+            system_params = system.active_system_params
+            if system_params.fraction_max_gpu_mem and system_params.fraction_max_gpu_mem != 1.0:
+                script += f'export HPC_LAUNCHER_MAX_GPU_MEM={system_params.fraction_max_gpu_mem}\n'
+
         if self.require_parallel_internal_run_command(blocking):
             script += self.internal_script_run_command()
             script += " ".join(cmd_args)

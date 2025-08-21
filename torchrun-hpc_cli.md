@@ -17,7 +17,7 @@ torchrun-hpc [-h] [--verbose] [-N NODES] [-n PROCS_PER_NODE] [--gpus-per-proc GP
              [-q QUEUE] [-t TIME_LIMIT] [-g GPUS_AT_LEAST] [--gpumem-at-least GPUMEM_AT_LEAST]
              [--exclusive] [--local] [--comm-backend JOB_COMM_PROTOCOL]
              [-x KEY=VALUE [KEY=VALUE ...]] [--bg] [--batch-script BATCH_SCRIPT]
-             [--scheduler {None,local,LocalScheduler,flux,FluxScheduler,slurm,SlurmScheduler,lsf,LSFScheduler}]
+             [--scheduler {local,flux,slurm,lsf}]
              [-l [LAUNCH_DIR]] [-o OUTPUT_SCRIPT] [--setup-only] [--dry-run]
              [--account ACCOUNT] [--dependency DEPENDENCY] [-J JOB_NAME]
              [--reservation RESERVATION] [--save-hostlist]
@@ -160,7 +160,7 @@ torchrun-hpc -N 1 -n 4 train.py --epochs 100
 torchrun-hpc -N 2 -n 4 train.py --batch-size 256
 
 # Local testing without scheduler
-torchrun-hpc --local -n 2 test_script.py
+torchrun-hpc --local -N 2 -n 2 test_script.py
 ```
 
 ### Rendezvous Configuration
@@ -173,14 +173,14 @@ torchrun-hpc -r mpi -N 4 -n 8 train.py
 torchrun-hpc -r tcp -N 2 -n 4 train.py
 
 # TCP is useful for cloud environments or mixed networks
-torchrun-hpc --rdv tcp -N 4 -n 8 cloud_train.py
+torchrun-hpc --rdv tcp -N 2 -n 4 cloud_train.py
 ```
 
 ### GPU Memory Management
 
 ```bash
 # Limit each process to 80% of GPU memory
-torchrun-hpc --fraction-max-gpu-mem 0.8 -N 2 -n 8 train.py
+torchrun-hpc --fraction-max-gpu-mem 0.8 -N 2 -n 4 train.py
 
 # Useful for avoiding OOM errors
 torchrun-hpc --fraction-max-gpu-mem 0.75 -N 1 -n 4 large_model.py
