@@ -201,7 +201,7 @@ class SlurmScheduler(Scheduler):
             env_list.append(
                 (
                     "TORCHRUN_HPC_MASTER_ADDR",
-                    "`printenv SLURM_JOB_NODELIST | /bin/hostlist -n 1`",
+                    "`scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1`",
                 )
             )
             env_list.append(("TORCHRUN_HPC_MASTER_PORT", "23456"))
