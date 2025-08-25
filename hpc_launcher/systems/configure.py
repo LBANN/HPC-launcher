@@ -30,7 +30,7 @@ def configure_launch(
     gpus_per_proc: Optional[int],
     gpus_at_least: int = 0,
     gpumem_at_least: int = 0,
-    cli_system_params: Optional[tuple[int, int, str, float, int, str, Optional[float]]] = None,
+    cli_system_params: Optional[dict[str, str]] = None,
     job_comm_protocol: Optional[str] = None,
 ) -> tuple[System, int, int, int]:
     """
@@ -63,15 +63,24 @@ def configure_launch(
     system_params = system.system_parameters(queue)
 
     # If any system parameters were provided on the command line, potentially overriding any known or discovered system parameters
+    msg = ""
     if cli_system_params:
+        msg = " (CLI Override) "
         if not system_params: # Use a default set of system parameters
-            system_params = SystemParams()
-        _cli_system_params_dict = asdict(system_params)
+            # for the active system params
+            system.active_system_params = SystemParams()
+            system_params = system.active_system_params()
         for field in fields(system_params):
             if field.name in cli_system_params:
-                _cli_system_params_dict[field.name] = convert_to_type_of_another(cli_system_params[field.name], _cli_system_params_dict[field.name])
-        # Create a new system_params with the proper fields overwritten
-        system_params = SystemParams(**_cli_system_params_dict)
+                system_params.__dict__[field.name] = convert_to_type_of_another(cli_system_params[field.name], system_params.__dict__[field.name])
+                del cli_system_params[field.name]
+
+        for unused_field in cli_system_params.keys():
+            raise ValueError(f"System Parameters CLI attempt to overwrite unknown field: {unused_field}")
+
+    logger.info(
+        f"Active System Parameters{msg}: {system.active_system_params.prettyprint()}"
+    )
 
     if not gpus_per_proc:
         gpus_per_proc = 0

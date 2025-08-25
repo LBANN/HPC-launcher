@@ -45,6 +45,6 @@ if affinity is not None:
 import os
 
 if torch.cuda.is_available():
-    fraction_max_gpu_mem = float(os.getenv("TORCHRUN_HPC_MAX_GPU_MEM"))
+    fraction_max_gpu_mem = float(os.getenv("HPC_LAUNCHER_MAX_GPU_MEM"))
     if fraction_max_gpu_mem != 1.0:
         torch.cuda.set_per_process_memory_fraction(fraction_max_gpu_mem)
