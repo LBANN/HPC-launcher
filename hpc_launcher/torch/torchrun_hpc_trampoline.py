@@ -37,7 +37,7 @@ def main():
     backend = None
     if torch.cuda.is_available():
         backend = "nccl"
-        fraction_max_gpu_mem = float(os.getenv("HPC_LAUNCHER_MAX_GPU_MEM"))
+        fraction_max_gpu_mem = float(os.getenv("HPC_LAUNCHER_MAX_GPU_MEM", 1.0))
         if fraction_max_gpu_mem != 1.0 and rank == 0:
             print(
                 f"[Rank {rank} of {world_size}] TORCHRUN-HPC set the max GPU memory fraction to {fraction_max_gpu_mem}"
