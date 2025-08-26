@@ -186,49 +186,43 @@ torchrun-hpc --fraction-max-gpu-mem 0.8 -N 2 -n 4 train.py
 torchrun-hpc --fraction-max-gpu-mem 0.75 -N 1 -n 4 large_model.py
 
 # Share GPUs between multiple jobs
-torchrun-hpc --fraction-max-gpu-mem 0.5 -n 2 shared_gpu_train.py
+torchrun-hpc --fraction-max-gpu-mem 0.5 -N 1 -n 2 shared_gpu_train.py
 ```
 
-### AMD GPU Support
+### AMD GPU Support - ROCR vs HIP visible devices
 
 ```bash
-# For AMD GPUs with HuggingFace Accelerate
-torchrun-hpc -u -N 2 -n 8 accelerate_train.py
-
-# TorchTitan on AMD GPUs
-torchrun-hpc --unswap-rocr-hip-vis-dev -N 4 -n 8 torchtitan_train.py
+# For AMD GPUs favor using ROCR_VISIBLE_DEVICES instead of HIP_VISIBLE_DEVICES
+torchrun-hpc -u -N 2 -n 4 accelerate_train.py
 ```
 
 ### Resource Specification
 
 ```bash
 # Request specific total GPU count
-torchrun-hpc -g 32 distributed_train.py
+torchrun-hpc -g 16 distributed_train.py
 
 # Request GPUs with minimum memory
-torchrun-hpc --gpumem-at-least 80 -n 8 large_model_train.py
+torchrun-hpc --gpumem-at-least 80 large_model_train.py
 
 # Exclusive node access for performance
-torchrun-hpc --exclusive -N 4 -n 8 performance_critical.py
-
-# Multiple GPUs per process (model parallel)
-torchrun-hpc -N 2 -n 2 --gpus-per-proc 4 model_parallel_train.py
+torchrun-hpc --exclusive -N 4 -n 4 performance_critical.py
 ```
 
 ### Job Scheduling
 
 ```bash
 # Submit to specific queue with time limit
-torchrun-hpc -q gpu_queue -t 480 -N 4 -n 8 long_train.py
+torchrun-hpc -q gpu_queue -t 480 -N 4 -n 4 long_train.py
 
 # Background job with custom name
-torchrun-hpc --bg -J "BERT_finetune" -N 2 -n 8 bert_train.py
+torchrun-hpc --bg -J "BERT_finetune" -N 2 -n 4 bert_train.py
 
 # Job with dependencies
 torchrun-hpc --dependency afterok:12345 -N 2 -n 4 continue_train.py
 
 # Use specific account
-torchrun-hpc --account ml_research -N 8 -n 8 research_train.py
+torchrun-hpc --account ml_research -N 8 -n 2 research_train.py
 
 # DAT reservation
 torchrun-hpc --reservation dat_2024 -N 16 -n 8 dat_experiment.py
@@ -238,70 +232,71 @@ torchrun-hpc --reservation dat_2024 -N 16 -n 8 dat_experiment.py
 
 ```bash
 # NCCL for NVIDIA GPUs
-torchrun-hpc --comm-backend NCCL -N 4 -n 8 nvidia_train.py
+torchrun-hpc --comm-backend NCCL -N 4 -n 4 nvidia_train.py
 
 # RCCL for AMD GPUs
-torchrun-hpc --comm-backend RCCL -N 4 -n 8 amd_train.py
+torchrun-hpc --comm-backend RCCL -N 4 -n 4 amd_train.py
 
 # MPI backend
-torchrun-hpc --comm-backend MPI -N 8 -n 4 mpi_train.py
+torchrun-hpc --comm-backend MPI -N 2 -n 4 mpi_train.py
 ```
 
-### Script Management
+### Script and Directory Management
 
 ```bash
 # Generate script without running
-torchrun-hpc --setup-only -o torch_job.sh -N 4 -n 8 train.py
+torchrun-hpc -l --setup-only -o torch_job.sh -N 2 -n 4 train.py
 
 # Dry run to preview
-torchrun-hpc --dry-run -N 8 -n 8 train.py --lr 0.001
+torchrun-hpc --dry-run -N 8 -n 4 train.py --lr 0.001
 
 # Custom launch directory
-torchrun-hpc -l experiment_001 -N 2 -n 8 experiment.py
+torchrun-hpc -l experiment_001 -N 2 -n 4 experiment.py
 
 # Save hostlist for debugging
-torchrun-hpc --save-hostlist -N 4 -n 8 debug_train.py
+torchrun-hpc -l --save-hostlist -N 4 -n 4 debug_train.py
 ```
 
 ### System Overrides
 
 ```bash
 # Override GPU detection
-torchrun-hpc -p gpus_per_node=8 gpu_arch=a100 -N 2 train.py
+torchrun-hpc -p gpus_per_node=4 gpu_arch=a100 -N 2 train.py
 
 # Custom system configuration
-torchrun-hpc -p cores_per_node=128 mem_per_gpu=80 -N 4 -n 8 custom_train.py
+torchrun-hpc -p cores_per_node=128 mem_per_gpu=80 -N 2 -n 2 custom_train.py
 
 # Force specific scheduler
-torchrun-hpc --scheduler slurm -N 2 -n 8 train.py
+torchrun-hpc --scheduler slurm -N 2 -n 4 train.py
 ```
 
 ### Logging Configuration
 
 ```bash
 # Separate output and error logs
-torchrun-hpc --out output.log --err error.log -N 2 -n 8 train.py
+torchrun-hpc -l --out output.log --err error.log -N 2 -n 4 train.py
 
 # Colored error output for debugging
 torchrun-hpc --color-stderr --verbose -N 1 -n 4 debug_train.py
 
 # Full logging setup
 torchrun-hpc \
+  -l \
   --verbose \
   --save-hostlist \
-  --out logs/train_out.log \
-  --err logs/train_err.log \
-  -N 4 -n 8 train.py
+  --out train_out.log \
+  --err train_err.log \
+  -N 2 -n 4 train.py
 ```
 
-### Complex Production Example
+### Complex Example
 
 ```bash
 # Full production training setup
 torchrun-hpc \
   --verbose \
   -N 16 \
-  -n 8 \
+  -n 4 \
   --gpus-per-proc 1 \
   -r mpi \
   --fraction-max-gpu-mem 0.9 \
@@ -315,8 +310,8 @@ torchrun-hpc \
   -J "GPT_Training" \
   --save-hostlist \
   -p gpu_arch=a100 mem_per_gpu=80 \
-  --out logs/gpt_out.log \
-  --err logs/gpt_err.log \
+  --out gpt_out.log \
+  --err gpt_err.log \
   train_gpt.py \
     --model-size 13B \
     --batch-size 2048 \
@@ -343,27 +338,39 @@ The command sets standard PyTorch distributed environment variables:
 Your PyTorch script should handle distributed initialization:
 
 ```python
-import os
 import torch
 import torch.distributed as dist
 
-def init_distributed():
-    # torchrun-hpc sets these environment variables
-    rank = int(os.environ['RANK'])
-    world_size = int(os.environ['WORLD_SIZE'])
-    local_rank = int(os.environ['LOCAL_RANK'])
+import sys
+import socket
+import os
 
-    # Initialize the process group
-    dist.init_process_group(backend='nccl')  # or 'gloo' for CPU
+
+def main():
+    args = sys.argv[1:]
+    torch_dist_initialized = dist.is_initialized()
+    for e in ["CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"]:
+        if os.getenv(e):
+            gpus = os.getenv(e)
+
+    if gpus:
+        avail_gpus = gpus.split(",")
+
+    local_rank = int(os.environ['LOCAL_RANK'])
+    print(f"Local Rank: {local_rank}")
+
+    if torch_dist_initialized:
+        print(
+            f"Device mesh: rank={dist.get_rank()} and local rank is {local_rank} and avail_gpus = {avail_gpus},",
+        )
+
+        print(f"{socket.gethostname()} reporting it is rank {dist.get_rank()} of {dist.get_world_size()}")
+    else:
+        print(f"{socket.gethostname()} reporting it is rank 0 of 1")
 
     # Set the device
     if torch.cuda.is_available():
         torch.cuda.set_device(local_rank)
-
-    return rank, world_size, local_rank
-
-def main():
-    rank, world_size, local_rank = init_distributed()
 
     # Create model and move to device
     model = YourModel().cuda(local_rank)
@@ -388,23 +395,24 @@ if __name__ == "__main__":
 
 1. **NCCL Errors**: Try setting NCCL debug environment variables
    ```bash
-   torchrun-hpc -x NCCL_DEBUG=INFO -N 2 -n 8 train.py
+   torchrun-hpc -x NCCL_DEBUG=INFO -N 2 -n 4 train.py
    ```
 
 2. **OOM Errors**: Use memory fraction limiting
    ```bash
-   torchrun-hpc --fraction-max-gpu-mem 0.8 -N 2 -n 8 train.py
+   torchrun-hpc --fraction-max-gpu-mem 0.8 -N 2 -n 4 train.py
    ```
 
 3. **Rendezvous Failures**: Switch between MPI and TCP
    ```bash
-   # Try MPI if TCP fails
-   torchrun-hpc -r mpi -N 2 -n 8 train.py
+   # Try TCP if MPI fails
+   torchrun-hpc -r tcp -N 2 -n 4 train.py
    ```
 
-4. **AMD GPU Issues**: Use the unswap flag
+4. **AMD GPU Issues**: Use the unswap flag to set ROCR_VISIBLE_DEVICES
+   vs HIP_VISIBLE_DEBICES
    ```bash
-   torchrun-hpc -u -N 2 -n 8 train.py
+   torchrun-hpc -u -N 2 -n 4 train.py
    ```
 
 ## Tips and Best Practices

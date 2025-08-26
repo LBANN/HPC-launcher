@@ -147,7 +147,7 @@ launch -N 4 -n 2 ./mpi_application
 launch -N 2 -n 2 --gpus-per-proc 2 ./gpu_application
 ```
 
-### Resource Specification Examples
+### Resource Specification
 
 ```bash
 # Request specific number of GPUs total
@@ -163,7 +163,7 @@ launch -N 2 --exclusive ./exclusive_app
 launch -N 1 --local ./test_script.py
 ```
 
-### Job Scheduling Examples
+### Job Scheduling
 
 ```bash
 # Submit to specific queue with time limit
@@ -179,7 +179,7 @@ launch --dependency afterok:12345 -N 1 ./dependent_job
 launch --account project123 -N 2 ./billable_job
 ```
 
-### Communication Backend Examples
+### Communication Backend
 
 ```bash
 # MPI backend
@@ -225,7 +225,7 @@ launch -p gpu_arch=sm_90 mem_per_gpu=32 scheduler=slurm -N 2 ./gpu_job
 launch --xargs key1=val1 --xargs key2=val2 -N 2 ./job
 ```
 
-### Logging Examples
+### Logging Configuration
 
 ```bash
 # Capture output and error to files
@@ -257,8 +257,8 @@ launch \
   --account ml_project \
   -J "ResNet Training" \
   --save-hostlist \
-  --out logs/output.log \
-  --err logs/error.log \
+  --out output.log \
+  --err error.log \
   python train_resnet.py --epochs 100 --batch-size 256
 ```
 
