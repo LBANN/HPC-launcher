@@ -438,7 +438,7 @@ if __name__ == "__main__":
 
 ## See Also
 
-- `launch` - General purpose HPC job launcher
+- [`launch`](./launch_cli.md) - General purpose HPC job launcher
 - PyTorch Distributed Documentation: https://pytorch.org/docs/stable/distributed.html
 - HPC-launcher Repository: https://github.com/LBANN/HPC-launcher
 - LBANN Documentation: https://lbann.readthedocs.io

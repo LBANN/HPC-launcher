@@ -296,7 +296,7 @@ The launcher automatically detects the available scheduler. Override with `--sch
 
 ## See Also
 
-- `torchrun-hpc` - PyTorch-specific distributed training launcher
+- [`torchrun-hpc`](./torchrun-hpc_cli.md) - PyTorch-specific distributed training launcher
 - HPC-launcher documentation: https://github.com/LBANN/HPC-launcher
 - LBANN documentation: https://lbann.readthedocs.io
 
