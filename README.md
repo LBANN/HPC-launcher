@@ -36,7 +36,7 @@ import hpc_launcher.torch
 ## CLI options for HPC-Launcher `launch` and `torchrun-hpc` commands
 
 - [`launch`](./launch_cli.md) - General purpose HPC job launcher
-- [`torchrun-hpc`](./torchrun-hpc_cli_2.md) - PyTorch-specific distributed training launcher
+- [`torchrun-hpc`](./torchrun-hpc_cli.md) - PyTorch-specific distributed training launcher
 
 # LBANN: Livermore Big Artificial Neural Network Toolkit
 
