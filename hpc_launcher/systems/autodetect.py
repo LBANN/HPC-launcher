@@ -60,6 +60,7 @@ def find_AMD_gpus() -> (int, float, str):
     finally:
         try:
             smi.amdsmi_shut_down()
+            return (0, 0, None)
         except smi.AmdSmiException as e:
             return (0, 0, None)
 
@@ -89,6 +90,7 @@ def find_NVIDIA_gpus() -> (int, float, str):
     finally:
         try:
             pynvml.nvmlShutdown()
+            return (0, 0, None)
         except pynvml.NVMLError as e:
             return (0, 0, None)
 

@@ -107,7 +107,7 @@ class FluxScheduler(Scheduler):
                 self.submit_only_args["--queue"] = f"{self.queue}"
 
         if self.account:
-            self.submit_only_args["--account"] = f"{self.account}"
+            self.submit_only_args["--bank"] = f"{self.account}"
 
         if self.reservation:
             logger.warning(
@@ -159,6 +159,10 @@ class FluxScheduler(Scheduler):
         return None
 
     @classmethod
+    def get_parallel_rank_env_variable(self) -> str:
+        return "${FLUX_TASK_RANK}"
+
+    @classmethod
     def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
         env_vars = [
             "FLUX_JOB_SIZE",
@@ -185,7 +189,7 @@ class FluxScheduler(Scheduler):
 
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
-        env_list.append(("RANK", "${FLUX_TASK_RANK}"))
+        env_list.append(("RANK", self.get_parallel_rank_env_variable()))
         if protocol.lower() == "tcp":
             env_list.append(
                 (

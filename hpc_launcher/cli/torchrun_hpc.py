@@ -75,6 +75,11 @@ def main():
 
     launch_helpers.setup_logging(logger, args.verbose)
 
+    if args.fraction_max_gpu_mem and args.fraction_max_gpu_mem != 1.0:
+        if not args.system_params:
+            args.system_params = {}
+        args.system_params["fraction_max_gpu_mem"] = args.fraction_max_gpu_mem
+
     # Process special arguments that can autoselect the number of ranks / GPUs
     system = common_args.process_arguments(args, logger)
     optimize_comm_protocol = ""
@@ -103,17 +108,6 @@ def main():
             env_list = scheduler.setup_rendezvous_protocol("tcp")
         else:
             raise Exception(f"Unknown rendezvous {args.rdv} requested.")
-
-    if args.fraction_max_gpu_mem and args.fraction_max_gpu_mem != 1.0:
-        env_list.append(("TORCHRUN_HPC_MAX_GPU_MEM", args.fraction_max_gpu_mem))
-    else:
-        if system.active_system_params:
-            env_list.append(
-                (
-                    "TORCHRUN_HPC_MAX_GPU_MEM",
-                    system.active_system_params.fraction_max_gpu_mem,
-                )
-            )
 
     if args.unswap_rocr_hip_vis_dev:
         env_list.append(("TORCHRUN_HPC_UNSWAP_ROCR_HIP_VIS_DEV", "TRUE"))
@@ -176,7 +170,7 @@ def main():
         args.setup_only,
         args.color_stderr,
         args.dry_run,
-        args.launch_dir != None and (args.save_hostlist or args.verbose),
+        args.launch_dir != None and args.save_hostlist,
     )
 
     if jobid:

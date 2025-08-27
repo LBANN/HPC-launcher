@@ -169,6 +169,10 @@ class SlurmScheduler(Scheduler):
         return None
 
     @classmethod
+    def get_parallel_rank_env_variable(self) -> str:
+        return "${SLURM_PROCID}"
+
+    @classmethod
     def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
         # Interesting but unused variables SLURM_JOB_NUM_NODES, SLURM_NPROCS, SLURM_DISTRIBUTION
         # Skipping 'SLURM_TASKS_PER_NODE' because this field has a weird format e.g. 2(x2)
@@ -192,12 +196,12 @@ class SlurmScheduler(Scheduler):
     @classmethod
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> str:
         env_list = []
-        env_list.append(("RANK", "${SLURM_PROCID}"))
+        env_list.append(("RANK", self.get_parallel_rank_env_variable()))
         if protocol.lower() == "tcp":
             env_list.append(
                 (
                     "TORCHRUN_HPC_MASTER_ADDR",
-                    "`printenv SLURM_JOB_NODELIST | /bin/hostlist -n 1`",
+                    "`scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1`",
                 )
             )
             env_list.append(("TORCHRUN_HPC_MASTER_PORT", "23456"))

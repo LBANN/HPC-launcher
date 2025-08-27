@@ -81,7 +81,7 @@ def main():
         args.setup_only,
         args.color_stderr,
         args.dry_run,
-        args.launch_dir != None and (args.save_hostlist or args.verbose),
+        args.launch_dir != None and args.save_hostlist,
         args.batch_script != "", # If a batch script is provided don't allow it to be modified
     )
 
