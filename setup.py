@@ -20,6 +20,7 @@ if path:
 setup(
     name="hpc-launcher",
     version=version,
+    license="Apache-2.0",
     url="https://github.com/LBANN/HPC-launcher",
     author="Lawrence Livermore National Laboratory",
     author_email="lbann@llnl.gov",
@@ -28,7 +29,6 @@ setup(
     long_description_content_type="text/markdown",
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.9",
