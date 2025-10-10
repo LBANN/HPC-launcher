@@ -35,8 +35,10 @@ def main():
 
     # Check on the backend and report if the memory size was set
     backend = None
+    device = None
     if torch.cuda.is_available():
         backend = "nccl"
+        device = "cuda"
         fraction_max_gpu_mem = float(os.getenv("HPC_LAUNCHER_MAX_GPU_MEM", 1.0))
         if fraction_max_gpu_mem != 1.0 and rank == 0:
             print(
@@ -44,6 +46,25 @@ def main():
             )
     else:
         backend = "gloo"
+        device="cpu"
+
+    # Standard operating mode assumes that there is one rank per GPU
+    # Check to see how many GPUS are actually available to this rank
+    avail_gpus = 0
+    gpus = []
+    for e in ["CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"]:
+        if os.getenv(e):
+            gpus = os.getenv(e)
+            break
+    if gpus:
+        avail_gpus = gpus.split(",")
+
+    # Round-robin assign the visibile GPUs
+    if avail_gpus:
+        local_device_id = local_rank % len(avail_gpus)
+    else:
+        local_device_id = local_rank
+    os.environ["LOCAL_RANK"] = f"{local_device_id}"
 
     torch_dist_initialized = dist.is_initialized()
     rdv_protocol = os.getenv("TORCHRUN_HPC_RDV_PROTOCOL")
@@ -77,7 +98,7 @@ def main():
                 )
             # TODO(later): Fix how we handle CUDA visible devices and MPI bind
             dist.init_process_group(
-                backend, init_method=rdv_protocol, world_size=world_size, rank=rank
+                backend, init_method=rdv_protocol, world_size=world_size, rank=rank, device_id=torch.device(device, local_device_id)
             )
 
             if rdv_protocol == "mpi://" and rank == 0:
@@ -107,24 +128,6 @@ def main():
     else:
         # If the mpi rendezvous protocol is set, this should be necessary but some packages still look for it
         os.environ["MASTER_ADDR"] = "23456"
-
-    # Standard operating mode assumes that there is one rank per GPU
-    # Check to see how many GPUS are actually available to this rank
-    avail_gpus = 0
-    gpus = []
-    for e in ["CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"]:
-        if os.getenv(e):
-            gpus = os.getenv(e)
-            break
-    if gpus:
-        avail_gpus = gpus.split(",")
-
-    # Round-robin assign the visibile GPUs
-    if avail_gpus:
-        local_gpu_id = local_rank % len(avail_gpus)
-    else:
-        local_gpu_id = local_rank
-    os.environ["LOCAL_RANK"] = f"{local_gpu_id}"
 
     # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
     sys.argv = sys.argv[1:]
