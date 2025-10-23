@@ -36,12 +36,14 @@ def find_AMD_gpus() -> (int, float, str):
         import amdsmi as smi
     except (ImportError, ModuleNotFoundError, KeyError):
         return (0, 0, None)
+
+    num_gpus = 0
+    mem_per_gpu = 0
+    gpu_arch = None
     try:
         smi.amdsmi_init()
         devices = smi.amdsmi_get_processor_handles()
         num_gpus = len(devices)
-        mem_per_gpu = 0
-        gpu_arch = None
         if len(devices) == 0:
             return (0, 0, None)
         else:
@@ -60,9 +62,9 @@ def find_AMD_gpus() -> (int, float, str):
     finally:
         try:
             smi.amdsmi_shut_down()
-            return (0, 0, None)
+            return (num_gpus, mem_per_gpu, gpu_arch)
         except smi.AmdSmiException as e:
-            return (0, 0, None)
+            return (num_gpus, mem_per_gpu, gpu_arch)
 
 
 def find_NVIDIA_gpus() -> (int, float, str):
@@ -76,23 +78,23 @@ def find_NVIDIA_gpus() -> (int, float, str):
     try:
         pynvml.nvmlInit()
 
-        deviceCount = pynvml.nvmlDeviceGetCount()
+        num_gpus = pynvml.nvmlDeviceGetCount()
         # Assume that the GPUs are homogeneous on a system
-        if deviceCount > 0:
+        if num_gpus > 0:
             handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             major, minor = pynvml.nvmlDeviceGetCudaComputeCapability(handle)
             info = pynvml.nvmlDeviceGetMemoryInfo(handle)
             gpu_arch = f"sm_{major}{minor}"
             mem_per_gpu = info.total / (1024**3)
-        return (deviceCount, mem_per_gpu, gpu_arch)
+        return (num_gpus, mem_per_gpu, gpu_arch)
     except:
         return (0, 0, None)
     finally:
         try:
             pynvml.nvmlShutdown()
-            return (0, 0, None)
+            return (num_gpus, mem_per_gpu, gpu_arch)
         except pynvml.NVMLError as e:
-            return (0, 0, None)
+            return (num_gpus, mem_per_gpu, gpu_arch)
 
 
 def find_gpus() -> (str, int, float, str):
@@ -202,10 +204,10 @@ def autodetect_current_system(quiet: bool = False) -> System:
     """
 
     sys = system()
-    if sys in ("tioga", "tuolumne", "elcap", "rzadams", "tenaya"):
+    if sys in ("tioga", "tuolumne", "elcap", "rzadams", "rzvernal", "tenaya"):
         return ElCapitan(sys)
 
-    if sys in ("ipa", "matrix", "vector"):
+    if sys in ("ipa", "matrix", "rzvector"):
         return CTS2(sys)
 
     if sys in ("lassen", "sierra", "rzanzel"):

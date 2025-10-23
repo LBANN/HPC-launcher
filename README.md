@@ -16,6 +16,18 @@ There are two main entry points into HPC-Launcher from the cli:
 replacement for `torchrun`, while `launch` is a generic interface for
 launching parallel jobs.
 
+## Installation
+
+To install the package, install released versions from PyPI run:
+```bash
+pip install hpc-launcher
+```
+
+Or install directly from GitHub:
+```bash
+pip install git+https://github.com/LBANN/HPC-launcher.git
+```
+
 ## Example Usage
 
 Using the launch command to execute a command in parallel

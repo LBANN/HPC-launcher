@@ -53,6 +53,13 @@ _system_params = {
             "pdebug": _mi300a_node,
         },
     ),
+    "rzvernal": (
+        "pdebug",
+        {
+            "pdebug": _mi250x_node,
+            "pllm":   _mi250x_node,
+        },
+    ),
     "tenaya": (
         "pbatch",
         {

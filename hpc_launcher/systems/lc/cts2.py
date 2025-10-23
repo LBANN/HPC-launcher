@@ -37,6 +37,13 @@ _system_params = {
             "erl": _h100_node,
         },
     ),
+    "rzvector": (
+        "pbatch",
+        {
+            "pbatch": _h100_node,
+            "pdebug": _h100_node,
+        },
+    ),
 }
 
 
