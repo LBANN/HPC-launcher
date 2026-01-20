@@ -32,7 +32,11 @@ if path:
     if rocm_version:
         # Constrain ROCm-dependent packages
         major, minor, patch = rocm_version.split('.')
-        extras.append(f"amdsmi=={major}.{minor}.{patch}")
+        # Releases of AMDSMI in PyPI are lagging github releases
+        if int(major) >= 7:
+            extras.append(f"amdsmi=={major}")
+        else:
+            extras.append(f"amdsmi=={major}.{minor}.{patch}")
     else:
         # Fallback or raise error
         raise RuntimeError("ROCm installation not found!")
