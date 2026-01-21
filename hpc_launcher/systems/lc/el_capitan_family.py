@@ -151,15 +151,16 @@ class ElCapitan(System):
                 # rocm_patch = int(match.group(3))
 
             # Unless overriden by an external env variable set the NCCL_NET to ensure that the libfabric interface is used, e.g.: libfabric, IB, Socket
+            msg = "By default HPC-launcher will force slingshot systems to use the libfabric NCCL/RCCL plugin or fail.  This behavior can be overridden by setting NCCL_NET=Socket in the calling environment."
             if rocm_major >= 7 and rocm_minor >= 1:
                 # Add AWS_OFI_NCCL for ROCm 7.1 - Ensure that it pick up the correct library object
                 if not os.getenv("NCCL_NET_PLUGIN"):
                     env_list.append(("NCCL_NET_PLUGIN", "librccl-net.so"))
                 if not os.getenv("NCCL_NET"):
-                    env_list.append(("NCCL_NET", "libfabric"))
+                    env_list.append(("NCCL_NET", "libfabric", msg))
             else:
                 if not os.getenv("NCCL_NET"):
-                    env_list.append(("NCCL_NET", '\"AWS Libfabric\"'))
+                    env_list.append(("NCCL_NET", '\"AWS Libfabric\"', msg))
 
         if optimize_rccl_protocol:
             # Performance tuning for HPE Slingshot Cassini NIC (Audited on 3/31/25) - Only use with RCCL
