@@ -34,7 +34,7 @@ if path:
         major, minor, patch = rocm_version.split('.')
         # Releases of AMDSMI in PyPI are lagging github releases
         if int(major) >= 7:
-            extras.append(f"amdsmi=={major}")
+            extras.append(f"amdsmi>={major},<={major}.{minor}.{patch}")
         else:
             extras.append(f"amdsmi=={major}.{minor}.{patch}")
     else:

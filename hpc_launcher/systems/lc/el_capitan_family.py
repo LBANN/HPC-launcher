@@ -151,8 +151,6 @@ class ElCapitan(System):
                 # rocm_patch = int(match.group(3))
 
             # Unless overriden by an external env variable set the NCCL_NET to ensure that the libfabric interface is used, e.g.: libfabric, IB, Socket
-            # env_list.append(("NCCL_DEUBG_SUBSYS", "INIT"))
-            # env_list.append(("NCCL_DEBUG", "INFO"))
             if rocm_major >= 7 and rocm_minor >= 1:
                 # Add AWS_OFI_NCCL for ROCm 7.1 - Ensure that it pick up the correct library object
                 if not os.getenv("NCCL_NET_PLUGIN"):
