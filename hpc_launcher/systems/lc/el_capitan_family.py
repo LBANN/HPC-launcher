@@ -15,6 +15,7 @@ from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.schedulers.flux import FluxScheduler
 from hpc_launcher.systems.system import System, SystemParams
 import os
+import re
 
 import logging
 
@@ -105,6 +106,17 @@ class ElCapitan(System):
         if optimize_comm_protocol.upper() == "RCCL" or optimize_comm_protocol.upper() == "*CCL":
             optimize_rccl_protocol = True
 
+        aws_ofi_plugin = None
+        different_ofi_plugin = os.getenv("LBANN_USE_THIS_OFI_PLUGIN")
+        if different_ofi_plugin is not None:
+            if os.path.isdir(different_ofi_plugin):
+                env_list.append(
+                    ("LD_LIBRARY_PATH", different_ofi_plugin + ":${LD_LIBRARY_PATH}")
+                )
+                aws_ofi_plugin = different_ofi_plugin
+            else:
+                logger.warn(f"WARNING: invalid path provided in LBANN_USE_THIS_OFI_PLUGIN: {different_ofi_plugin}. Ensure one is loaded or performance will be degraded.")
+
         if os.getenv("ROCM_PATH") is not None:
             rocm_path = os.getenv("ROCM_PATH")
             env_list.append(
@@ -114,8 +126,9 @@ class ElCapitan(System):
                     + ":${LD_LIBRARY_PATH}",
                 )
             )
-            if optimize_rccl_protocol:
-                rocm_ver = os.path.basename(rocm_path)
+            rocm_ver = os.path.basename(rocm_path)
+
+            if optimize_rccl_protocol and not aws_ofi_plugin:
                 # Check for and include the AWS_OFI_PLUGIN if it exists
                 sys_type = os.getenv("SYS_TYPE")
                 aws_ofi_plugin = f'/collab/usr/global/tools/rccl/{sys_type}/{rocm_ver}/install/lib'
@@ -131,11 +144,23 @@ class ElCapitan(System):
                 else:
                     logger.warn(f"WARNING: using RCCL communication protocol and no default AWS_OFI_RCCL plugin was detected.  Checked {aws_ofi_plugin}. Ensure one is loaded or performance will be degraded.")
 
-        different_ofi_plugin = os.getenv("LBANN_USE_THIS_OFI_PLUGIN")
-        if different_ofi_plugin is not None:
-            env_list.append(
-                ("LD_LIBRARY_PATH", different_ofi_plugin + ":${LD_LIBRARY_PATH}")
-            )
+            match = re.match(r'rocm-(\d+)\.(\d+).(\d+)', rocm_ver)
+            if match:
+                rocm_major = int(match.group(1))
+                rocm_minor = int(match.group(2))
+                # rocm_patch = int(match.group(3))
+
+            # Unless overriden by an external env variable set the NCCL_NET to ensure that the libfabric interface is used, e.g.: libfabric, IB, Socket
+            msg = "By default HPC-launcher will force slingshot systems to use the libfabric NCCL/RCCL plugin or fail.  This behavior can be overridden by setting NCCL_NET=Socket in the calling environment."
+            if rocm_major >= 7 and rocm_minor >= 1:
+                # Add AWS_OFI_NCCL for ROCm 7.1 - Ensure that it pick up the correct library object
+                if not os.getenv("NCCL_NET_PLUGIN"):
+                    env_list.append(("NCCL_NET_PLUGIN", "librccl-net.so"))
+                if not os.getenv("NCCL_NET"):
+                    env_list.append(("NCCL_NET", "libfabric", msg))
+            else:
+                if not os.getenv("NCCL_NET"):
+                    env_list.append(("NCCL_NET", '\"AWS Libfabric\"', msg))
 
         if optimize_rccl_protocol:
             # Performance tuning for HPE Slingshot Cassini NIC (Audited on 3/31/25) - Only use with RCCL
@@ -166,6 +191,10 @@ class ElCapitan(System):
         env_list.append(("NCCL_CROSS_NIC", "1"))
         # Improve the performance of large scale RCCL initialization - should only be used on wire-up
         env_list.append(("NCCL_SOCKET_IFNAME", "hsi0"))
+
+        # Ensure that PyTorch respects channel's last for MIOpen (Audited on 1/13/2026)
+        env_list.append(("PYTORCH_MIOPEN_SUGGEST_NHWC", "1"))
+        env_list.append(("PYTORCH_MIOPEN_SUGGEST_NHWC_BATCHNORM", "1"))
 
         for i in self._aux_env_list:
             env_list.append(i)
