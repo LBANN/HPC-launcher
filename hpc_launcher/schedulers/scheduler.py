@@ -474,7 +474,10 @@ class Scheduler:
         elif launch_dir == "":
             # Create a folder for the output and error logs
             # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
-            folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}'
+            folder_name = (
+                f'{folder_prefix}-{self.job_name or command_as_folder_name}_'
+                f'{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}{int((time.time() % 1) * 1000):03d}ms'
+            )
         else:
             folder_name = launch_dir
 
