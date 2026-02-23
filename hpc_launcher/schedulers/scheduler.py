@@ -477,7 +477,6 @@ class Scheduler:
             # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs_UUID
             short_uuid = uuid.uuid4().hex[:8]
             folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}_{short_uuid}'
-            print(folder_name)
         else:
             folder_name = launch_dir
 
