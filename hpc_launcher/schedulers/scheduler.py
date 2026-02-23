@@ -21,6 +21,7 @@ import time
 import tempfile
 import subprocess
 import shutil
+import uuid
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
 from hpc_launcher.schedulers import parse_env_list
 
@@ -473,11 +474,10 @@ class Scheduler:
             folder_name = os.getcwd()
         elif launch_dir == "":
             # Create a folder for the output and error logs
-            # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs
-            folder_name = (
-                f'{folder_prefix}-{self.job_name or command_as_folder_name}_'
-                f'{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}{int((time.time() % 1) * 1000):03d}ms'
-            )
+            # Timestamp is of the format YYYY-MM-DD_HHhMMmSSs_UUID
+            short_uuid = uuid.uuid4().hex[:8]
+            folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}_{short_uuid}'
+            print(folder_name)
         else:
             folder_name = launch_dir
 
