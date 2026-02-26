@@ -62,6 +62,13 @@ def main():
         "Ensureing that HIP vs ROCR can improve behavior of HF Accelerate and TorchTitan.",
     )
 
+    parser.add_argument(
+        "--no-dist-init",
+        action="store_true",
+        default=False,
+        help="Do not call torch.distributed.init_process_group() in the torchrun-hpc trampoline.",
+    )
+
     # Grab the rest of the command line to launch
     # torchrun-hpc does not support running with a pre-generated batch script file
     parser.add_argument("command", help="Command to be executed")
@@ -152,6 +159,10 @@ def main():
     launch_args = [
         "-u",
         f"{os.path.abspath(folder_name)}/{trampoline_file}",
+    ]
+    if args.no_dist_init:
+        launch_args.append("--no-dist-init")
+    launch_args += [
         os.path.abspath(args.command),
     ]
     launch_args += args.args

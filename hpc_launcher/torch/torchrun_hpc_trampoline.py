@@ -26,6 +26,10 @@ from hpc_launcher.schedulers import get_schedulers
 def main():
     # Strip off the name of this script and pass the rest to runpy
     args = sys.argv[1:]
+    no_dist_init = False
+    if "--no-dist-init" in args:
+        no_dist_init = True
+        args = [a for a in args if a != "--no-dist-init"]
 
     scheduler_type = os.getenv("TORCHRUN_HPC_SCHEDULER")
     scheduler = get_schedulers()[scheduler_type]
@@ -67,6 +71,7 @@ def main():
     os.environ["LOCAL_RANK"] = f"{local_device_id}"
 
     torch_dist_initialized = dist.is_initialized()
+    did_init_dist = False
     rdv_protocol = os.getenv("TORCHRUN_HPC_RDV_PROTOCOL")
     if world_size > 1 or rdv_protocol == "mpi://":
         if rdv_protocol == "mpi://":
@@ -86,7 +91,7 @@ def main():
                     f"MPI rendezvous protocol selected without installing mpi_rndv library."
                 )
 
-        if not torch_dist_initialized:
+        if not torch_dist_initialized and not no_dist_init:
             if not backend:
                 raise Exception(
                     f"torchrun-hpc is unable to find a valid backend for torch distributed."
@@ -100,6 +105,7 @@ def main():
             dist.init_process_group(
                 backend, init_method=rdv_protocol, world_size=world_size, rank=rank, device_id=torch.device(device, local_device_id)
             )
+            did_init_dist = True
 
             if rdv_protocol == "mpi://" and rank == 0:
                 print(
@@ -129,12 +135,12 @@ def main():
         # If the mpi rendezvous protocol is set, this should be necessary but some packages still look for it
         os.environ["MASTER_ADDR"] = "23456"
 
-    # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
-    sys.argv = sys.argv[1:]
+    # Forward the underlying script argv, but strip any trampoline-only flags.
+    sys.argv = args
     # Run underlying script
     runpy.run_path(args[0], run_name="__main__")
 
-    if dist.is_initialized():
+    if did_init_dist and dist.is_initialized():
         # Deal with destroying the process group here
         dist.destroy_process_group()
 
