@@ -127,7 +127,7 @@ def main():
         os.environ["MASTER_PORT"] = os.getenv("TORCHRUN_HPC_MASTER_PORT")
     else:
         # If the mpi rendezvous protocol is set, this should be necessary but some packages still look for it
-        os.environ["MASTER_ADDR"] = "23456"
+        os.environ["MASTER_PORT"] = "23456"
 
     # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
     sys.argv = sys.argv[1:]
