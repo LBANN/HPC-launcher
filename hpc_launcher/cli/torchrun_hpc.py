@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(
-        description="A wrapper script that launches and runs distributed PyTorch on HPC systems."
+        description=
+        "A wrapper script that launches and runs distributed PyTorch on HPC systems."
     )
     common_args.setup_arguments(parser)
     parser.add_argument(
@@ -57,10 +58,19 @@ def main():
         "--unswap-rocr-hip-vis-dev",
         action="store_true",
         default=False,
-        help="Undo moving ROCR_VISIBLE_DEVICES into the HIP_VISIBLE_DEVICES env variable. "
+        help=
+        "Undo moving ROCR_VISIBLE_DEVICES into the HIP_VISIBLE_DEVICES env variable. "
         "In PyTorch codes HIP_VISIBLE_DEVICES is most similar to CUDA_VISIBLE_DEVICES. "
         "Ensureing that HIP vs ROCR can improve behavior of HF Accelerate and TorchTitan.",
     )
+
+    parser.add_argument(
+        "-m",
+        "--module",
+        action="store_true",
+        default=False,
+        help="If specified, the command will be interpreted as "
+        "a Python module (similar to `python -m module ...`).")
 
     # Grab the rest of the command line to launch
     # torchrun-hpc does not support running with a pre-generated batch script file
@@ -86,7 +96,9 @@ def main():
     if args.job_comm_protocol:
         optimize_comm_protocol = args.job_comm_protocol
     if optimize_comm_protocol.upper() == "MPI":
-        logger.warning(f"Using MPI as the primary communication protocol for PyTorch requires additional support")
+        logger.warning(
+            f"Using MPI as the primary communication protocol for PyTorch requires additional support"
+        )
     else:
         system.job_comm_protocol = "*CCL"
     # Pick batch scheduler
@@ -122,21 +134,22 @@ def main():
         )
         exit(1)
 
-    if args.bg and args.launch_dir is None: # or args.batch_script
+    if args.bg and args.launch_dir is None:  # or args.batch_script
         # If running a batch job with no launch directory argument,
         # run in the generated timestamped directory
         args.launch_dir = ""
     if args.launch_dir is None and not args.bg:
         args.launch_dir = ""
-        logger.info(f"torchrun-hpc needs to run jobs from a launch directory -- automatically setting the -l (--launch-dir) CLI argument")
+        logger.info(
+            f"torchrun-hpc needs to run jobs from a launch directory -- automatically setting the -l (--launch-dir) CLI argument"
+        )
 
     _, folder_name = scheduler.create_launch_folder_name(
-        args.command, "torchrun_hpc", args.launch_dir
-    )
+        args.command, "torchrun_hpc", args.launch_dir)
 
-    script_file = scheduler.create_launch_folder(
-        folder_name, not args.bg, args.output_script, args.dry_run
-    )
+    script_file = scheduler.create_launch_folder(folder_name, not args.bg,
+                                                 args.output_script,
+                                                 args.dry_run)
 
     trampoline_file = "torchrun_hpc_trampoline.py"
 
@@ -152,8 +165,11 @@ def main():
     launch_args = [
         "-u",
         f"{os.path.abspath(folder_name)}/{trampoline_file}",
-        os.path.abspath(args.command),
     ]
+    if args.module:
+        launch_args += ["-m", args.command]
+    else:
+        launch_args.append(os.path.abspath(args.command))
     launch_args += args.args
 
     logger.info(f"Running job in directory: {folder_name}")
