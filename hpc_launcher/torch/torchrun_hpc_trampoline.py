@@ -26,12 +26,16 @@ from hpc_launcher.schedulers import get_schedulers
 def main():
     # Strip off the name of this script and pass the rest to runpy
     args = sys.argv[1:]
+    if args[0] == "-m":
+        is_module = True
+        args = args[1:]
+    else:
+        is_module = False
 
     scheduler_type = os.getenv("TORCHRUN_HPC_SCHEDULER")
     scheduler = get_schedulers()[scheduler_type]
-    (world_size, rank, local_world_size, local_rank) = (
-        scheduler.get_parallel_configuration()
-    )
+    (world_size, rank, local_world_size,
+     local_rank) = (scheduler.get_parallel_configuration())
 
     # Check on the backend and report if the memory size was set
     backend = None
@@ -39,20 +43,24 @@ def main():
     if torch.cuda.is_available():
         backend = "nccl"
         device = "cuda"
-        fraction_max_gpu_mem = float(os.getenv("HPC_LAUNCHER_MAX_GPU_MEM", 1.0))
+        fraction_max_gpu_mem = float(os.getenv("HPC_LAUNCHER_MAX_GPU_MEM",
+                                               1.0))
         if fraction_max_gpu_mem != 1.0 and rank == 0:
             print(
                 f"[Rank {rank} of {world_size}] TORCHRUN-HPC set the max GPU memory fraction to {fraction_max_gpu_mem}"
             )
     else:
         backend = "gloo"
-        device="cpu"
+        device = "cpu"
 
     # Standard operating mode assumes that there is one rank per GPU
     # Check to see how many GPUS are actually available to this rank
     avail_gpus = 0
     gpus = []
-    for e in ["CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"]:
+    for e in [
+            "CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES",
+            "HIP_VISIBLE_DEVICES"
+    ]:
         if os.getenv(e):
             gpus = os.getenv(e)
             break
@@ -97,21 +105,18 @@ def main():
                     f"[Rank {rank} of {world_size}]: Initializing distributed PyTorch using protocol: {rdv_protocol}"
                 )
             # TODO(later): Fix how we handle CUDA visible devices and MPI bind
-            dist.init_process_group(
-                backend, init_method=rdv_protocol, world_size=world_size, rank=rank, device_id=torch.device(device, local_device_id)
-            )
+            dist.init_process_group(backend,
+                                    init_method=rdv_protocol,
+                                    world_size=world_size,
+                                    rank=rank,
+                                    device_id=torch.device(
+                                        device, local_device_id))
 
             if rdv_protocol == "mpi://" and rank == 0:
-                print(
-                    "[Rank {} of {}]: MPI Version: {}".format(
-                        rank, world_size, MPI.Get_version()
-                    )
-                )
-                print(
-                    "[Rank {} of {}]: MPI Implementation: {}".format(
-                        rank, world_size, MPI.Get_library_version()
-                    )
-                )
+                print("[Rank {} of {}]: MPI Version: {}".format(
+                    rank, world_size, MPI.Get_version()))
+                print("[Rank {} of {}]: MPI Implementation: {}".format(
+                    rank, world_size, MPI.Get_library_version()))
 
     # If the world size is only 1, torch distributed doesn't have to be initialized
     # however, the called application may try to setup torch distributed -- provide env variables
@@ -130,9 +135,13 @@ def main():
         os.environ["MASTER_PORT"] = "23456"
 
     # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
-    sys.argv = sys.argv[1:]
+    sys.argv = sys.argv[1:] if not is_module else sys.argv[2:]
+
     # Run underlying script
-    runpy.run_path(args[0], run_name="__main__")
+    if is_module:
+        runpy.run_module(args[0], run_name="__main__", alter_sys=True)
+    else:
+        runpy.run_path(args[0], run_name="__main__")
 
     if dist.is_initialized():
         # Deal with destroying the process group here
