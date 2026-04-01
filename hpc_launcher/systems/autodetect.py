@@ -15,6 +15,7 @@ from hpc_launcher.systems.system import System, GenericSystem, SystemParams
 from hpc_launcher.systems.lc.el_capitan_family import ElCapitan
 from hpc_launcher.systems.lc.cts2 import CTS2
 from hpc_launcher.systems.lc.sierra_family import Sierra
+from hpc_launcher.systems.lc.corona import Corona 
 import logging
 import socket
 import re
@@ -213,7 +214,10 @@ def autodetect_current_system(quiet: bool = False) -> System:
     if sys in ("lassen", "sierra", "rzanzel"):
         return Sierra(sys)
 
-    # Try to find current system via other means
+    if sys == "corona":
+        return Corona(sys)
+ 
+   # Try to find current system via other means
     (generic_name, num_gpus, mem_per_gpu, gpu_arch) = find_gpus()
     num_cpus = count_cpus()
     scheduler = find_scheduler()
