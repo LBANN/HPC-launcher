@@ -195,6 +195,8 @@ class ElCapitan(System):
         # Ensure that PyTorch respects channel's last for MIOpen (Audited on 1/13/2026)
         env_list.append(("PYTORCH_MIOPEN_SUGGEST_NHWC", "1"))
         env_list.append(("PYTORCH_MIOPEN_SUGGEST_NHWC_BATCHNORM", "1"))
+        # Ensure that MIOpen uses Stream-k for PyTorch backwards operations in 7.x (Audited on 3/17/2026)
+        env_list.append(("TENSILE_SOLUTION_SELECTION_METHOD", "2"))
 
         for i in self._aux_env_list:
             env_list.append(i)
