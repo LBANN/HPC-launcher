@@ -48,11 +48,14 @@ def create_scheduler_arguments(**kwargs) -> dict[str, str]:
     return cmdline_args
 
 
-def setup_arguments(parser: argparse.ArgumentParser):
+def setup_arguments(parser: argparse.ArgumentParser, time_limit_short: bool = True):
     """
     Adds common arguments for CLI utilities.
 
     :param parser: The ``argparse`` parser of the tool.
+    :param time_limit_short: If True, register ``-t`` as a short alias for
+        ``--time-limit``. torchrun-hpc disables this so that ``-t`` passes
+        through to torchrun (``--tee``).
     """
     parser.add_argument(
         "--verbose",
@@ -91,9 +94,10 @@ def setup_arguments(parser: argparse.ArgumentParser):
 
     group.add_argument("-q", "--queue", default=None, help="Specifies the queue to use")
 
+    time_limit_flags = ["-t", "--time-limit"] if time_limit_short else ["--time-limit"]
     group.add_argument(
-        "-t",
-        "--time-limit",
+        *time_limit_flags,
+        dest="time_limit",
         type=int,
         default=None,
         help="Set a time limit for the job in minutes",

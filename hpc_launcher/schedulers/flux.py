@@ -44,16 +44,23 @@ class FluxScheduler(Scheduler):
         # Number of Nodes
         self.common_launch_args[f"-N{self.nodes}"] = None
 
-        # Total number of Tasks / Processes
-        self.common_launch_args[f"-n{self.nodes * self.procs_per_node}"] = None
+        # Total number of Tasks / Processes. In torchrun_mode a single task per
+        # node is launched (torchrun spawns the per-node workers internally),
+        # otherwise one task per rank.
+        num_tasks = self.nodes if self.torchrun_mode else self.nodes * self.procs_per_node
+        self.common_launch_args[f"-n{num_tasks}"] = None
 
         # Unbuffered output
         self.common_launch_args["-u"] = None
 
         # Set the Number of GPUs per task
-        # There is a difference in option names between tasks and allocations
+        # There is a difference in option names between tasks and allocations.
+        # In torchrun_mode the single per-node task must see all of the node's
+        # GPUs so torchrun can round-robin them across its workers.
         if self.gpus_per_proc > 0:
-            tmp = f"{self.gpus_per_proc}"
+            gpus_per_task = (self.procs_per_node * self.gpus_per_proc
+                             if self.torchrun_mode else self.gpus_per_proc)
+            tmp = f"{gpus_per_task}"
             # command line flag for a task
             self.run_only_args["--gpus-per-task"] = tmp
             # command and shell flags for an allocation

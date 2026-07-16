@@ -11,19 +11,96 @@
 # https://github.com/LBANN and https://github.com/LLNL/LBANN.
 #
 # SPDX-License-Identifier: (Apache-2.0)
+#
+# This trampoline runs in one of two modes, selected by the
+# ``TORCHRUN_HPC_MODE`` environment variable that torchrun-hpc sets:
+#
+# * "torchrun" (default): the script is invoked as a torchrun *worker*. torchrun
+#   has already performed rendezvous and set RANK/LOCAL_RANK/WORLD_SIZE/
+#   MASTER_ADDR/MASTER_PORT. This trampoline only applies the HPC-specific GPU
+#   visibility tweaks and then runs the user's script/module. Distributed
+#   initialization is left to the user's code (via the standard "env://").
+#
+# * "mpi": the legacy path where the scheduler launches one process per rank and
+#   this trampoline performs its own MPI/TCP rendezvous. Used for
+#   ``--rdv-protocol mpi``.
 import hpc_launcher.torch
 
 import torch
 import torch.distributed as dist
 import runpy
-import atexit
 import sys
 import os
 
 from hpc_launcher.schedulers import get_schedulers
 
 
-def main():
+def _discover_visible_gpus():
+    """Return ``(env_var_name, [device_ids])`` for whichever vendor GPU
+    visibility variable is populated, or ``(None, [])`` if none are set."""
+    for e in [
+            "CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES",
+            "HIP_VISIBLE_DEVICES"
+    ]:
+        val = os.getenv(e)
+        if val:
+            return e, val.split(",")
+    return None, []
+
+
+def _run_user_target(args, is_module):
+    """Execute the user's script or module, restoring its sys.argv first."""
+    # Note that run_path/run_module will prepend args[0] back onto sys.argv, so
+    # it needs to be stripped off first.
+    sys.argv = args
+    if is_module:
+        runpy.run_module(args[0], run_name="__main__", alter_sys=True)
+    else:
+        runpy.run_path(args[0], run_name="__main__")
+
+
+def torchrun_worker_main():
+    """Default mode: run as a torchrun worker.
+
+    torchrun owns rendezvous and has already exported the standard distributed
+    environment variables. Here we only reconcile GPU visibility with the
+    LOCAL_RANK that torchrun assigned and then hand off to the user's code.
+    """
+    # sys.argv == [trampoline, <user_target>, <user_args...>]
+    args = sys.argv[1:]
+    if not args:
+        raise Exception(
+            "torchrun-hpc trampoline received no training target to execute.")
+
+    is_module = os.getenv("TORCHRUN_HPC_IS_MODULE", "0") == "1"
+
+    # torchrun sets LOCAL_RANK for each worker it spawns.
+    local_rank = int(os.getenv("LOCAL_RANK", "0"))
+
+    # The single per-node task can see all of the node's GPUs. Find the visible
+    # device list from whichever vendor variable is populated.
+    gpu_var, avail_gpus = _discover_visible_gpus()
+
+    visibility = os.getenv("TORCHRUN_HPC_GPU_VISIBILITY", "single")
+    if avail_gpus:
+        local_device_id = local_rank % len(avail_gpus)
+        if visibility == "single":
+            # Narrow this worker to only its assigned GPU and reset LOCAL_RANK to
+            # 0, so user code that assumes a single visible device (index 0)
+            # behaves correctly.
+            os.environ[gpu_var] = avail_gpus[local_device_id]
+            os.environ["LOCAL_RANK"] = "0"
+        else:
+            # Keep all GPUs visible; point LOCAL_RANK at the round-robin device.
+            os.environ["LOCAL_RANK"] = f"{local_device_id}"
+
+    # Distributed initialization is intentionally left to the user's script,
+    # which should use the default "env://" init method populated by torchrun.
+    _run_user_target(args, is_module)
+
+
+def mpi_legacy_main():
+    """Legacy mode: one process per rank, this trampoline does the rendezvous."""
     # Strip off the name of this script and pass the rest to runpy
     args = sys.argv[1:]
     if args[0] == "-m":
@@ -55,17 +132,7 @@ def main():
 
     # Standard operating mode assumes that there is one rank per GPU
     # Check to see how many GPUS are actually available to this rank
-    avail_gpus = 0
-    gpus = []
-    for e in [
-            "CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES",
-            "HIP_VISIBLE_DEVICES"
-    ]:
-        if os.getenv(e):
-            gpus = os.getenv(e)
-            break
-    if gpus:
-        avail_gpus = gpus.split(",")
+    _, avail_gpus = _discover_visible_gpus()
 
     # Round-robin assign the visibile GPUs
     if avail_gpus:
@@ -134,18 +201,22 @@ def main():
         # If the mpi rendezvous protocol is set, this should be necessary but some packages still look for it
         os.environ["MASTER_PORT"] = "23456"
 
-    # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
-    sys.argv = sys.argv[1:] if not is_module else sys.argv[2:]
-
-    # Run underlying script
-    if is_module:
-        runpy.run_module(args[0], run_name="__main__", alter_sys=True)
-    else:
-        runpy.run_path(args[0], run_name="__main__")
+    # ``args`` already has this trampoline's name (and any leading "-m")
+    # stripped, so args[0] is the user target -- exactly what _run_user_target
+    # expects as sys.argv.
+    _run_user_target(args, is_module)
 
     if dist.is_initialized():
         # Deal with destroying the process group here
         dist.destroy_process_group()
+
+
+def main():
+    mode = os.getenv("TORCHRUN_HPC_MODE", "torchrun")
+    if mode == "mpi":
+        mpi_legacy_main()
+    else:
+        torchrun_worker_main()
 
 
 if __name__ == "__main__":

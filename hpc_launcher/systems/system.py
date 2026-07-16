@@ -92,7 +92,7 @@ class System:
             else:
                 logger.warning("Could not auto-detect current system parameters")
         # Optional system level flag to indicate primary communication method for distributed jobs
-        self.job_comm_protocol = None
+        self.job_comm_protocol: str | None = None
 
     _aux_env_list = []
 

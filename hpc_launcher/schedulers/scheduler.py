@@ -73,6 +73,10 @@ class Scheduler:
     ld_preloads: Optional[list[str]] = None
     # Capture the original command so that it can be added to the launch script
     command_line: Optional[list[str]] = None
+    # If True, a single task is launched per node (e.g., one torchrun process
+    # per node that internally spawns procs_per_node workers), rather than one
+    # task per rank. Used by torchrun-hpc when wrapping the real torchrun.
+    torchrun_mode: bool = False
 
     # Command line flags given to a batch or interactive submit command
     submit_only_args = OrderedDict()
@@ -424,7 +428,7 @@ class Scheduler:
         """
         raise NotImplementedError
 
-    def setup_rendezvous_protocol(self, protocol: str) -> list[str]:
+    def setup_rendezvous_protocol(self, protocol: str) -> list[tuple[str, str]]:
         """
         Setup a protocol for a tool like PyTorch to use to establish
         distributed communication.
@@ -454,7 +458,7 @@ class Scheduler:
         command: str,
         folder_prefix: str = "launch",
         launch_dir: Optional[str] = None,
-    ) -> (str, str):
+    ) -> tuple[str, str]:
         """
         Create a folder name for the launcher based on the command.
 
@@ -478,7 +482,7 @@ class Scheduler:
             short_uuid = uuid.uuid4().hex[:8]
             folder_name = f'{folder_prefix}-{self.job_name or command_as_folder_name}_{time.strftime("%Y-%m-%d_%Hh%Mm%Ss")}_{short_uuid}'
         else:
-            folder_name = launch_dir
+            folder_name = launch_dir or ""
 
         return (command_as_folder_name, folder_name)
 
@@ -488,7 +492,7 @@ class Scheduler:
         blocking: bool = True,
         script_file: Optional[str] = None,
         dry_run: bool = False,
-    ) -> (str, str):
+    ) -> str:
         """
         Create a folder and associated launch script if approrpiate.
 
@@ -578,7 +582,7 @@ class Scheduler:
         :params immutable_launch_script: It True, do not modify the script and put any system env arguments on the CLI command
         :return: The queued job ID as a string.
         """
-
+        args = args or []
         self.override_launch_args = override_launch_args
 
         # If the command is run from a directory
