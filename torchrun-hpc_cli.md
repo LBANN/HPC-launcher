@@ -4,17 +4,19 @@
 
 The `torchrun-hpc` command is a wrapper script that launches and runs distributed PyTorch on HPC systems. It provides HPC-optimized functionality for PyTorch distributed training across various schedulers (SLURM, LSF, Flux) and handles the complexities of multi-node, multi-GPU training setups.
 
+By default `torchrun-hpc` **wraps the real `torchrun`**: the batch scheduler launches one `torchrun` process per node, `torchrun` performs its (c10d) rendezvous and spawns the per-node workers, and a thin trampoline applies the HPC-specific GPU/memory handling before running your script. Because `torchrun` itself is invoked, **all of `torchrun`'s command-line flags are accepted and forwarded automatically** — you do not need a new `torchrun-hpc` release to use a new `torchrun` flag. `torchrun-hpc` still derives the topology and rendezvous from the HPC scheduler; see [torchrun Flag Passthrough](#torchrun-flag-passthrough) below.
+
 ## Synopsis
 
 ```bash
-torchrun-hpc [options] command [args...]
+torchrun-hpc [torchrun-hpc options] [torchrun options] training_script [script args...]
 ```
 
 ## Command Structure
 
 ```bash
 torchrun-hpc [-h] [--verbose] [-N NODES] [-n PROCS_PER_NODE] [--gpus-per-proc GPUS_PER_PROC]
-             [-q QUEUE] [-t TIME_LIMIT] [-g GPUS_AT_LEAST] [--gpumem-at-least GPUMEM_AT_LEAST]
+             [-q QUEUE] [--time-limit TIME_LIMIT] [-g GPUS_AT_LEAST] [--gpumem-at-least GPUMEM_AT_LEAST]
              [--exclusive] [--local] [--comm-backend JOB_COMM_PROTOCOL]
              [-x KEY=VALUE [KEY=VALUE ...]] [--bg] [--batch-script BATCH_SCRIPT]
              [--scheduler {local,flux,slurm,lsf}]
@@ -22,16 +24,19 @@ torchrun-hpc [-h] [--verbose] [-N NODES] [-n PROCS_PER_NODE] [--gpus-per-proc GP
              [--account ACCOUNT] [--dependency DEPENDENCY] [-J JOB_NAME]
              [--reservation RESERVATION] [--save-hostlist]
              [-p KEY=VALUE [KEY=VALUE ...]] [--out OUT_LOG_FILE] [--err ERR_LOG_FILE]
-             [--color-stderr] [-r RDV] [--fraction-max-gpu-mem FRACTION_MAX_GPU_MEM]
-             [-u] command [args...]
+             [--color-stderr] [--rdv-protocol RDV] [--gpu-visibility {single,all}]
+             [--fraction-max-gpu-mem FRACTION_MAX_GPU_MEM] [-u]
+             [torchrun options ...] training_script [script args...]
 ```
+
+> **Note:** `torchrun-hpc` no longer registers `-t` as a short form for `--time-limit`, and `--rdv` has been renamed to `--rdv-protocol`. This frees the `-r` and `-t` short options so that `torchrun`'s own `-r/--redirects` and `-t/--tee` flags can pass straight through.
 
 ## Positional Arguments
 
 | Argument | Description |
 |----------|-------------|
-| `command` | Command to be executed (typically a Python script) |
-| `args` | Arguments to pass to the command |
+| `training_script` | The script (or module, with `-m`) to be executed |
+| `script args` | Arguments passed to the training script |
 
 ## Optional Arguments
 
@@ -46,16 +51,35 @@ torchrun-hpc [-h] [--verbose] [-N NODES] [-n PROCS_PER_NODE] [--gpus-per-proc GP
 
 | Option | Short Form | Description | Values |
 |--------|------------|-------------|--------|
-| `--rdv` | `-r` | Specifies rendezvous protocol to use | `mpi` \| `tcp` |
+| `--rdv-protocol` | | Specifies rendezvous protocol to use | `mpi` \| `tcp` (default) |
+| `--gpu-visibility` | | Controls how many GPUs each worker sees | `single` (default) \| `all` |
 | `--fraction-max-gpu-mem` | | Use `torch.cuda.set_per_process_memory_fraction` to limit GPU memory allocation | Float (0.0-1.0) |
 | `--unswap-rocr-hip-vis-dev` | `-u` | Undo moving ROCR_VISIBLE_DEVICES into HIP_VISIBLE_DEVICES env variable | Flag |
 
 #### Notes on PyTorch Options:
-- **Rendezvous (`--rdv`)**: Controls how distributed processes discover and connect to each other
-  - `mpi`: Use MPI for rendezvous (good for HPC environments)
-  - `tcp`: Use TCP/IP for rendezvous (standard PyTorch default)
+- **Rendezvous (`--rdv-protocol`)**: Controls how distributed processes discover and connect to each other
+  - `tcp` (default): Wraps the real `torchrun` and uses its c10d rendezvous. The coordinator address/port are still derived from the HPC scheduler (e.g. the first host of the SLURM node list).
+  - `mpi`: Uses the **legacy** per-rank launcher (one process per rank, MPI/`mpi://` rendezvous performed inside the trampoline). This path does **not** wrap `torchrun` and requires the `mpi4py`/`mpi_rdv` libraries. Use it only if you specifically need MPI-based rendezvous.
+- **GPU Visibility (`--gpu-visibility`)**: In the default `torchrun` path a single task per node sees all of the node's GPUs.
+  - `single` (default): each worker is narrowed to only its round-robin-assigned GPU (`LOCAL_RANK` is reset to 0). Matches the historical `torchrun-hpc` behavior.
+  - `all`: every GPU stays visible and `LOCAL_RANK` is set to the round-robin device index (standard `torchrun` behavior). Choose this if your code calls `torch.cuda.set_device(LOCAL_RANK)` itself.
 - **GPU Memory Fraction**: Useful for preventing OOM errors or sharing GPUs
 - **AMD GPU Support**: The `-u` flag improves behavior with HuggingFace Accelerate and TorchTitan on AMD GPUs
+
+### torchrun Flag Passthrough
+
+Any option `torchrun-hpc` does not recognize is validated by (and forwarded to) the real `torchrun` — so flags such as `--max-restarts`, `--monitor-interval`, `--tee`, `--redirects`, `--start-method`, `--local-ranks-filter`, and elastic `--nnodes` ranges are all available without any change to `torchrun-hpc`. Run `torchrun --help` to see the full list.
+
+`torchrun-hpc` **owns** the flags that determine job topology and rendezvous, because it derives them from the HPC scheduler. If you pass any of these to `torchrun-hpc` explicitly, it errors out rather than silently ignoring your value:
+
+```
+--nnodes  --nproc-per-node  --rdzv-backend  --rdzv-endpoint  --rdzv-id
+--node-rank  --master-addr  --master-port  --standalone  --no-python  --run-path
+```
+
+Use the `torchrun-hpc` equivalents instead: `-N/--nodes`, `-n/--procs-per-node`, `-g/--gpus-at-least`, etc.
+
+**Module execution:** pass `-m`/`--module` (as you would to `torchrun`/`python`) to run a module instead of a script file, e.g. `torchrun-hpc -N2 -n4 -m my.training.module --lr 0.1`.
 
 ## Job Size Options
 
@@ -67,7 +91,7 @@ These options determine the number of nodes, accelerators, and ranks for the job
 | `--procs-per-node` | `-n` | Specifies the number of requested processes per node | Mutually exclusive with `-g` |
 | `--gpus-per-proc` | | Specifies the number of requested GPUs per process | Default: 1 |
 | `--queue` | `-q` | Specifies the queue to use | |
-| `--time-limit` | `-t` | Set a time limit for the job in minutes | |
+| `--time-limit` | | Set a time limit for the job in minutes (no `-t` short form; `-t` is forwarded to `torchrun --tee`) | |
 | `--gpus-at-least` | `-g` | Specifies the total number of accelerators requested | Mutually exclusive with `-n` and `-N` |
 | `--gpumem-at-least` | | Constraint for accelerator memory needed (in GB) | System must be registered with launcher |
 | `--exclusive` | | Request exclusive access from the scheduler | |
@@ -166,14 +190,14 @@ torchrun-hpc --local -N 2 -n 2 test_script.py
 ### Rendezvous Configuration
 
 ```bash
-# MPI rendezvous (recommended for HPC)
-torchrun-hpc -r mpi -N 4 -n 8 train.py
+# Default: wraps torchrun with scheduler-derived c10d rendezvous
+torchrun-hpc -N 2 -n 4 train.py
 
-# TCP rendezvous (standard PyTorch)
-torchrun-hpc -r tcp -N 2 -n 4 train.py
+# Explicit TCP/c10d rendezvous (same as default)
+torchrun-hpc --rdv-protocol tcp -N 2 -n 4 train.py
 
-# TCP is useful for cloud environments or mixed networks
-torchrun-hpc --rdv tcp -N 2 -n 4 cloud_train.py
+# Legacy MPI rendezvous (per-rank launcher; requires mpi4py/mpi_rdv)
+torchrun-hpc --rdv-protocol mpi -N 4 -n 8 train.py
 ```
 
 ### GPU Memory Management
@@ -213,7 +237,7 @@ torchrun-hpc --exclusive -N 4 -n 4 performance_critical.py
 
 ```bash
 # Submit to specific queue with time limit
-torchrun-hpc -q gpu_queue -t 480 -N 4 -n 4 long_train.py
+torchrun-hpc -q gpu_queue --time-limit 480 -N 4 -n 4 long_train.py
 
 # Background job with custom name
 torchrun-hpc --bg -J "BERT_finetune" -N 2 -n 4 bert_train.py
@@ -298,11 +322,10 @@ torchrun-hpc \
   -N 16 \
   -n 4 \
   --gpus-per-proc 1 \
-  -r mpi \
   --fraction-max-gpu-mem 0.9 \
   --comm-backend NCCL \
   -q production \
-  -t 1440 \
+  --time-limit 1440 \
   --exclusive \
   --bg \
   -l production_run_$(date +%Y%m%d_%H%M%S) \
@@ -403,10 +426,10 @@ if __name__ == "__main__":
    torchrun-hpc --fraction-max-gpu-mem 0.8 -N 2 -n 4 train.py
    ```
 
-3. **Rendezvous Failures**: Switch between MPI and TCP
+3. **Rendezvous Failures**: The default TCP/c10d path is recommended; the legacy MPI path is available as a fallback
    ```bash
-   # Try TCP if MPI fails
-   torchrun-hpc -r tcp -N 2 -n 4 train.py
+   # Fall back to the legacy MPI launcher (requires mpi4py/mpi_rdv)
+   torchrun-hpc --rdv-protocol mpi -N 2 -n 4 train.py
    ```
 
 4. **AMD GPU Issues**: Use the unswap flag to set ROCR_VISIBLE_DEVICES
@@ -417,7 +440,7 @@ if __name__ == "__main__":
 
 ## Tips and Best Practices
 
-1. **Use MPI rendezvous** (`-r mpi`) for stable HPC environments
+1. **Use the default (torchrun/c10d) rendezvous** for most jobs; reserve `--rdv-protocol mpi` for environments that specifically need MPI-based rendezvous
 2. **Match processes to GPUs**: Set `-n` equal to GPUs per node
 3. **Test locally first**: Use `--local` flag for debugging
 4. **Save setup scripts**: Use `--setup-only` to review job configuration
@@ -428,12 +451,15 @@ if __name__ == "__main__":
 9. **Set appropriate time limits** to avoid job termination
 10. **Use dry-run** (`--dry-run`) to verify complex commands
 
-## Differences from Standard torchrun
+## Relationship to Standard torchrun
 
-- **HPC Scheduler Integration**: Native support for SLURM, LSF, Flux
-- **Rendezvous Options**: Choice between MPI and TCP
-- **Resource Management**: HPC-specific resource allocation
+`torchrun-hpc` wraps `torchrun` rather than replacing it: it launches one real `torchrun` per node and forwards all `torchrun` flags. On top of `torchrun` it adds:
+
+- **HPC Scheduler Integration**: Native support for SLURM, LSF, Flux (one `torchrun` per node with the right task/GPU allocation)
+- **Scheduler-derived rendezvous**: The c10d coordinator is set from the scheduler's node list automatically; a legacy MPI rendezvous path is also available
+- **Resource Management**: HPC-specific resource allocation and constraints (`-g`, `--gpumem-at-least`, etc.)
 - **GPU Memory Control**: Built-in memory fraction limiting
+- **GPU Visibility Control**: Per-worker GPU narrowing via `--gpu-visibility`
 - **AMD GPU Support**: Special handling for ROCm environments
 
 ## See Also

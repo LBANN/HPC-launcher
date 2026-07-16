@@ -174,7 +174,7 @@ def test_launcher_multinode(num_nodes, procs_per_node, rdv, scheduler_type):
         "-v",
         f"-N{num_nodes}",
         f"-n{procs_per_node}",
-        f"-r{rdv}",
+        f"--rdv-protocol={rdv}",
         "--save-hostlist",
         driver_file,
     ]
@@ -188,17 +188,21 @@ def test_launcher_multinode(num_nodes, procs_per_node, rdv, scheduler_type):
     else:
         assert False, f"Unable to find expected hostlist: hpc_launcher_hostlist.txt"
 
-    regex = re.compile(
-        ".*Initializing distributed PyTorch using protocol: ({})://.*".format(rdv),
-        re.MULTILINE | re.DOTALL,
-    )
-    match = regex.match(proc.stdout)
-    if match:
-        assert (
-            match.group(1) == rdv
-        ), f"{match.group(1)} is the incorrect rendezvous protocol: requested {rdv}"
-    else:
-        assert False, f"Unable to detect a valid rendezvous protocol for test {rdv}"
+    # The legacy MPI path performs rendezvous inside the trampoline and prints a
+    # protocol banner. The default (tcp/c10d) path delegates rendezvous to the
+    # real torchrun, which does not print this banner.
+    if rdv == "mpi":
+        regex = re.compile(
+            ".*Initializing distributed PyTorch using protocol: ({})://.*".format(rdv),
+            re.MULTILINE | re.DOTALL,
+        )
+        match = regex.match(proc.stdout)
+        if match:
+            assert (
+                match.group(1) == rdv
+            ), f"{match.group(1)} is the incorrect rendezvous protocol: requested {rdv}"
+        else:
+            assert False, f"Unable to detect a valid rendezvous protocol for test {rdv}"
     assert proc.returncode == 0
 
     if exp_dir:
