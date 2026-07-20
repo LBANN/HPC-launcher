@@ -29,6 +29,21 @@ scripts are constructed directly against a ``GenericSystem`` stub.
 """
 from hpc_launcher.schedulers.lsf import LSFScheduler
 
+# bsub-only flags that must never reach jsrun (they live in
+# submit_only_args, not common_launch_args/run_only_args).
+BSUB_ONLY_FLAGS = ("-nnodes", "-q", "-J", "--shared-launch", "-W", "-G")
+
+# jsrun flags the scheduler is expected to still emit on the internal run
+# line (unaffected by the E1/E2 restructuring).
+JSRUN_FLAGS = (
+    "--nrs",
+    "--rs_per_host",
+    "--tasks_per_rs",
+    "--launch_distribution",
+    "--cpu_per_rs",
+    "--gpu_per_rs",
+)
+
 
 def _make_scheduler():
     return LSFScheduler(
@@ -77,3 +92,49 @@ def test_bsub_argv_tokens_are_split(stub_system, monkeypatch):
 
         # --shared-launch is a bare flag (no value).
         assert "--shared-launch" in cmd
+
+
+def test_jsrun_line_has_no_bsub_flags(stub_system, tmp_path, monkeypatch):
+    """
+    The internal ``jsrun`` line written into the batch script by
+    ``launcher_script`` must not contain any bsub-only flag, and must
+    contain the genuine jsrun flags.
+    """
+    monkeypatch.delenv("LSB_HOSTS", raising=False)
+    scheduler = _make_scheduler()
+
+    script = scheduler.launcher_script(
+        stub_system,
+        "python",
+        ["train.py"],
+        blocking=False,
+        launch_dir=str(tmp_path),
+    )
+
+    jsrun_lines = [
+        line
+        for line in script.splitlines()
+        if "jsrun" in line and not line.lstrip().startswith("#")
+    ]
+    assert len(jsrun_lines) == 1, (
+        f"expected exactly one internal jsrun line, found {len(jsrun_lines)}:\n{script}"
+    )
+    jsrun_line = jsrun_lines[0]
+
+    for flag in BSUB_ONLY_FLAGS:
+        assert (
+            f" {flag} " not in f" {jsrun_line} "
+        ), f"bsub-only flag {flag!r} leaked into the jsrun line: {jsrun_line}"
+
+    for flag in JSRUN_FLAGS:
+        assert flag in jsrun_line, f"expected jsrun flag {flag!r} missing from: {jsrun_line}"
+
+    # The job name (a submit-only value) must not have leaked into the run
+    # line either -- it only belongs on the #BSUB header line.
+    assert "myjob" not in jsrun_line
+
+    # Sanity check: the job name *is* present, quoted, on a #BSUB directive.
+    directive_lines = [
+        line for line in script.splitlines() if line.startswith("#BSUB")
+    ]
+    assert any("myjob" in line for line in directive_lines)

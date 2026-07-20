@@ -28,35 +28,19 @@ from hpc_launcher.schedulers import parse_env_list
 @dataclass
 class LSFScheduler(Scheduler):
 
-    # bsub flags that take a value using LSF's native space-separated CLI
-    # syntax (e.g. ``-nnodes 2``), not the GNU-style ``--flag=value`` syntax
-    # used by Slurm/Flux (finding E1). Keyed by flag name so the correct
-    # formatting applies regardless of which argument bucket a given flag
-    # currently lives in.
-    _SPACE_SEPARATED_FLAGS = frozenset(
-        {
-            "-nnodes",
-            "-J",
-            "-q",
-            "-G",
-            "-U",
-            "-W",
-            "-o",
-            "-e",
-            "-cwd",
-            "--chdir",
-            "--shared-launch",
-        }
-    )
-
     def build_scheduler_specific_arguments(
         self, system: "System", blocking: bool = True
     ):
         # Number of Nodes
         self.run_only_args["--nrs"] = f"{self.nodes}"
-        self.common_launch_args["-nnodes"] = f"{self.nodes}"
+        # bsub-only flag (submit-only): jsrun has no notion of "-nnodes", it
+        # only ever sees "--nrs" (above). Keep this out of common_launch_args
+        # so it doesn't leak into the internal jsrun run command written into
+        # the batch script (finding E2).
+        self.submit_only_args["-nnodes"] = f"{self.nodes}"
 
-        self.common_launch_args["--shared-launch"] = None
+        # bsub-only flag: not a jsrun option (finding E2).
+        self.submit_only_args["--shared-launch"] = None
 
         # jsrun options (do we need to guard this with something like if os.getenv("LSB_HOSTS"):
         self.run_only_args["--rs_per_host"] = "1"
@@ -78,14 +62,16 @@ class LSFScheduler(Scheduler):
         if self.job_name:
             # Flag and value are now separate dict entries, so the job name
             # flows through as a normal value and is quoted by the
-            # scheduler's central serialization (format_common_arg /
+            # scheduler's central serialization (format_submit_arg /
             # build_command_string_and_batch_script) wherever it is emitted
             # (finding D1). No source-level quoting needed here.
-            self.common_launch_args["-J"] = self.job_name
+            self.submit_only_args["-J"] = self.job_name
         if self.queue:
-            self.common_launch_args["-q"] = f"{self.queue}"
+            # bsub-only flag: not a jsrun option (finding E2).
+            self.submit_only_args["-q"] = f"{self.queue}"
         if self.account:
-            self.common_launch_args["-G"] = f"{self.account}"
+            # bsub-only flag: not a jsrun option (finding E2).
+            self.submit_only_args["-G"] = f"{self.account}"
         if self.reservation:
             self.submit_only_args["-U"] = f"{self.reservation}"
 
@@ -99,23 +85,21 @@ class LSFScheduler(Scheduler):
 
         return
 
-    def _format_lsf_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+    def format_submit_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
         # Both launch paths execute argv lists (or an internal run-command
         # line built from them) without a shell, so a bsub flag and its
         # value must be separate tokens like ``["-nnodes", "2"]`` rather than
-        # one token containing a literal space (finding E1).
+        # one token containing a literal space (finding E1), unlike Slurm's/
+        # Flux's GNU-style "--flag=value" long options. Every entry in
+        # submit_only_args is a genuine bsub-only flag (finding E2 moved the
+        # rest out of common_launch_args), so this formatting applies
+        # unconditionally here; common_launch_args keeps the base class's
+        # default "=" formatting for LSF (it only holds generic/overridden
+        # flags, since LSF has none genuinely shared between bsub and jsrun).
         if not v:
             return [k]
         val = shlex.quote(v) if quote_value else v
-        if k in self._SPACE_SEPARATED_FLAGS:
-            return [k, val]
-        return [f"{k}={val}"]
-
-    def format_submit_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
-        return self._format_lsf_arg(k, v, quote_value)
-
-    def format_common_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
-        return self._format_lsf_arg(k, v, quote_value)
+        return [k, val]
 
     def batch_script_prefix(self) -> str:
         return "#BSUB"
