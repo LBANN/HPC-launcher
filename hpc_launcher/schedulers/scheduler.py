@@ -12,7 +12,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
@@ -75,11 +75,11 @@ class Scheduler:
     command_line: Optional[list[str]] = None
 
     # Command line flags given to a batch or interactive submit command
-    submit_only_args = OrderedDict()
+    submit_only_args: OrderedDict = field(default_factory=OrderedDict)
     # Commands given to active run command
-    run_only_args = OrderedDict()
+    run_only_args: OrderedDict = field(default_factory=OrderedDict)
     # Flags given to both submit and run commands
-    common_launch_args = OrderedDict()
+    common_launch_args: OrderedDict = field(default_factory=OrderedDict)
 
     # CLI flags for override
     override_launch_args: Optional[dict] = None
