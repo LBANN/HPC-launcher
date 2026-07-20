@@ -110,6 +110,52 @@ class Scheduler:
     ):
         return NotImplementedError
 
+    @staticmethod
+    def _kv_arg_tokens(k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+        """
+        Default flag/value formatting: a bare flag (``k``) when ``v`` is
+        falsy, otherwise a single GNU-style ``k=v`` token (e.g. Slurm's
+        ``--nodes=2``, Flux's ``--env=FOO``).
+
+        :param k: The flag.
+        :param v: The flag's value, or a falsy value (``None``/``""``) for a
+                  bare flag.
+        :param quote_value: If True, shell-quote the value before joining
+                             (used when the returned token(s) will be written
+                             into a batch-script line that a shell later
+                             parses; not used for argv passed directly to
+                             ``exec``, which needs no quoting).
+        :return: A list containing the single formatted token.
+        """
+        if not v:
+            return [k]
+        val = shlex.quote(v) if quote_value else v
+        return [f"{k}={val}"]
+
+    def format_submit_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+        """
+        Formats a single (flag, value) pair from ``submit_only_args`` into
+        the token(s) used on the submit command's argv or a batch-script
+        directive line. Default: GNU-style ``k=v`` as one token. Override
+        for schedulers whose submit flags don't accept ``=`` (e.g. LSF's
+        ``bsub`` short options, which need ``-nnodes`` and ``2`` as two
+        separate tokens).
+
+        :param k: The flag.
+        :param v: The flag's value, or a falsy value for a bare flag.
+        :param quote_value: See :meth:`_kv_arg_tokens`.
+        :return: A list of one or more tokens representing this flag/value pair.
+        """
+        return self._kv_arg_tokens(k, v, quote_value)
+
+    def format_common_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+        """As :meth:`format_submit_arg`, for ``common_launch_args``."""
+        return self._kv_arg_tokens(k, v, quote_value)
+
+    def format_run_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+        """As :meth:`format_submit_arg`, for ``run_only_args``."""
+        return self._kv_arg_tokens(k, v, quote_value)
+
     def build_command_string_and_batch_script(
             self, system: "System", blocking: bool = True, cli_env_only: bool = False,
             for_launch_cmd: bool = True,
@@ -183,17 +229,15 @@ class Scheduler:
             for k,v in self.submit_only_args.items():
                 if not for_launch_cmd and k == '--dependency':
                     continue
-                if not v:
-                    header.write(f"{prefix} {k}\n")
-                else:
-                    header.write(f"{prefix} {k}={shlex.quote(v)}\n")
+                header.write(
+                    f"{prefix} " + " ".join(self.format_submit_arg(k, v, quote_value=True)) + "\n"
+                )
             for k,v in self.common_launch_args.items():
                 if not for_launch_cmd and k == '--dependency':
                     continue
-                if not v:
-                    header.write(f"{prefix} {k}\n")
-                else:
-                    header.write(f"{prefix} {k}={shlex.quote(v)}\n")
+                header.write(
+                    f"{prefix} " + " ".join(self.format_common_arg(k, v, quote_value=True)) + "\n"
+                )
 
         if len(env_vars):
             if blocking and cli_env_only:
@@ -258,25 +302,16 @@ class Scheduler:
 
         # Both commands get the submit args
         for k,v in self.common_launch_args.items():
-            if not v:
-                cmd_args += [k]
-            else:
-                cmd_args += [f"{k}={v}"]
+            cmd_args += self.format_common_arg(k, v)
         for k,v in self.submit_only_args.items():
-            if not v:
-                cmd_args += [k]
-            else:
-                cmd_args += [f"{k}={v}"]
+            cmd_args += self.format_submit_arg(k, v)
         if not blocking:
             return self.nonblocking_launch_command() + cmd_args
 
         # For interactive jobs add the run args (if the scheduler permits it)
         if self.enable_run_args_on_launch_command():
             for k,v in self.run_only_args.items():
-                if not v:
-                    cmd_args += [k]
-                else:
-                    cmd_args += [f"{k}={v}"]
+                cmd_args += self.format_run_arg(k, v)
         return self.blocking_launch_command() + cmd_args
 
     def export_hostlist(self) -> str:
@@ -346,17 +381,11 @@ class Scheduler:
         # For batch jobs add any common args to the internal command
         if not blocking:
             for k,v in self.common_launch_args.items():
-                if not v:
-                    cmd_args += [k]
-                else:
-                    cmd_args += [f"{k}={shlex.quote(v)}"]
+                cmd_args += self.format_common_arg(k, v, quote_value=True)
         # For jobs that require a parallel internal command add any run args
         if self.require_parallel_internal_run_command(blocking):
             for k,v in self.run_only_args.items():
-                if not v:
-                    cmd_args += [k]
-                else:
-                    cmd_args += [f"{k}={shlex.quote(v)}"]
+                cmd_args += self.format_run_arg(k, v, quote_value=True)
 
         # Configure header and command line with scheduler job options
         script += header_lines

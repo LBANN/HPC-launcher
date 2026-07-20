@@ -28,12 +28,33 @@ from hpc_launcher.schedulers import parse_env_list
 @dataclass
 class LSFScheduler(Scheduler):
 
+    # bsub flags that take a value using LSF's native space-separated CLI
+    # syntax (e.g. ``-nnodes 2``), not the GNU-style ``--flag=value`` syntax
+    # used by Slurm/Flux (finding E1). Keyed by flag name so the correct
+    # formatting applies regardless of which argument bucket a given flag
+    # currently lives in.
+    _SPACE_SEPARATED_FLAGS = frozenset(
+        {
+            "-nnodes",
+            "-J",
+            "-q",
+            "-G",
+            "-U",
+            "-W",
+            "-o",
+            "-e",
+            "-cwd",
+            "--chdir",
+            "--shared-launch",
+        }
+    )
+
     def build_scheduler_specific_arguments(
         self, system: "System", blocking: bool = True
     ):
         # Number of Nodes
         self.run_only_args["--nrs"] = f"{self.nodes}"
-        self.common_launch_args[f"-nnodes {self.nodes}"] = None
+        self.common_launch_args["-nnodes"] = f"{self.nodes}"
 
         self.common_launch_args["--shared-launch"] = None
 
@@ -45,28 +66,28 @@ class LSFScheduler(Scheduler):
         self.run_only_args["--gpu_per_rs"] = "ALL_GPUS"
 
         if self.out_log_file and not blocking:
-            self.submit_only_args[f"-o {self.out_log_file}"] = None
+            self.submit_only_args["-o"] = f"{self.out_log_file}"
         if self.err_log_file and not blocking:
-            self.submit_only_args[f"-e {self.err_log_file}"] = None
+            self.submit_only_args["-e"] = f"{self.err_log_file}"
 
         # Configure header with LSF job options
         if self.time_limit:
             minutes = int(round(max(self.time_limit, 0)))
             hours, minutes = divmod(minutes, 60)
-            self.submit_only_args[f"-W {hours}:{minutes:02}\n"] = None
+            self.submit_only_args["-W"] = f"{hours}:{minutes:02}"
         if self.job_name:
-            # The job name is embedded in the dict key (with a None value), so
-            # the scheduler's central value-quoting does not reach it. Quote the
-            # name portion here so it stays a single inert token wherever this
-            # entry is serialized into the shell script (finding D1). The flag
-            # (`-J`) itself is left unquoted.
-            self.common_launch_args[f"-J {shlex.quote(self.job_name)}"] = None
+            # Flag and value are now separate dict entries, so the job name
+            # flows through as a normal value and is quoted by the
+            # scheduler's central serialization (format_common_arg /
+            # build_command_string_and_batch_script) wherever it is emitted
+            # (finding D1). No source-level quoting needed here.
+            self.common_launch_args["-J"] = self.job_name
         if self.queue:
-            self.common_launch_args[f"-q {self.queue}"] = None
+            self.common_launch_args["-q"] = f"{self.queue}"
         if self.account:
-            self.common_launch_args[f"-G {self.account}"] = None
+            self.common_launch_args["-G"] = f"{self.account}"
         if self.reservation:
-            self.submit_only_args[f"-U {self.reservation}"] = None
+            self.submit_only_args["-U"] = f"{self.reservation}"
 
         if self.work_dir:
             if blocking:
@@ -77,6 +98,24 @@ class LSFScheduler(Scheduler):
                 self.submit_only_args["-cwd"] = f"{self.work_dir}"
 
         return
+
+    def _format_lsf_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+        # Both launch paths execute argv lists (or an internal run-command
+        # line built from them) without a shell, so a bsub flag and its
+        # value must be separate tokens like ``["-nnodes", "2"]`` rather than
+        # one token containing a literal space (finding E1).
+        if not v:
+            return [k]
+        val = shlex.quote(v) if quote_value else v
+        if k in self._SPACE_SEPARATED_FLAGS:
+            return [k, val]
+        return [f"{k}={val}"]
+
+    def format_submit_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+        return self._format_lsf_arg(k, v, quote_value)
+
+    def format_common_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+        return self._format_lsf_arg(k, v, quote_value)
 
     def batch_script_prefix(self) -> str:
         return "#BSUB"
