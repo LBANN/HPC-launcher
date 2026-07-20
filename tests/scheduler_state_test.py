@@ -19,6 +19,8 @@ autodetection -- systems are constructed directly.
 """
 from hpc_launcher.schedulers.flux import FluxScheduler
 from hpc_launcher.schedulers.slurm import SlurmScheduler
+from hpc_launcher.systems.lc.el_capitan_family import ElCapitan
+from hpc_launcher.systems.system import GenericSystem
 
 
 def test_scheduler_args_not_shared_between_instances(stub_system):
@@ -67,3 +69,11 @@ def test_scheduler_args_not_shared_across_classes(stub_system):
         assert not any(
             leaked_flag in c for c in second_cmd
         ), f"{leaked_flag} leaked from a SlurmScheduler into a fresh FluxScheduler: {second_cmd}"
+
+
+def test_aux_env_list_not_shared():
+    ElCapitan("tioga").extend_environment_variables([("LEAKED_VAR", "1")])
+    leaked = [
+        e for e in GenericSystem().environment_variables() if "LEAKED" in str(e)
+    ]
+    assert leaked == []
