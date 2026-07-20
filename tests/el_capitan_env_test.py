@@ -142,3 +142,90 @@ def test_version_gate_tuple_compare(monkeypatch, tmp_path):
     env = {e[0]: e[1] for e in _env_pairs(env_list)}
     assert env.get("NCCL_NET") == "libfabric"
     assert env.get("NCCL_NET_PLUGIN") == "librccl-net.so"
+
+
+def test_version_prefers_torch_hip(monkeypatch, tmp_path, rocm_test_env, caplog):
+    """
+    E8: torch's bundled ROCm (7.2) wins over a mismatched ROCM_PATH
+    (6.4.2): the probe looks in the 7.2 tree, the >=7.1 NCCL branch is
+    taken, a mismatch warning is logged, and the mismatched ROCM_PATH's
+    llvm/lib is NOT prepended to LD_LIBRARY_PATH.
+    """
+    rocm = tmp_path / "rocm-6.4.2"
+    rocm.mkdir()
+    monkeypatch.setenv("ROCM_PATH", str(rocm))
+    _fake_torch(monkeypatch, "7.2.24191-cf58cf3856")
+    plugin_lib = _make_plugin_tree(rocm_test_env, "rocm-7.2.0")
+
+    system = ElCapitan("tuolumne")
+    system.job_comm_protocol = "RCCL"
+    with caplog.at_level(logging.WARNING):
+        env_list = system.environment_variables()
+
+    ld_paths = _ld_library_path_values(env_list)
+    assert any(str(plugin_lib) in v for v in ld_paths)
+    env = {e[0]: e[1] for e in _env_pairs(env_list)}
+    assert env.get("NCCL_NET") == "libfabric"
+    assert env.get("NCCL_NET_PLUGIN") == "librccl-net.so"
+    # The 6.4.2 llvm/lib prepend is an ABI hazard next to a 7.2 torch.
+    assert not any("llvm" in v for v in ld_paths)
+    assert any("mismatch" in record.message.lower() for record in caplog.records)
+
+
+def test_nccl_net_set_when_plugin_present(monkeypatch, rocm_test_env):
+    """
+    E7/E8: with a matching plugin tree the NCCL knobs are set -- and this
+    works with ROCM_PATH entirely unset (the torch wheel case).
+    """
+    _fake_torch(monkeypatch, "7.2.0")
+    plugin_lib = _make_plugin_tree(rocm_test_env, "rocm-7.2.0")
+
+    system = ElCapitan("tuolumne")
+    system.job_comm_protocol = "RCCL"
+    env_list = system.environment_variables()
+
+    env = {e[0]: e[1] for e in _env_pairs(env_list)}
+    assert env.get("NCCL_NET") == "libfabric"
+    assert env.get("NCCL_NET_PLUGIN") == "librccl-net.so"
+    assert any(str(plugin_lib) in v for v in _ld_library_path_values(env_list))
+
+
+def test_nccl_net_plugin_fuzzy_tree_match(monkeypatch, rocm_test_env):
+    """
+    E8 wrinkle: ROCm 7.2.1 requested but only a rocm-7.2.0 plugin tree
+    exists -- the probe must accept the same-major.minor sibling.
+    """
+    _fake_torch(monkeypatch, "7.2.1")
+    plugin_lib = _make_plugin_tree(rocm_test_env, "rocm-7.2.0")
+
+    system = ElCapitan("tuolumne")
+    system.job_comm_protocol = "RCCL"
+    env_list = system.environment_variables()
+
+    env = {e[0]: e[1] for e in _env_pairs(env_list)}
+    assert env.get("NCCL_NET") == "libfabric"
+    assert env.get("NCCL_NET_PLUGIN") == "librccl-net.so"
+    assert any(str(plugin_lib) in v for v in _ld_library_path_values(env_list))
+
+
+def test_explicit_plugin_override(monkeypatch, tmp_path, rocm_test_env):
+    """
+    LBANN_USE_THIS_OFI_PLUGIN bypasses probing entirely, even when a
+    probe tree exists.
+    """
+    _fake_torch(monkeypatch, "7.2.0")
+    probe_lib = _make_plugin_tree(rocm_test_env, "rocm-7.2.0")
+    override = tmp_path / "my-plugin"
+    override.mkdir()
+    monkeypatch.setenv("LBANN_USE_THIS_OFI_PLUGIN", str(override))
+
+    system = ElCapitan("tuolumne")
+    system.job_comm_protocol = "RCCL"
+    env_list = system.environment_variables()
+
+    ld_paths = _ld_library_path_values(env_list)
+    assert any(str(override) in v for v in ld_paths)
+    assert not any(str(probe_lib) in v for v in ld_paths)
+    env = {e[0]: e[1] for e in _env_pairs(env_list)}
+    assert env.get("NCCL_NET") == "libfabric"
+    assert env.get("NCCL_NET_PLUGIN") == "librccl-net.so"
