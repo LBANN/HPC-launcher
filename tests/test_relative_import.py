@@ -24,6 +24,8 @@ from hpc_launcher.systems import autodetect
 from hpc_launcher.systems.lc.sierra_family import Sierra
 from hpc_launcher.schedulers import get_schedulers
 
+from conftest import require_torch
+
 
 def test_torchrun_hpc_relimport():
     scheduler_type = "slurm"
@@ -41,10 +43,7 @@ def test_torchrun_hpc_relimport():
         pytest.skip(
             "Executed inside of an allocation with insufficient resources")
 
-    try:
-        import torch
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("torch not found")
+    require_torch()
 
     cmd = [
         sys.executable,

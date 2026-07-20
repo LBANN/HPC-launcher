@@ -14,10 +14,39 @@
 """
 Shared pytest fixtures for the hpc_launcher test suite.
 """
+import os
+
 import pytest
 
 from hpc_launcher.schedulers.slurm import SlurmScheduler
 from hpc_launcher.systems.system import GenericSystem
+
+
+def require_torch():
+    """
+    Import and return the ``torch`` module, or skip the calling test if it
+    is not installed.
+
+    This is the shared replacement for the ``try: import torch / except
+    (ImportError, ModuleNotFoundError): pytest.skip(...)`` pattern used by
+    the torch-guarded tests. When the environment variable
+    ``HPC_LAUNCHER_CI_REQUIRE_TORCH`` is set (CI sets it on every matrix
+    leg once torch is installed everywhere), a missing torch fails the
+    test instead of silently skipping it. Without this, a CI leg that
+    fails to install torch could report fully green while every
+    torch-dependent test was quietly skipped (review finding I3).
+    """
+    try:
+        import torch
+    except (ImportError, ModuleNotFoundError):
+        if os.environ.get("HPC_LAUNCHER_CI_REQUIRE_TORCH"):
+            pytest.fail(
+                "torch is not importable, but HPC_LAUNCHER_CI_REQUIRE_TORCH "
+                "is set: torch is required to be installed in this "
+                "environment, so this cannot be silently skipped."
+            )
+        pytest.skip("torch not found")
+    return torch
 
 
 @pytest.fixture
