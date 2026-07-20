@@ -16,10 +16,43 @@ from hpc_launcher.schedulers.flux import FluxScheduler
 from hpc_launcher.systems.system import System, SystemParams
 import os
 import re
+from typing import Optional
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_rocm_version(text: str) -> Optional[tuple[int, int, int]]:
+    """
+    Extract a ROCm version triple from strings such as ``rocm-6.4.2``,
+    ``rocm-7.1``, or a ``torch.version.hip`` string like
+    ``7.2.24191-cf58cf3856``. A missing patch component is treated as 0.
+
+    :return: ``(major, minor, patch)``, or ``None`` when no
+             ``major.minor`` version is present at all.
+    """
+    match = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", text)
+    if not match:
+        return None
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3) or 0))
+
+
+def _version_str(version: tuple[int, int, int]) -> str:
+    return ".".join(str(v) for v in version)
+
+
+def _rocm_path_version() -> Optional[tuple[int, int, int]]:
+    """
+    The ROCm version encoded in ``$ROCM_PATH``. The path is resolved
+    through ``os.path.realpath`` first so the conventional unversioned
+    ``/opt/rocm`` symlink still yields a version when it points at a
+    ``rocm-X.Y.Z`` tree (review finding G2).
+    """
+    rocm_path = os.getenv("ROCM_PATH")
+    if not rocm_path:
+        return None
+    return _parse_rocm_version(os.path.basename(os.path.realpath(rocm_path)))
 
 # Known LC systems
 _mi250x_node = SystemParams(64, 8, "gfx90a", 64.0, 4, "flux")
@@ -144,23 +177,27 @@ class ElCapitan(System):
                 else:
                     logger.warn(f"WARNING: using RCCL communication protocol and no default AWS_OFI_RCCL plugin was detected.  Checked {aws_ofi_plugin}. Ensure one is loaded or performance will be degraded.")
 
-            match = re.match(r'rocm-(\d+)\.(\d+).(\d+)', rocm_ver)
-            if match:
-                rocm_major = int(match.group(1))
-                rocm_minor = int(match.group(2))
-                # rocm_patch = int(match.group(3))
-
-            # Unless overriden by an external env variable set the NCCL_NET to ensure that the libfabric interface is used, e.g.: libfabric, IB, Socket
-            msg = "By default HPC-launcher will force slingshot systems to use the libfabric NCCL/RCCL plugin or fail.  This behavior can be overridden by setting NCCL_NET=Socket in the calling environment."
-            if rocm_major >= 7 and rocm_minor >= 1:
-                # Add AWS_OFI_NCCL for ROCm 7.1 - Ensure that it pick up the correct library object
-                if not os.getenv("NCCL_NET_PLUGIN"):
-                    env_list.append(("NCCL_NET_PLUGIN", "librccl-net.so"))
-                if not os.getenv("NCCL_NET"):
-                    env_list.append(("NCCL_NET", "libfabric", msg))
+            rocm_version = _rocm_path_version()
+            if rocm_version is None:
+                # Never crash on an undeterminable ROCm version (review
+                # finding G2): skip the version-dependent configuration.
+                logger.warning(
+                    f"Could not determine the ROCm version from ROCM_PATH={rocm_path} "
+                    "(it does not resolve to a rocm-X.Y.Z tree); skipping the "
+                    "ROCm-version-dependent RCCL/NCCL configuration."
+                )
             else:
-                if not os.getenv("NCCL_NET"):
-                    env_list.append(("NCCL_NET", '\"AWS Libfabric\"', msg))
+                # Unless overriden by an external env variable set the NCCL_NET to ensure that the libfabric interface is used, e.g.: libfabric, IB, Socket
+                msg = "By default HPC-launcher will force slingshot systems to use the libfabric NCCL/RCCL plugin or fail.  This behavior can be overridden by setting NCCL_NET=Socket in the calling environment."
+                if rocm_version[:2] >= (7, 1):
+                    # Add AWS_OFI_NCCL for ROCm 7.1 - Ensure that it pick up the correct library object
+                    if not os.getenv("NCCL_NET_PLUGIN"):
+                        env_list.append(("NCCL_NET_PLUGIN", "librccl-net.so"))
+                    if not os.getenv("NCCL_NET"):
+                        env_list.append(("NCCL_NET", "libfabric", msg))
+                else:
+                    if not os.getenv("NCCL_NET"):
+                        env_list.append(("NCCL_NET", '\"AWS Libfabric\"', msg))
 
         if optimize_rccl_protocol:
             # Performance tuning for HPE Slingshot Cassini NIC (Audited on 3/31/25) - Only use with RCCL
