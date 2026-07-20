@@ -29,13 +29,13 @@ def test_system(mock_gethostname):
 
 
 @patch("socket.gethostname", return_value="tuolumne0001")
-def test_autodetect(mock_gethostname):
+def test_autodetect_el_capitan(mock_gethostname):
     clear_autodetected_system()
     assert isinstance(autodetect_current_system(), ElCapitan)
 
 
 @patch("socket.gethostname", return_value="lassen001")
-def test_autodetect(mock_gethostname):
+def test_autodetect_sierra(mock_gethostname):
     clear_autodetected_system()
     assert isinstance(autodetect_current_system(), Sierra)
 
@@ -49,5 +49,6 @@ def test_autodetect_generic(mock_gethostname):
 
 if __name__ == "__main__":
     test_system()
-    test_autodetect()
+    test_autodetect_el_capitan()
+    test_autodetect_sierra()
     test_autodetect_generic()
