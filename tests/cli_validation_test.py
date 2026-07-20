@@ -177,3 +177,29 @@ def test_out_err_allowed_with_auto_launch_dir(tmp_path):
     )
 
 
+# ---------------------------------------------------------------------------
+# H4 -- re-running -l . -o name must not crash with SameFileError
+# ---------------------------------------------------------------------------
+def test_rerun_same_output_script(tmp_path):
+    """
+    Running ``launch -l . -o run.sh --setup-only`` twice in the same directory
+    must regenerate the script in place rather than aborting with
+    ``shutil.SameFileError`` on the second run (finding H4).
+    """
+    cmd = LAUNCH + [
+        "--local", "-N1", "-n1",
+        "-l", ".",
+        "-o", "run.sh",
+        "--setup-only",
+        "echo", "hi",
+    ]
+
+    for i in range(2):
+        proc = subprocess.run(cmd, cwd=str(tmp_path), capture_output=True)
+        stderr = proc.stderr.decode(errors="replace")
+        assert proc.returncode == 0, f"run {i} failed:\n{stderr}"
+        assert "SameFileError" not in stderr, f"run {i} hit SameFileError:\n{stderr}"
+
+    assert (tmp_path / "run.sh").exists(), "the output script was not regenerated"
+
+

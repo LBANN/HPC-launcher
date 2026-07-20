@@ -574,9 +574,19 @@ class Scheduler:
 
         # Create a temporary file or a script file, if given
         if script_file is not None:
-            if os.path.exists(script_file):
+            # Destination the script would be written/copied to inside the folder.
+            dest = os.path.abspath(os.path.join(folder_name, os.path.basename(script_file)))
+            # Only treat ``script_file`` as an *input* batch script to copy in
+            # when it exists AND is a different file from the destination. A
+            # re-run with the same ``-l``/``-o`` resolves source and destination
+            # to the same path; copying it onto itself raises SameFileError, so
+            # in that case we simply regenerate the script in place (finding H4).
+            is_input_batch_script = os.path.exists(script_file) and not (
+                os.path.exists(dest) and os.path.samefile(script_file, dest)
+            )
+            if is_input_batch_script:
                 # A batch file was provided
-                filename = os.path.abspath(os.path.join(folder_name, os.path.basename(script_file)))
+                filename = dest
                 # Plan to copy provided file into the launch directory
                 copy_script_to_filename = True
             else:
