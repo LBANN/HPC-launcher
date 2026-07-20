@@ -60,10 +60,21 @@ These options determine the number of nodes, accelerators, and ranks for the job
 | `--xargs` | `-x` | Specify scheduler and launch arguments | Format: `KEY=VALUE` |
 
 ### Notes on `--xargs`:
-- Will override any known key
-- Use format: `--xargs k1=v1 k2=v2` or `--xargs k1=v1 --xargs k2=v2`
-- Double dash `--` needed if this is the last argument
-- Arguments with leading tilde `~` will be removed if found
+- Overrides (or adds) scheduler/launch arguments. Repeatable, and may take
+  several space-separated `key=value` tokens: `-x k1=v1 k2=v2` or
+  `-x k1=v1 -x k2=v2`.
+- **Undashed keys are normalized** to the scheduler's own spelling:
+  `-x ntasks=8` becomes `--ntasks=8`; a single-character key gets a single
+  dash, e.g. `-x q=pbatch` becomes `-q=pbatch`.
+- **Attached dashed forms are passed through verbatim**, for exact control:
+  `-x--ntasks=8` or `--xargs=--ntasks=8`. Use these for single-dash long flags
+  such as LSF's `-nnodes` (e.g. `-x-nnodes=2`).
+- **Removal**: a leading tilde removes a key the launcher would otherwise set,
+  e.g. `-x ~ntasks` removes `--ntasks`.
+- Values may contain `=`; the split is on the **first** `=` only, so
+  `-x foo=a=b` sets `--foo` to `a=b`.
+- A double dash `--` is needed before the command if `-x` is the last option
+  (otherwise the command token would be consumed as another `key=value`).
 
 ## Schedule Options
 
@@ -223,6 +234,15 @@ launch -p gpu_arch=sm_90 mem_per_gpu=32 scheduler=slurm -N 2 ./gpu_job
 ```bash
 # Multiple xargs
 launch --xargs key1=val1 --xargs key2=val2 -N 2 ./job
+
+# Undashed keys are normalized to the scheduler spelling (--ntasks=8)
+launch -x ntasks=8 -N 2 -- ./job
+
+# Pass an exact flag verbatim (e.g. LSF's single-dash -nnodes)
+launch -x-nnodes=2 -N 2 ./job
+
+# Remove a key the launcher would otherwise set
+launch -x ~ntasks -N 2 -- ./job
 ```
 
 ### Logging Configuration

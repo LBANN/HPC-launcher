@@ -70,3 +70,64 @@ def test_missing_command_is_clean_error():
     )
 
 
+# ---------------------------------------------------------------------------
+# H2 -- the -x/--xargs grammar
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "tokens,expected",
+    [
+        # undashed multi-character key -> --key
+        (["-x", "ntasks=8"], {"--ntasks": "8"}),
+        # multiple space-separated tokens after a single -x
+        (["-x", "k1=v1", "k2=v2"], {"--k1": "v1", "--k2": "v2"}),
+        # removal: ~key -> normalized ~--key (empty value)
+        (["-x", "~ntasks"], {"~--ntasks": ""}),
+        # attached short form is kept verbatim
+        (["-x--ntasks=8"], {"--ntasks": "8"}),
+        # attached long form via = is kept verbatim
+        (["--xargs=--ntasks=8"], {"--ntasks": "8"}),
+        # value may contain '=' (split on the first '=' only)
+        (["-x", "foo=a=b"], {"--foo": "a=b"}),
+        # undashed single-character key -> -k
+        (["-x", "q=pbatch"], {"-q": "pbatch"}),
+    ],
+)
+def test_xargs_dashed_key_forms(tokens, expected):
+    """The parsed ``override_args`` dict matches the decided ``-x`` grammar."""
+    args = _override_parser().parse_args(tokens)
+    assert args.override_args == expected
+
+
+def test_xargs_bad_token_is_clean_error():
+    """A token that is neither ``key=value`` nor ``~key`` is a clean error."""
+    with pytest.raises(SystemExit):
+        _override_parser().parse_args(["-x", "notakeyvalue"])
+
+
+def test_xargs_flag_lands_in_generated_script(tmp_path):
+    """
+    End-to-end: an undashed ``-x`` override reaches the generated batch script
+    with its normalized (dashed) spelling (finding H2). Uses ``--scheduler
+    slurm --bg --setup-only`` so the override is emitted as a header directive
+    and the internal run command, without submitting anything.
+    """
+    proc = subprocess.run(
+        LAUNCH
+        + [
+            "--scheduler", "slurm",
+            "-N1", "-n1",
+            "--bg", "--setup-only",
+            "-l", str(tmp_path),
+            "-x", "myflag=myval",
+            "--", "echo", "hi",
+        ],
+        capture_output=True,
+    )
+    stderr = proc.stderr.decode(errors="replace")
+    assert proc.returncode == 0, stderr
+    script = (tmp_path / "launch.sh").read_text()
+    assert "--myflag=myval" in script, (
+        f"normalized override did not land in the script:\n{script}"
+    )
+
+
