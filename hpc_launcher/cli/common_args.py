@@ -313,7 +313,12 @@ def validate_arguments(args: argparse.Namespace):
     # 4. The user specifies a minimum amount of GPU memory
 
     args_dict = vars(args)
-    if args_dict.get('command') is not None:
+    # Only CLIs that define a ``command`` positional should run this check. Use
+    # key presence rather than ``.get('command') is not None`` so that the
+    # forgot-the-command case (key present, value ``None``) is caught here with a
+    # clean validation error instead of crashing later when ``None`` reaches the
+    # command join (finding H1).
+    if 'command' in args_dict:
         if not args.command and not args.batch_script:
             raise ValueError(
                 "Either a command or a batch script has to be provided"
