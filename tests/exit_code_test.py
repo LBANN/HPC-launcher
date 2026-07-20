@@ -12,10 +12,14 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-Regression tests for exit-code propagation (review finding C1).
+Regression tests for exit-code propagation (review finding C1) and Ctrl-C /
+SIGINT handling (review finding C2).
 """
+import signal
 import subprocess
 import sys
+import threading
+import time
 
 import pytest
 
@@ -82,3 +86,97 @@ def test_launch_result_unit(tmp_path, monkeypatch, stub_system):
     assert isinstance(result, LaunchResult)
     assert result.returncode == 3
     assert result.job_id is None
+
+
+def test_sigint_kills_child(tmp_path):
+    """
+    C2: after the launcher receives SIGINT, its scheduler child (and any
+    grandchildren it spawned) must be killed within a bounded time and the
+    launcher must exit non-zero (130 = 128 + SIGINT).
+
+    Sending SIGINT only to the launcher pid (not the whole process group) is
+    deliberate: it verifies the launcher actively *forwards* the signal to the
+    child rather than the child receiving it directly.
+    """
+    psutil = pytest.importorskip("psutil")
+
+    # The child prints "ready" then sleeps; if the launcher does not forward
+    # the signal, this sleeper is orphaned and keeps running.
+    child_code = (
+        "import sys, time; print('ready'); sys.stdout.flush(); time.sleep(60)"
+    )
+    cmd = [
+        sys.executable,
+        "-m",
+        "hpc_launcher.cli.launch",
+        "--local",
+        "-N1",
+        "-n1",
+        "-l",
+        str(tmp_path),
+        sys.executable,
+        "-c",
+        child_code,
+    ]
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,  # launcher gets its own process group
+    )
+
+    # Drain stdout on a background thread and signal when the child is ready.
+    ready = threading.Event()
+
+    def _reader():
+        try:
+            for line in proc.stdout:
+                if b"ready" in line:
+                    ready.set()
+        except Exception:
+            pass
+
+    reader = threading.Thread(target=_reader, daemon=True)
+    reader.start()
+
+    try:
+        assert ready.wait(timeout=30), "child never reported ready"
+
+        # Enumerate descendants BEFORE signaling so we can confirm they are
+        # gone afterwards (the sleeping python grandchild in particular).
+        parent = psutil.Process(proc.pid)
+        descendants = []
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            descendants = parent.children(recursive=True)
+            if descendants:
+                break
+            time.sleep(0.1)
+        assert descendants, "expected launcher to have spawned a child process"
+
+        # SIGINT to the launcher pid only.
+        proc.send_signal(signal.SIGINT)
+
+        rc = proc.wait(timeout=15)
+        assert rc == 130, f"launcher exited {rc}, expected 130"
+
+        # Every descendant must be gone (dead or reaped); tolerate a brief
+        # window while the OS reaps them.
+        alive = descendants
+        gone_deadline = time.time() + 10
+        while time.time() < gone_deadline:
+            alive = [
+                d
+                for d in descendants
+                if d.is_running() and d.status() != psutil.STATUS_ZOMBIE
+            ]
+            if not alive:
+                break
+            time.sleep(0.2)
+        assert not alive, f"orphaned descendants still running after SIGINT: {alive}"
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=10)
+        reader.join(timeout=5)
