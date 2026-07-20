@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
+import re
 import shlex
 
 if TYPE_CHECKING:
@@ -161,7 +162,14 @@ class LSFScheduler(Scheduler):
         return "jsrun "
 
     def get_job_id(self, output: str) -> Optional[str]:
-        raise NotImplementedError
+        # bsub prints e.g. "Job <123> is submitted to queue <pbatch>." on a
+        # successful non-blocking submission; return None (per the base
+        # class's contract) when the output can't be parsed instead of
+        # raising (finding E3).
+        match = re.search(r"Job <(\d+)>", output)
+        if match:
+            return match.group(1)
+        return None
 
     @classmethod
     def num_nodes_in_allocation(cls) -> Optional[int]:

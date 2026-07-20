@@ -138,3 +138,15 @@ def test_jsrun_line_has_no_bsub_flags(stub_system, tmp_path, monkeypatch):
         line for line in script.splitlines() if line.startswith("#BSUB")
     ]
     assert any("myjob" in line for line in directive_lines)
+
+
+def test_get_job_id_parses_bsub_output():
+    scheduler = LSFScheduler(nodes=1, procs_per_node=1, gpus_per_proc=0)
+    output = "Job <123> is submitted to default queue <pbatch>.\n"
+    assert scheduler.get_job_id(output) == "123"
+
+
+def test_get_job_id_returns_none_on_garbage():
+    scheduler = LSFScheduler(nodes=1, procs_per_node=1, gpus_per_proc=0)
+    assert scheduler.get_job_id("garbage output, no job id here") is None
+    assert scheduler.get_job_id("") is None
