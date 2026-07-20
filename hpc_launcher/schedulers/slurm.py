@@ -193,8 +193,9 @@ class SlurmScheduler(Scheduler):
         # local_world_size = env['SLURM_TASKS_PER_NODE']
         return (world_size, rank, local_world_size, local_rank)
 
-    @classmethod
-    def dynamically_configure_rendezvous_protocol(self, protocol: str) -> str:
+    # Instance method (not a classmethod): it reads the per-instance
+    # rendezvous port so all env entries of one launch agree (finding E6).
+    def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
         env_list.append(("RANK", self.get_parallel_rank_env_variable()))
         if protocol.lower() == "tcp":
@@ -204,7 +205,9 @@ class SlurmScheduler(Scheduler):
                     "`scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1`",
                 )
             )
-            env_list.append(("TORCHRUN_HPC_MASTER_PORT", "23456"))
+            env_list.append(
+                ("TORCHRUN_HPC_MASTER_PORT", str(self.rendezvous_port()))
+            )
             return env_list
         elif protocol.lower() == "mpi":
             # To use MPI, pass `init_method="mpi://"` - no special work here.

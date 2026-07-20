@@ -197,7 +197,9 @@ class FluxScheduler(Scheduler):
                     "`flux hostlist local | /bin/hostlist -n 1`",
                 )
             )
-            env_list.append(("TORCHRUN_HPC_MASTER_PORT", "23456"))
+            env_list.append(
+                ("TORCHRUN_HPC_MASTER_PORT", str(self.rendezvous_port()))
+            )
             return env_list
         elif protocol.lower() == "mpi":
             # To use MPI, pass `init_method="mpi://"` - no special work here.

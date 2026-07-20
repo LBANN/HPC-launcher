@@ -95,7 +95,9 @@ class LocalScheduler(Scheduler):
         env_list = []
         if protocol.lower() == "tcp":
             env_list.append(("TORCHRUN_HPC_MASTER_ADDR", "localhost"))
-            env_list.append(("TORCHRUN_HPC_MASTER_PORT", "23456"))
+            env_list.append(
+                ("TORCHRUN_HPC_MASTER_PORT", str(self.rendezvous_port()))
+            )
             return env_list
         else:
             msg = f"Unsupported rendezvous protocol {protocol} for scheduler {type(self).__name__}"

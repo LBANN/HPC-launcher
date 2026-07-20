@@ -22,6 +22,7 @@ import tempfile
 import subprocess
 import shlex
 import shutil
+import socket
 import uuid
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
 from hpc_launcher.schedulers import parse_env_list
@@ -29,6 +30,47 @@ from hpc_launcher.schedulers import parse_env_list
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Rendezvous port selection (finding E6)
+# ---------------------------------------------------------------------------
+
+# Range for the UUID-hash fallback used when an ephemeral bind is not
+# possible (e.g. a sandbox that forbids ``bind``). High, unprivileged ports.
+_RENDEZVOUS_PORT_FALLBACK_MIN = 20000
+_RENDEZVOUS_PORT_FALLBACK_MAX = 65000
+
+
+def pick_rendezvous_port() -> int:
+    """
+    Choose a TCP port for the distributed rendezvous, once per launch.
+
+    Ask the OS for a free ephemeral port by binding a throwaway socket to
+    port 0, reading back the port it assigned, and closing it. Because each
+    launch asks independently, two concurrent jobs almost never receive the
+    same port -- which is what fixes the cross-job rendezvous-store
+    collisions of the old hardcoded ``23456`` (finding E6).
+
+    On any failure (for instance a sandbox that forbids ``bind``), fall back
+    to hashing a fresh UUID into a high, unprivileged port range so that two
+    launches still almost certainly differ.
+
+    Known limitation (accepted in the plan): the port is chosen on the
+    *launch* host, so a port free here may already be in use on the rank-0
+    compute node. This narrows -- but does not fully eliminate -- the
+    collision window; the previous fixed port collided for *every* pair of
+    coincident jobs.
+
+    :return: A TCP port number in ``[1024, 65535]``.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("", 0))
+            return sock.getsockname()[1]
+    except OSError:
+        span = _RENDEZVOUS_PORT_FALLBACK_MAX - _RENDEZVOUS_PORT_FALLBACK_MIN + 1
+        return _RENDEZVOUS_PORT_FALLBACK_MIN + (uuid.uuid4().int % span)
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -104,6 +146,13 @@ class Scheduler:
 
     # CLI flags for override
     override_launch_args: Optional[dict] = None
+
+    # Rendezvous TCP port for this launch. Chosen once, lazily, and cached so
+    # every env entry of a single launch agrees while two launches differ
+    # (finding E6). Not a constructor argument.
+    _rendezvous_port: Optional[int] = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def build_scheduler_specific_arguments(
             self, system: "System", blocking: bool = True
@@ -275,6 +324,23 @@ class Scheduler:
         :return: scheduler specific command for non-blocking batch jobs
         """
         raise NotImplementedError
+
+    def rendezvous_port(self) -> int:
+        """
+        The rendezvous TCP port for this launch, chosen once (lazily) and
+        cached on the instance so that every environment entry generated for
+        a single launch agrees on the port, while two separate launches (two
+        scheduler instances) get different ports (finding E6).
+
+        ``TORCHRUN_HPC_MASTER_PORT`` remains the documented user override:
+        the trampoline honors it when set, so exporting it explicitly still
+        pins the port.
+
+        :return: The chosen TCP port.
+        """
+        if self._rendezvous_port is None:
+            self._rendezvous_port = pick_rendezvous_port()
+        return self._rendezvous_port
 
     def cli_env_arg(self, env_list: list[tuple[str,str]]) -> None:
         """
