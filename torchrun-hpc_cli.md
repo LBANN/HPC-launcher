@@ -126,6 +126,16 @@ Batch scheduler script parameters.
 - **Not set + non-blocking job**: Creates launch file and logs in current directory
 - **Note**: Double dash `--` needed if this is the last argument
 
+> **Important — the job runs from the launch directory.** `torchrun-hpc` always
+> runs from a launch directory (one is auto-created when `-l` is not given), and
+> the generated job changes into it before running your command. The training
+> script path is made absolute automatically, but **its arguments are passed
+> through verbatim**, so a *relative* path argument (a config file, a dataset)
+> is resolved relative to the launch directory, not the directory you launched
+> from. The launcher logs a warning when it detects such a relative-path
+> argument. To avoid the problem, pass **absolute paths** for script arguments,
+> or use `-l .` to run in the current directory.
+
 ## System Options
 
 Provide system parameters from CLI - overrides built-in system descriptions and autodetection.

@@ -675,6 +675,30 @@ class Scheduler:
         if command and os.path.isfile(command):
             command = os.path.abspath(command)
 
+        # Warn about relative-path arguments that will not resolve once the job
+        # changes into the launch directory (finding H5). The job runs from the
+        # launch folder, but command arguments are emitted verbatim, so a
+        # relative path that exists in the invocation directory but not under the
+        # launch directory would silently fail to open. Document behavior in
+        # launch_cli.md; here we surface a clear warning.
+        if folder_name and args:
+            launch_dir_abs = os.path.abspath(folder_name)
+            cwd = os.getcwd()
+            if launch_dir_abs != cwd:
+                for arg in args:
+                    if not arg or os.path.isabs(arg):
+                        continue
+                    in_cwd = os.path.exists(os.path.join(cwd, arg))
+                    in_launch_dir = os.path.exists(os.path.join(launch_dir_abs, arg))
+                    if in_cwd and not in_launch_dir:
+                        logger.warning(
+                            f"Argument '{arg}' is a relative path that exists in "
+                            f"the current directory but not in the launch "
+                            f"directory '{launch_dir_abs}'. The job runs from the "
+                            f"launch directory, so this path will not resolve; "
+                            f"pass an absolute path (or use '-l .') instead."
+                        )
+
         use_launch_folder = folder_name or filename
         cmd = self.launch_command(system, blocking, not use_launch_folder or immutable_launch_script)
 

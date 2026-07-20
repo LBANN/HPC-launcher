@@ -203,3 +203,56 @@ def test_rerun_same_output_script(tmp_path):
     assert (tmp_path / "run.sh").exists(), "the output script was not regenerated"
 
 
+# ---------------------------------------------------------------------------
+# H5 -- relative-path argument warning
+# ---------------------------------------------------------------------------
+def test_relative_arg_warning(tmp_path):
+    """
+    ``launch -l outdir python script.py`` where ``./script.py`` exists in the
+    invocation directory but not under the launch directory must warn that the
+    relative path will not resolve once the job cd's into the launch dir
+    (finding H5).
+    """
+    (tmp_path / "script.py").write_text("print(1)\n")
+
+    proc = subprocess.run(
+        LAUNCH
+        + [
+            "--local", "-N1", "-n1",
+            "-l", "outdir",
+            "--setup-only",
+            "python", "script.py",
+        ],
+        cwd=str(tmp_path),
+        capture_output=True,
+    )
+    stderr = proc.stderr.decode(errors="replace")
+    assert proc.returncode == 0, stderr
+    assert "relative path" in stderr and "script.py" in stderr, (
+        f"expected a relative-path warning for script.py:\n{stderr}"
+    )
+
+
+def test_no_relative_arg_warning_when_launch_dir_is_cwd(tmp_path):
+    """
+    The H5 warning must not fire when the launch directory is the current
+    directory (``-l .``): relative paths still resolve.
+    """
+    (tmp_path / "script.py").write_text("print(1)\n")
+
+    proc = subprocess.run(
+        LAUNCH
+        + [
+            "--local", "-N1", "-n1",
+            "-l", ".",
+            "--setup-only",
+            "python", "script.py",
+        ],
+        cwd=str(tmp_path),
+        capture_output=True,
+    )
+    stderr = proc.stderr.decode(errors="replace")
+    assert proc.returncode == 0, stderr
+    assert "relative path" not in stderr, (
+        f"unexpected relative-path warning when -l . :\n{stderr}"
+    )

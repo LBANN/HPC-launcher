@@ -110,6 +110,19 @@ Batch scheduler script parameters.
 - **Not set + non-blocking job**: Creates launch file and logs in current directory
 - **Note**: Double dash `--` needed if this is the last argument
 
+> **Important — the job runs from the launch directory.** When a launch
+> directory is used, the generated job changes into it before running your
+> command (`cd` for `--local`, `--chdir`/`--setattr=system.cwd` for the batch
+> schedulers). The command itself is made absolute automatically, but **its
+> arguments are passed through verbatim**, so a *relative* path argument (a
+> script, a config file, a dataset) is resolved relative to the launch
+> directory, not the directory you launched from. For example,
+> `launch -l outdir python script.py` runs `cd outdir; python script.py` and
+> fails to find `script.py` if it lives in your current directory. The launcher
+> logs a warning when it detects such a relative-path argument. To avoid the
+> problem, pass **absolute paths** for command arguments, or use `-l .` to run
+> in the current directory.
+
 ## System Options
 
 Provide system parameters from CLI - overrides built-in system descriptions and autodetection.
