@@ -43,13 +43,30 @@ def setup_logging(logger: logging.Logger, verbose: bool):
 def select_scheduler(
     args: argparse.Namespace, logger: logging.Logger, system: System
 ) -> Scheduler:
-    # Pick batch scheduler
+    # Pick batch scheduler, in priority order (review finding G3):
+    #   1. --local
+    #   2. an explicit --scheduler CLI argument
+    #   3. a `-p scheduler=<x>` system-parameter override, or -- absent that --
+    #      the resolved system's own scheduler: a known system's table
+    #      default, or the `find_scheduler()` autodetection probe result on
+    #      an unrecognized host (both land in
+    #      `system.active_system_params.scheduler` by the time this runs)
+    #   4. the system's `preferred_scheduler` (hardcoded, always available)
     if args.local:
         scheduler_class = LocalScheduler
     elif args.scheduler:
         scheduler_class = get_schedulers()[args.scheduler]
     else:
-        scheduler_class = system.preferred_scheduler
+        schedulers = get_schedulers()
+        probed_scheduler = None
+        if system.active_system_params is not None:
+            probed_scheduler = system.active_system_params.scheduler
+        # `None` is itself a valid key in `get_schedulers()` (-> LocalScheduler),
+        # so guard against it explicitly rather than using dict.get()'s default.
+        if probed_scheduler and probed_scheduler in schedulers:
+            scheduler_class = schedulers[probed_scheduler]
+        else:
+            scheduler_class = system.preferred_scheduler
     logger.info(f"Using {scheduler_class.__name__}")
 
     scheduler_args = common_args.create_scheduler_arguments(**vars(args))
