@@ -304,19 +304,34 @@ class ElCapitan(System):
                     )
                 else:
                     checked = f'{_AWS_OFI_RCCL_ROOT}/{os.getenv("SYS_TYPE")}/rocm-{rocm.version[0]}.{rocm.version[1]}.*/install/lib'
-                    logger.warning(f"WARNING: using RCCL communication protocol and no default AWS_OFI_RCCL plugin was detected.  Checked {checked}. Ensure one is loaded or performance will be degraded.")
+                    logger.warning(
+                        "No AWS OFI RCCL (libfabric) plugin was found for ROCm "
+                        f"{_version_str(rocm.version)} (checked {checked}). "
+                        "NCCL_NET is left unset, so RCCL will fall back to its "
+                        "built-in transports: multi-node jobs will not use the "
+                        "Slingshot fabric plugin and may underperform or fail "
+                        "to scale. Install the plugin or point "
+                        "LBANN_USE_THIS_OFI_PLUGIN at an existing plugin lib "
+                        "directory."
+                    )
 
-            # Unless overriden by an external env variable set the NCCL_NET to ensure that the libfabric interface is used, e.g.: libfabric, IB, Socket
-            msg = "By default HPC-launcher will force slingshot systems to use the libfabric NCCL/RCCL plugin or fail.  This behavior can be overridden by setting NCCL_NET=Socket in the calling environment."
-            if rocm.version[:2] >= (7, 1):
-                # Add AWS_OFI_NCCL for ROCm 7.1 - Ensure that it pick up the correct library object
-                if not os.getenv("NCCL_NET_PLUGIN"):
-                    env_list.append(("NCCL_NET_PLUGIN", "librccl-net.so"))
-                if not os.getenv("NCCL_NET"):
-                    env_list.append(("NCCL_NET", "libfabric", msg))
-            else:
-                if not os.getenv("NCCL_NET"):
-                    env_list.append(("NCCL_NET", '\"AWS Libfabric\"', msg))
+            # Only force the libfabric NET plugin when one was actually
+            # found (probe hit or explicit override): forcing NCCL_NET
+            # without the plugin present hard-crashes RCCL initialization
+            # with "Failed to initialize any NET plugin", even for
+            # single-node jobs (review finding E7).
+            if aws_ofi_plugin is not None:
+                # Unless overriden by an external env variable set the NCCL_NET to ensure that the libfabric interface is used, e.g.: libfabric, IB, Socket
+                msg = "HPC-launcher forces slingshot systems to use the detected libfabric NCCL/RCCL plugin.  This behavior can be overridden by setting NCCL_NET=Socket in the calling environment."
+                if rocm.version[:2] >= (7, 1):
+                    # Add AWS_OFI_NCCL for ROCm 7.1 - Ensure that it pick up the correct library object
+                    if not os.getenv("NCCL_NET_PLUGIN"):
+                        env_list.append(("NCCL_NET_PLUGIN", "librccl-net.so"))
+                    if not os.getenv("NCCL_NET"):
+                        env_list.append(("NCCL_NET", "libfabric", msg))
+                else:
+                    if not os.getenv("NCCL_NET"):
+                        env_list.append(("NCCL_NET", '\"AWS Libfabric\"', msg))
 
         if optimize_rccl_protocol:
             # Performance tuning for HPE Slingshot Cassini NIC (Audited on 3/31/25) - Only use with RCCL

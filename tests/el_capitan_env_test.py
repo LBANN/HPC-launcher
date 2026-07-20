@@ -172,6 +172,28 @@ def test_version_prefers_torch_hip(monkeypatch, tmp_path, rocm_test_env, caplog)
     assert any("mismatch" in record.message.lower() for record in caplog.records)
 
 
+def test_nccl_net_not_forced_without_plugin(monkeypatch, rocm_test_env, caplog):
+    """
+    E7: with no plugin anywhere and no override, NCCL_NET and
+    NCCL_NET_PLUGIN must not be forced (forcing them hard-crashes RCCL
+    init on plugin-less wheels); a warning naming the remedy is logged.
+    """
+    _fake_torch(monkeypatch, "7.2.0")
+    # rocm_test_env points the probe at an empty scratch tree.
+
+    system = ElCapitan("tuolumne")
+    system.job_comm_protocol = "RCCL"
+    with caplog.at_level(logging.WARNING):
+        env_list = system.environment_variables()
+
+    names = _env_names(env_list)
+    assert "NCCL_NET" not in names
+    assert "NCCL_NET_PLUGIN" not in names
+    assert any(
+        "LBANN_USE_THIS_OFI_PLUGIN" in record.message for record in caplog.records
+    )
+
+
 def test_nccl_net_set_when_plugin_present(monkeypatch, rocm_test_env):
     """
     E7/E8: with a matching plugin tree the NCCL knobs are set -- and this
