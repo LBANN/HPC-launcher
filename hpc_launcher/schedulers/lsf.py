@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
+import shlex
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -54,7 +55,12 @@ class LSFScheduler(Scheduler):
             hours, minutes = divmod(minutes, 60)
             self.submit_only_args[f"-W {hours}:{minutes:02}\n"] = None
         if self.job_name:
-            self.common_launch_args[f"-J {self.job_name}"] = None
+            # The job name is embedded in the dict key (with a None value), so
+            # the scheduler's central value-quoting does not reach it. Quote the
+            # name portion here so it stays a single inert token wherever this
+            # entry is serialized into the shell script (finding D1). The flag
+            # (`-J`) itself is left unquoted.
+            self.common_launch_args[f"-J {shlex.quote(self.job_name)}"] = None
         if self.queue:
             self.common_launch_args[f"-q {self.queue}"] = None
         if self.account:

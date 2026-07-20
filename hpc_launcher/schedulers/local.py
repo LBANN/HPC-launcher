@@ -54,16 +54,20 @@ class LocalScheduler(Scheduler):
             "export RANK=0",
         ]
         if save_hostlist:
+            hostlist_file = os.path.join(launch_dir, "hpc_launcher_hostlist.txt")
             envvars += [
                 "export HPC_LAUNCHER_HOSTLIST=$(hostname)\n",
                 'if [ "${RANK}" = "0" ]; then\n',
-                "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n"),
+                "    echo ${HPC_LAUNCHER_HOSTLIST} > " + shlex.quote(hostlist_file) + "\n",
                 "fi\n\n",
             ]
         header = "\n".join(envvars)
 
         if self.work_dir:
-            header += f"\ncd {os.path.abspath(self.work_dir)}\n"
+            # The working directory can carry a user-controlled job name (it is
+            # embedded in an auto-generated folder name), so quote it before it
+            # is interpreted by /bin/sh in the cd (finding D1).
+            header += f"\ncd {shlex.quote(os.path.abspath(self.work_dir))}\n"
 
         # Quote the command arguments so that values containing shell
         # metacharacters (spaces, ';', '()', quotes, ...) survive as a single

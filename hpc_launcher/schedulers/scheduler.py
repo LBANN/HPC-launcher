@@ -20,6 +20,7 @@ import sys
 import time
 import tempfile
 import subprocess
+import shlex
 import shutil
 import uuid
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
@@ -172,6 +173,12 @@ class Scheduler:
                     self.common_launch_args[k] = v
 
         if not blocking: # Only add batch script header items on non-blocking calls
+            # These header lines are only ever emitted into the shell script
+            # produced by ``launcher_script`` (in ``launch_command`` the header
+            # is discarded). The scheduler parses them and, being written to a
+            # file executed by /bin/sh, they are exposed to the shell, so quote
+            # every interpolated value to keep user-controlled data (e.g. a job
+            # name) a single inert token rather than shell syntax (finding D1).
             prefix = self.batch_script_prefix()
             for k,v in self.submit_only_args.items():
                 if not for_launch_cmd and k == '--dependency':
@@ -179,14 +186,14 @@ class Scheduler:
                 if not v:
                     header.write(f"{prefix} {k}\n")
                 else:
-                    header.write(f"{prefix} {k}={v}\n")
+                    header.write(f"{prefix} {k}={shlex.quote(v)}\n")
             for k,v in self.common_launch_args.items():
                 if not for_launch_cmd and k == '--dependency':
                     continue
                 if not v:
                     header.write(f"{prefix} {k}\n")
                 else:
-                    header.write(f"{prefix} {k}={v}\n")
+                    header.write(f"{prefix} {k}={shlex.quote(v)}\n")
 
         if len(env_vars):
             if blocking and cli_env_only:
@@ -331,20 +338,25 @@ class Scheduler:
         (header_lines, cmd_args) = self.build_command_string_and_batch_script(
             system, blocking, False, for_launch_cmd=False
         )
+        # This ``cmd_args`` list is joined into the internal run command that is
+        # written into the shell script below (unlike ``launch_command``'s
+        # cmd_args, which are argv elements executed without a shell). Quote
+        # every value so it reaches the run command as a single verbatim token
+        # instead of being re-parsed by /bin/sh (finding D1).
         # For batch jobs add any common args to the internal command
         if not blocking:
             for k,v in self.common_launch_args.items():
                 if not v:
                     cmd_args += [k]
                 else:
-                    cmd_args += [f"{k}={v}"]
+                    cmd_args += [f"{k}={shlex.quote(v)}"]
         # For jobs that require a parallel internal command add any run args
         if self.require_parallel_internal_run_command(blocking):
             for k,v in self.run_only_args.items():
                 if not v:
                     cmd_args += [k]
                 else:
-                    cmd_args += [f"{k}={v}"]
+                    cmd_args += [f"{k}={shlex.quote(v)}"]
 
         # Configure header and command line with scheduler job options
         script += header_lines
@@ -352,12 +364,17 @@ class Scheduler:
         if launch_dir != os.getcwd():
             callee_directory = os.path.dirname(launch_dir)
             logger.info(f"Callee directory: {callee_directory} - and {launch_dir}")
-            script += f"export PYTHONPATH={callee_directory}:" + "${PYTHONPATH}\n"
+            # The launch-dir path can carry a user-controlled job name (it is
+            # embedded in an auto-generated folder name); quote the literal path
+            # so it cannot inject shell syntax, while leaving the trailing
+            # ${PYTHONPATH} reference to expand as intended (finding D1).
+            script += f"export PYTHONPATH={shlex.quote(callee_directory)}:" + "${PYTHONPATH}\n"
         if save_hostlist:
+            hostlist_file = os.path.join(launch_dir, "hpc_launcher_hostlist.txt")
             script += f'export RANK={self.get_parallel_rank_env_variable()}\n'
             script += self.export_hostlist()
             script += 'if [ "${RANK}" = "0" ]; then\n'
-            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
+            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + shlex.quote(hostlist_file) + "\n"
             script += "fi\n\n"
 
         if system.active_system_params:
@@ -372,8 +389,12 @@ class Scheduler:
 
         script += f"{command}"
 
+        # Quote each command argument so values containing shell metacharacters
+        # (spaces, ';', '&', '$(...)', backticks, redirections, ...) survive as
+        # a single verbatim token rather than being split or interpreted when
+        # the scheduler executes this script under /bin/sh (finding D1).
         for arg in args:
-            script += f" {arg}"
+            script += f" {shlex.quote(arg)}"
 
         script += "\n"
 
