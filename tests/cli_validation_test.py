@@ -131,3 +131,49 @@ def test_xargs_flag_lands_in_generated_script(tmp_path):
     )
 
 
+# ---------------------------------------------------------------------------
+# H3 -- out/err/etc. allowed when a launch directory is (auto-)provided, but
+#       still rejected for a genuinely ephemeral blocking launch.
+# ---------------------------------------------------------------------------
+def test_out_err_allowed_with_auto_launch_dir(tmp_path):
+    """
+    ``torchrun-hpc`` always runs from a launch directory (it auto-defaults
+    ``-l``), so ``--out`` must be accepted -- not rejected as an ephemeral
+    interactive job (finding H3). The genuinely ephemeral rejection must still
+    fire for a blocking ``launch`` with no ``-l``.
+    """
+    require_torch()
+
+    driver = tmp_path / "trivial.py"
+    driver.write_text("print('hello')\n")
+
+    # torchrun-hpc auto-provides a launch dir: --out is accepted.
+    proc = subprocess.run(
+        TORCHRUN
+        + [
+            "--local", "-N1", "-n1",
+            "--setup-only",
+            "--out", "t.log",
+            str(driver),
+        ],
+        cwd=str(tmp_path),
+        capture_output=True,
+    )
+    stderr = proc.stderr.decode(errors="replace")
+    assert proc.returncode == 0, (
+        f"torchrun-hpc --out with an auto launch dir should succeed:\n{stderr}"
+    )
+
+    # A blocking launch with no -l is genuinely ephemeral: --out is rejected.
+    proc = subprocess.run(
+        LAUNCH + ["--local", "-N1", "-n1", "--out", "t.log", "echo", "hi"],
+        cwd=str(tmp_path),
+        capture_output=True,
+    )
+    stderr = proc.stderr.decode(errors="replace")
+    assert proc.returncode != 0, "ephemeral --out should have been rejected"
+    assert "ephemeral" in stderr.lower(), (
+        f"expected an ephemeral-job rejection message:\n{stderr}"
+    )
+
+

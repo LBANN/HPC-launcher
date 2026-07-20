@@ -43,6 +43,18 @@ def main():
 
     launch_helpers.setup_logging(logger, args.verbose)
 
+    # Default the launch directory *before* validation so that the ephemeral
+    # rejection of --out/--err/-o/--save-hostlist only fires for genuinely
+    # ephemeral runs (no -l, blocking, no batch script) rather than for configs
+    # that actually do get a launch directory (finding H3).
+    if args.bg and args.launch_dir is None:  # or args.batch_script
+        # If running a batch job with no launch directory argument,
+        # run in the generated timestamped directory
+        args.launch_dir = ""
+    if args.launch_dir is None and args.batch_script:
+        args.launch_dir = ""
+        logger.info(f"Using a predefined launch script needs to run jobs from a launch directory -- automatically setting the -l (--launch-dir) CLI argument")
+
     # Process special arguments that can autoselect the number of ranks / GPUs
     system = common_args.process_arguments(args, logger)
 
@@ -55,13 +67,7 @@ def main():
         script_file = args.output_script
     elif args.batch_script:
         script_file = args.batch_script
-    if args.bg and args.launch_dir is None: # or args.batch_script
-        # If running a batch job with no launch directory argument,
-        # run in the generated timestamped directory
-        args.launch_dir = ""
-    if args.launch_dir is None and args.batch_script:
-        args.launch_dir = ""
-        logger.info(f"Using a predefined launch script needs to run jobs from a launch directory -- automatically setting the -l (--launch-dir) CLI argument")
+    # (launch-dir defaulting now happens before validation above -- finding H3)
     if args.launch_dir is not None:
         _, folder_name = scheduler.create_launch_folder_name(
             args.command or args.batch_script.rsplit('.', 1)[0], "launch", args.launch_dir
