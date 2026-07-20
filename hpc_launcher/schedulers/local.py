@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 import os
+import shlex
 import logging
 from hpc_launcher.schedulers import parse_env_list
 
@@ -64,12 +65,19 @@ class LocalScheduler(Scheduler):
         if self.work_dir:
             header += f"\ncd {os.path.abspath(self.work_dir)}\n"
 
+        # Quote the command arguments so that values containing shell
+        # metacharacters (spaces, ';', '()', quotes, ...) survive as a single
+        # token rather than being re-interpreted by /bin/sh. Without this the
+        # child's real exit status cannot be observed (e.g. a shell syntax
+        # error would mask it), which defeats exit-code propagation.
+        run_args = " ".join(shlex.quote(a) for a in args)
+
         return f"""#!/bin/sh
 # Setup
 {header}
 
 # Run
-{command} {" ".join(args)}
+{command} {run_args}
 """
 
     def get_job_id(self, output: str) -> Optional[str]:

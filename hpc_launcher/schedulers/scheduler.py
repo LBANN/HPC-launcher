@@ -35,6 +35,26 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class LaunchResult:
+    """
+    The result of a :meth:`Scheduler.launch` call.
+
+    :ivar job_id: The scheduler job ID for a non-blocking (background)
+                  submission, or ``None`` when there is no job ID (blocking
+                  runs, interactive runs, dry/setup-only runs, or a failed
+                  submission).
+    :ivar returncode: The exit status the launcher should propagate. This is
+                      the child's exit code for blocking/interactive runs,
+                      ``0`` for setup-only/dry-run, ``None`` for a successful
+                      non-blocking submission whose job is still running, and
+                      non-zero when a submission fails.
+    """
+
+    job_id: Optional[str] = None
+    returncode: Optional[int] = None
+
+
+@dataclass
 class Scheduler:
     """
     An instance of a batch job scheduler that can launch jobs on a given
@@ -560,7 +580,7 @@ class Scheduler:
         dry_run: bool = False,
         save_hostlist: bool = False,
         immutable_launch_script: bool = False,
-    ) -> str:
+    ) -> "LaunchResult":
         """
         Launches the given command and arguments uaing this launcher.
 
@@ -576,7 +596,8 @@ class Scheduler:
         :param run_from_launch_dir: If True, runs the command from the launch directory.
         :params save_hostlist: Add local scripting to capture the list of hosts the command is launched on
         :params immutable_launch_script: It True, do not modify the script and put any system env arguments on the CLI command
-        :return: The queued job ID as a string.
+        :return: A :class:`LaunchResult` carrying the job ID (if any) and the
+                 exit status the caller should propagate.
         """
 
         self.override_launch_args = override_launch_args
@@ -606,7 +627,7 @@ class Scheduler:
 
             if setup_only:
                 logger.warning(f'To launch, run: {" ".join(full_cmdline)}')
-                return ""
+                return LaunchResult(job_id=None, returncode=0)
 
             logger.info(f'Launching {" ".join(full_cmdline)}')
 
@@ -618,7 +639,8 @@ class Scheduler:
                     logging.error(
                         f"Interactive scheduler exited with error code {process.returncode}"
                     )
-            return None
+                return LaunchResult(job_id=None, returncode=process.returncode)
+            return LaunchResult(job_id=None, returncode=0)
         else:
             full_cmdline = cmd + [filename]
             logger.info(f"Script filename: {filename}")
@@ -637,25 +659,25 @@ class Scheduler:
 
             if setup_only:
                 logger.warning(f'To launch, run: {" ".join(full_cmdline)}')
-                return ""
+                return LaunchResult(job_id=None, returncode=0)
 
             logger.info(f'Launching {" ".join(full_cmdline)}')
 
             if dry_run:
-                return None
+                return LaunchResult(job_id=None, returncode=0)
 
             if blocking:  # Launch job and trace outputs live
                with open(self.out_log_file, "wb") as out_file:
                    with open(self.err_log_file, "wb") as err_file:
 
-                       run_process_with_live_output(
+                       returncode = run_process_with_live_output(
                            full_cmdline,
                            out_file=out_file,
                            err_file=err_file,
                            color_stderr=color_stderr,
                        )
-               # In this mode, there is no job ID
-               return None
+               # In this mode, there is no job ID; propagate the child's status.
+               return LaunchResult(job_id=None, returncode=returncode)
             else:
                 # Run batch script and get job ID
                 process = subprocess.run(full_cmdline, capture_output=True)
@@ -664,5 +686,9 @@ class Scheduler:
                         f"Batch scheduler exited with error code {process.returncode}"
                     )
                     sys.stderr.buffer.write(process.stderr)
-                    return None
-                return self.get_job_id(process.stdout.decode())
+                    return LaunchResult(job_id=None, returncode=process.returncode or 1)
+                # Successful non-blocking submission: the job is still running,
+                # so there is no exit code to report yet.
+                return LaunchResult(
+                    job_id=self.get_job_id(process.stdout.decode()), returncode=None
+                )

@@ -12,6 +12,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 import argparse
+import sys
 from hpc_launcher.cli import common_args, launch_helpers
 from hpc_launcher.schedulers import get_schedulers
 from hpc_launcher.schedulers.local import LocalScheduler
@@ -70,7 +71,7 @@ def main():
             folder_name, not args.bg, script_file, args.dry_run
         )
 
-    jobid = scheduler.launch(
+    result = scheduler.launch(
         system,
         folder_name,
         script_file,
@@ -85,11 +86,15 @@ def main():
         args.batch_script != "", # If a batch script is provided don't allow it to be modified
     )
 
-    if jobid:
-        msg = f"Job ID: {jobid} launched from {folder_name}"
+    if result.job_id:
+        msg = f"Job ID: {result.job_id} launched from {folder_name}"
         logger.info(msg)
         if not args.verbose:
             print(msg)
+
+    # Propagate the job's exit status: a successful non-blocking submission has
+    # no return code yet (job still running) and exits 0.
+    sys.exit(result.returncode or 0)
 
 if __name__ == "__main__":
     main()
