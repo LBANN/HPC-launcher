@@ -115,19 +115,16 @@ class LSFScheduler(Scheduler):
         return ["bsub"]
 
     def cli_env_arg(self, env_list) -> None:
-        env_vars = []
-        for e in env_list:
-            if len(e) == 1:
-                continue
-            elif len(e) == 2:
-                k,v = e
-                env_vars += [f"{k}={v}"]
-            elif len(e) == 3:
-                k,v,m = e
-                env_vars += [f"{k}={v}"]
+        # Expand ${VAR} references, merge duplicate keys, and dequote values
+        # like the shell-script path would before folding them into bsub's
+        # --env "ALL, ..." token (finding E4).
+        env_vars = [f"{k}={v}" for k, v in self.expand_cli_env(env_list).items()]
 
         key_found = False
-        for key in self.submit_only_args:
+        # Iterate over a snapshot: the loop body mutates submit_only_args (this
+        # method can be called twice per launch -- once for env vars, once for
+        # passthrough vars).
+        for key in list(self.submit_only_args):
             if key.startswith("--env"):
                 existing_env = key.split(" ")
                 new_env = existing_env[2:]
@@ -138,6 +135,7 @@ class LSFScheduler(Scheduler):
                 self.submit_only_args[new_key] = None
                 del self.submit_only_args[key]
                 key_found = True
+                break
 
         if not key_found:
             self.submit_only_args['--env "ALL, ' + ", ".join(env_vars) + '"'] = None

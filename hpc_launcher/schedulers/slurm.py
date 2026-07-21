@@ -124,16 +124,10 @@ class SlurmScheduler(Scheduler):
         return ["sbatch"]
 
     def cli_env_arg(self, env_list) -> None:
-        env_vars = []
-        for e in env_list:
-            if len(e) == 1:
-                continue
-            elif len(e) == 2:
-                k,v = e
-                env_vars += [f"{k}={v}"]
-            elif len(e) == 3:
-                k,v,m = e
-                env_vars += [f"{k}={v}"]
+        # Expand ${VAR} references, merge duplicate keys, and dequote values
+        # like the shell-script path would before folding them into Slurm's
+        # single --export=ALL,k=v,... token (finding E4).
+        env_vars = [f"{k}={v}" for k, v in self.expand_cli_env(env_list).items()]
         if "--export" in self.submit_only_args:
             self.submit_only_args["--export"] += "," + ",".join(env_vars)
         else:

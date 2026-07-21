@@ -11,11 +11,12 @@
 # https://github.com/LBANN and https://github.com/LLNL/LBANN.
 #
 # SPDX-License-Identifier: (Apache-2.0)
-from collections import OrderedDict
+from collections import OrderedDict, ChainMap
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
+import re
 import sys
 import time
 import tempfile
@@ -71,6 +72,81 @@ def pick_rendezvous_port() -> int:
     except OSError:
         span = _RENDEZVOUS_PORT_FALLBACK_MAX - _RENDEZVOUS_PORT_FALLBACK_MIN + 1
         return _RENDEZVOUS_PORT_FALLBACK_MIN + (uuid.uuid4().int % span)
+
+
+# ---------------------------------------------------------------------------
+# Ephemeral CLI environment expansion (finding E4)
+# ---------------------------------------------------------------------------
+
+# A ``$NAME`` or ``${NAME}`` parameter reference (POSIX variable name).
+_ENV_VAR_REF = re.compile(
+    r"\$\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)\}"
+    r"|\$(?P<bare>[A-Za-z_][A-Za-z0-9_]*)"
+)
+
+
+def _expand_env_refs(text: str, lookup) -> str:
+    """
+    Expand ``$NAME`` / ``${NAME}`` references in ``text`` against
+    ``lookup``. Unknown names expand to the empty string, as ``sh`` does.
+    """
+    def _replace(match: "re.Match") -> str:
+        name = match.group("braced") or match.group("bare")
+        return lookup.get(name, "")
+
+    return _ENV_VAR_REF.sub(_replace, text)
+
+
+def shell_expand_assignment(value: str, lookup) -> str:
+    """
+    Emulate what a POSIX shell produces for the right-hand side of an
+    ``export NAME=<value>`` statement: parameter expansion followed by quote
+    removal, *without* invoking a shell. Field splitting and pathname
+    expansion do not apply to an assignment's RHS, so the result is always a
+    single value -- exactly what a single ``--env=NAME=...`` argv element
+    needs.
+
+    - Text inside single quotes is literal (no ``$`` expansion); the quotes
+      are removed.
+    - Text inside double quotes has ``$NAME`` / ``${NAME}`` expanded; the
+      quotes are removed.
+    - Unquoted text has ``$NAME`` / ``${NAME}`` expanded.
+
+    Simplification (documented): backslash escaping is not interpreted --
+    the env values this handles (paths, plugin names, ``${VAR}``-built
+    library paths) never rely on it. This is a deliberately small emulation,
+    not a full shell word-expansion engine.
+
+    :param value: The raw value as authored for the shell-script path.
+    :param lookup: A mapping consulted for parameter expansion (typically
+                   the accumulated overlay chained over ``os.environ``).
+    :return: The expanded, dequoted value.
+    """
+    out = []
+    i, n = 0, len(value)
+    while i < n:
+        c = value[i]
+        if c == "'":
+            j = value.find("'", i + 1)
+            if j == -1:  # unbalanced quote: take the remainder literally
+                out.append(value[i + 1:])
+                break
+            out.append(value[i + 1:j])
+            i = j + 1
+        elif c == '"':
+            j = value.find('"', i + 1)
+            if j == -1:  # unbalanced quote: expand the remainder
+                out.append(_expand_env_refs(value[i + 1:], lookup))
+                break
+            out.append(_expand_env_refs(value[i + 1:j], lookup))
+            i = j + 1
+        else:
+            j = i
+            while j < n and value[j] not in "'\"":
+                j += 1
+            out.append(_expand_env_refs(value[i:j], lookup))
+            i = j
+    return "".join(out)
 
 if TYPE_CHECKING:
     # If type-checking, import the other class
@@ -341,6 +417,45 @@ class Scheduler:
         if self._rendezvous_port is None:
             self._rendezvous_port = pick_rendezvous_port()
         return self._rendezvous_port
+
+    @staticmethod
+    def expand_cli_env(env_list: list[tuple]) -> "OrderedDict[str, str]":
+        """
+        Collapse an ordered environment list into the final
+        ``{name: value}`` mapping a POSIX shell would produce after running
+        the equivalent sequence of ``export`` statements -- but without a
+        shell (finding E4).
+
+        On the ephemeral blocking path env vars are moved onto the scheduler
+        CLI (e.g. flux ``--env=``), where no shell interprets them. Passing
+        the raw script-authored values there would (a) leave literal quotes
+        in the value, (b) collapse duplicate keys, silently dropping one of
+        two ``LD_LIBRARY_PATH`` entries, and (c) never expand ``${VAR}``.
+
+        This processes the list IN ORDER, keeping an overlay of what has been
+        assigned so far on top of ``os.environ``. Each value is expanded and
+        dequoted against ``os.environ`` plus the overlay-so-far, so a later
+        ``LD_LIBRARY_PATH=B:${LD_LIBRARY_PATH}`` naturally incorporates an
+        earlier ``LD_LIBRARY_PATH=A:...`` exactly as the shell would (yielding
+        ``B:A:<original>``). The final overlay has one fully expanded entry
+        per key, in first-seen order. The values are verbatim argv elements
+        (destined for ``exec``), so they are NOT shell-quoted.
+
+        :param env_list: The env entries, each a ``(name, value[, comment])``
+                         tuple; bare comment/no-op entries (length < 2) are
+                         skipped.
+        :return: The expanded, deduplicated mapping.
+        """
+        overlay: "OrderedDict[str, str]" = OrderedDict()
+        for e in env_list:
+            if len(e) < 2:
+                continue
+            k, v = e[0], e[1]
+            # overlay takes precedence over os.environ for expansion, so a
+            # later entry sees the values assigned by earlier entries.
+            lookup = ChainMap(overlay, os.environ)
+            overlay[k] = shell_expand_assignment(str(v), lookup)
+        return overlay
 
     def cli_env_arg(self, env_list: list[tuple[str,str]]) -> None:
         """

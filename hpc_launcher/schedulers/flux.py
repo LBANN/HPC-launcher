@@ -126,15 +126,12 @@ class FluxScheduler(Scheduler):
         return ["flux", "batch"]
 
     def cli_env_arg(self, env_list) -> None:
-        for e in env_list:
-            if len(e) == 1:
-                continue
-            elif len(e) == 2:
-                k,v = e
-                self.submit_only_args[f"--env={k}"] = f"{v}"
-            elif len(e) == 3:
-                k,v,m = e
-                self.submit_only_args[f"--env={k}"] = f"{v}"
+        # Expand ${VAR} references, merge duplicate keys, and dequote values
+        # exactly as the shell-script path would, so the ephemeral CLI env is
+        # well-defined (finding E4). The resulting values are argv elements
+        # passed straight to exec, so they are NOT shell-quoted here.
+        for k, v in self.expand_cli_env(env_list).items():
+            self.submit_only_args[f"--env={k}"] = f"{v}"
         return
 
     def export_hostlist(self) -> str:
