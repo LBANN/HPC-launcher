@@ -23,6 +23,29 @@ import os
 from hpc_launcher.schedulers import get_schedulers
 
 
+def _process_group_kwargs(backend, init_method, world_size, rank, device,
+                          local_device_id):
+    """
+    Build the keyword arguments for ``torch.distributed.init_process_group``.
+
+    The ``device_id`` argument is only meaningful for accelerator devices:
+    torch >= 2.x rejects a CPU ``device_id`` with ``ValueError:
+    init_process_group device_id parameter must be an accelerator with an
+    index``. Passing it unconditionally crashed every multi-rank CPU/gloo job
+    at initialization (review finding E5). Include ``device_id`` only when an
+    accelerator is actually in use.
+    """
+    kwargs = dict(
+        backend=backend,
+        init_method=init_method,
+        world_size=world_size,
+        rank=rank,
+    )
+    if device != "cpu" and torch.cuda.is_available():
+        kwargs["device_id"] = torch.device(device, local_device_id)
+    return kwargs
+
+
 def main():
     # Strip off the name of this script and pass the rest to runpy
     args = sys.argv[1:]
@@ -105,12 +128,10 @@ def main():
                     f"[Rank {rank} of {world_size}]: Initializing distributed PyTorch using protocol: {rdv_protocol}"
                 )
             # TODO(later): Fix how we handle CUDA visible devices and MPI bind
-            dist.init_process_group(backend,
-                                    init_method=rdv_protocol,
-                                    world_size=world_size,
-                                    rank=rank,
-                                    device_id=torch.device(
-                                        device, local_device_id))
+            pg_kwargs = _process_group_kwargs(backend, rdv_protocol,
+                                              world_size, rank, device,
+                                              local_device_id)
+            dist.init_process_group(**pg_kwargs)
 
             if rdv_protocol == "mpi://" and rank == 0:
                 print("[Rank {} of {}]: MPI Version: {}".format(
