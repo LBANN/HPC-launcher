@@ -42,9 +42,9 @@ import torch
 if affinity is not None:
     # Restore affinity after importing torch
     Process().cpu_affinity(affinity)
-import os
 
-if torch.cuda.is_available():
-    fraction_max_gpu_mem = float(os.getenv("HPC_LAUNCHER_MAX_GPU_MEM", 1.0))
-    if fraction_max_gpu_mem != 1.0:
-        torch.cuda.set_per_process_memory_fraction(fraction_max_gpu_mem)
+# NOTE: the optional GPU memory-fraction cap (HPC_LAUNCHER_MAX_GPU_MEM) is
+# intentionally NOT applied here. Doing so at import time capped device 0
+# regardless of which GPU the worker later selected, and forced a
+# ``torch.cuda`` call onto the package import path. It is now applied inside
+# the trampoline after the per-rank device is chosen (review finding A2).

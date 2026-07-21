@@ -12,12 +12,16 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-Tests for trampoline device handling (review finding E5).
+Tests for trampoline device handling (review findings E5 and A2).
 
 E5: ``torchrun_hpc_trampoline.main()`` used to pass
 ``device_id=torch.device("cpu", ...)`` to ``dist.init_process_group`` even on
 the CPU/gloo path, which torch >= 2.x rejects, crashing every multi-rank
 CPU/gloo job at initialization.
+
+A2: the optional GPU memory-fraction cap used to be applied at
+``import hpc_launcher.torch`` time with no device argument, so it capped
+device 0 regardless of which GPU the worker went on to use.
 
 These are Tier B tests: they need a CPU-capable torch. The import is guarded
 with the shared ``require_torch()`` helper.
@@ -180,3 +184,51 @@ def test_cpu_gloo_two_ranks_init(tmp_path):
     for rank, marker in enumerate(markers):
         assert marker.exists(), f"rank {rank} did not write its success marker"
         assert marker.read_text().startswith("OK "), marker.read_text()
+
+
+# ---------------------------------------------------------------------------
+# A2 - memory fraction applied to the selected device
+# ---------------------------------------------------------------------------
+def test_memory_fraction_applied_to_selected_device(monkeypatch):
+    require_torch()
+    import hpc_launcher.torch.torchrun_hpc_trampoline as tramp
+
+    # Fake a node with four visible GPUs and a non-default fraction cap.
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,2,3")
+    monkeypatch.delenv("ROCR_VISIBLE_DEVICES", raising=False)
+    monkeypatch.delenv("HIP_VISIBLE_DEVICES", raising=False)
+    monkeypatch.setenv("HPC_LAUNCHER_MAX_GPU_MEM", "0.5")
+
+    # Drive the round-robin device selection: local_rank 2 of 4 -> device 2,
+    # deliberately not device 0 (the device the old import-time bug capped).
+    selected = tramp._select_local_device_id(2)
+    assert selected == 2
+
+    with mock.patch(
+        "hpc_launcher.torch.torchrun_hpc_trampoline.torch.cuda.is_available",
+        return_value=True,
+    ), mock.patch(
+        "hpc_launcher.torch.torchrun_hpc_trampoline.torch.cuda."
+        "set_per_process_memory_fraction"
+    ) as set_fraction:
+        tramp._apply_memory_fraction(selected)
+
+    set_fraction.assert_called_once_with(0.5, device=2)
+
+
+def test_memory_fraction_noop_at_default(monkeypatch):
+    require_torch()
+    import hpc_launcher.torch.torchrun_hpc_trampoline as tramp
+
+    monkeypatch.delenv("HPC_LAUNCHER_MAX_GPU_MEM", raising=False)
+
+    with mock.patch(
+        "hpc_launcher.torch.torchrun_hpc_trampoline.torch.cuda.is_available",
+        return_value=True,
+    ), mock.patch(
+        "hpc_launcher.torch.torchrun_hpc_trampoline.torch.cuda."
+        "set_per_process_memory_fraction"
+    ) as set_fraction:
+        tramp._apply_memory_fraction(1)
+
+    set_fraction.assert_not_called()
