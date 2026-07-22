@@ -32,7 +32,7 @@ def _process_group_kwargs(backend, init_method, world_size, rank, device,
     torch >= 2.x rejects a CPU ``device_id`` with ``ValueError:
     init_process_group device_id parameter must be an accelerator with an
     index``. Passing it unconditionally crashed every multi-rank CPU/gloo job
-    at initialization (review finding E5). Include ``device_id`` only when an
+    at initialization. Include ``device_id`` only when an
     accelerator is actually in use.
     """
     kwargs = dict(
@@ -74,7 +74,7 @@ def _apply_memory_fraction(local_device_id):
 
     This previously ran at ``import hpc_launcher.torch`` time with no device
     argument, which capped device 0 regardless of which GPU the worker went
-    on to use (review finding A2). Applying it here, after ``local_device_id``
+    on to use. Applying it here, after ``local_device_id``
     has been chosen, caps the correct device. It is a no-op on CPU-only ranks
     and when the fraction is left at the default 1.0.
     """
@@ -123,7 +123,7 @@ def main():
 
     # Apply the optional GPU memory-fraction cap to the selected device. This
     # used to run at import time against device 0 regardless of the device the
-    # worker ends up using (review finding A2).
+    # worker ends up using.
     _apply_memory_fraction(local_device_id)
 
     torch_dist_initialized = dist.is_initialized()

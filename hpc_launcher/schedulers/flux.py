@@ -128,7 +128,7 @@ class FluxScheduler(Scheduler):
     def cli_env_arg(self, env_list) -> None:
         # Expand ${VAR} references, merge duplicate keys, and dequote values
         # exactly as the shell-script path would, so the ephemeral CLI env is
-        # well-defined (finding E4). The resulting values are argv elements
+        # well-defined. The resulting values are argv elements
         # passed straight to exec, so they are NOT shell-quoted here.
         for k, v in self.expand_cli_env(env_list).items():
             self.submit_only_args[f"--env={k}"] = f"{v}"

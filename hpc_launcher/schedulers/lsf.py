@@ -37,10 +37,10 @@ class LSFScheduler(Scheduler):
         # bsub-only flag (submit-only): jsrun has no notion of "-nnodes", it
         # only ever sees "--nrs" (above). Keep this out of common_launch_args
         # so it doesn't leak into the internal jsrun run command written into
-        # the batch script (finding E2).
+        # the batch script.
         self.submit_only_args["-nnodes"] = f"{self.nodes}"
 
-        # bsub-only flag: not a jsrun option (finding E2).
+        # bsub-only flag: not a jsrun option.
         self.submit_only_args["--shared-launch"] = None
 
         # jsrun options (do we need to guard this with something like if os.getenv("LSB_HOSTS"):
@@ -64,14 +64,14 @@ class LSFScheduler(Scheduler):
             # Flag and value are now separate dict entries, so the job name
             # flows through as a normal value and is quoted by the
             # scheduler's central serialization (format_submit_arg /
-            # build_command_string_and_batch_script) wherever it is emitted
-            # (finding D1). No source-level quoting needed here.
+            # build_command_string_and_batch_script) wherever it is emitted.
+            # No source-level quoting needed here.
             self.submit_only_args["-J"] = self.job_name
         if self.queue:
-            # bsub-only flag: not a jsrun option (finding E2).
+            # bsub-only flag: not a jsrun option.
             self.submit_only_args["-q"] = f"{self.queue}"
         if self.account:
-            # bsub-only flag: not a jsrun option (finding E2).
+            # bsub-only flag: not a jsrun option.
             self.submit_only_args["-G"] = f"{self.account}"
         if self.reservation:
             self.submit_only_args["-U"] = f"{self.reservation}"
@@ -90,11 +90,10 @@ class LSFScheduler(Scheduler):
         # Both launch paths execute argv lists (or an internal run-command
         # line built from them) without a shell, so a bsub flag and its
         # value must be separate tokens like ``["-nnodes", "2"]`` rather than
-        # one token containing a literal space (finding E1), unlike Slurm's/
+        # one token containing a literal space, unlike Slurm's/
         # Flux's GNU-style "--flag=value" long options. Every entry in
-        # submit_only_args is a genuine bsub-only flag (finding E2 moved the
-        # rest out of common_launch_args), so this formatting applies
-        # unconditionally here; common_launch_args keeps the base class's
+        # submit_only_args is a genuine bsub-only flag, so this formatting
+        # applies unconditionally here; common_launch_args keeps the base class's
         # default "=" formatting for LSF (it only holds generic/overridden
         # flags, since LSF has none genuinely shared between bsub and jsrun).
         if not v:
@@ -117,7 +116,7 @@ class LSFScheduler(Scheduler):
     def cli_env_arg(self, env_list) -> None:
         # Expand ${VAR} references, merge duplicate keys, and dequote values
         # like the shell-script path would before folding them into bsub's
-        # --env "ALL, ..." token (finding E4).
+        # --env "ALL, ..." token.
         env_vars = [f"{k}={v}" for k, v in self.expand_cli_env(env_list).items()]
 
         key_found = False
@@ -163,7 +162,7 @@ class LSFScheduler(Scheduler):
         # bsub prints e.g. "Job <123> is submitted to queue <pbatch>." on a
         # successful non-blocking submission; return None (per the base
         # class's contract) when the output can't be parsed instead of
-        # raising (finding E3).
+        # raising.
         match = re.search(r"Job <(\d+)>", output)
         if match:
             return match.group(1)

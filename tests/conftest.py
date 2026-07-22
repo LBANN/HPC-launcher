@@ -34,7 +34,7 @@ def require_torch():
     leg once torch is installed everywhere), a missing torch fails the
     test instead of silently skipping it. Without this, a CI leg that
     fails to install torch could report fully green while every
-    torch-dependent test was quietly skipped (review finding I3).
+    torch-dependent test was quietly skipped.
     """
     try:
         import torch
@@ -62,7 +62,7 @@ def stub_system() -> GenericSystem:
 @pytest.fixture(autouse=True)
 def _no_shared_scheduler_or_system_state():
     """
-    Autouse tripwire for the F1/F2 shared-mutable-state regressions.
+    Autouse tripwire for shared-mutable-state regressions.
 
     Before every test, verify that a freshly constructed ``Scheduler`` starts
     with empty argument dictionaries and that a freshly constructed

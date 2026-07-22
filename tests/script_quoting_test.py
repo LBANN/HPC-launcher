@@ -12,8 +12,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-Regression tests for shell quoting / injection in generated launch scripts
-(review finding D1).
+Regression tests for shell quoting / injection in generated launch scripts.
 
 The generated ``launch.sh`` is executed by ``/bin/sh`` under the scheduler
 (sbatch/bsub/flux) or directly for ``--local`` jobs. Every user-controlled
@@ -26,7 +25,7 @@ lines and on any internal run command) -- must be quoted so that:
 2. a value containing ``$(...)``, backticks, ``;``, ``&`` or ``>`` is inert
    rather than interpreted by the shell.
 
-These are pure Tier A tests: no torch, no scheduler binaries. Scripts are
+No torch or scheduler binaries needed. Scripts are
 generated directly via ``Scheduler.launcher_script`` into ``tmp_path``; the
 ``--local`` case is additionally executed end-to-end (local runs work in the
 sandbox).

@@ -174,7 +174,7 @@ class GenericSystem(System):
     def preferred_scheduler(self) -> type[Scheduler]:
         # Prefer the autodetection probe result (`find_scheduler()`, threaded
         # through `SystemParams.scheduler` -- see `autodetect.py`) when one
-        # is available (finding G3); SLURM remains a relatively safe bet
+        # is available; SLURM remains a relatively safe bet
         # otherwise.
         from hpc_launcher.schedulers import get_schedulers
         from hpc_launcher.schedulers.slurm import SlurmScheduler

@@ -12,19 +12,19 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-Tier A tests for env plumbing (review findings E6 and E4):
+Tests for env plumbing:
 
-- E6: the rendezvous port was hardcoded to ``23456`` in every scheduler, so
+- The rendezvous port was hardcoded to ``23456`` in every scheduler, so
   two jobs whose rank-0 node coincided collided on one TCPStore. It is now
   chosen once per launch (a free ephemeral port on the launch host, with a
   UUID-hash fallback) and baked into ``TORCHRUN_HPC_MASTER_PORT``.
-- E4: on the ephemeral blocking path env vars are moved onto the scheduler
+- On the ephemeral blocking path env vars are moved onto the scheduler
   CLI (flux ``--env=``), where no shell interprets them -- literal quotes
   survived, duplicate keys collapsed, and ``${VAR}`` never expanded. The env
   list is now expanded/merged/dequoted in-process exactly as the shell-script
   path would, and the fully expanded values become the CLI env args.
 
-Pure Tier A: no torch, no scheduler binaries. Schedulers and a
+No torch or scheduler binaries needed. Schedulers and a
 ``GenericSystem`` stub are constructed directly; ``os.environ`` is
 monkeypatched where the expansion source matters.
 """
@@ -142,13 +142,13 @@ def test_local_scheduler_bakes_real_rendezvous_port():
 
 
 # ---------------------------------------------------------------------------
-# E4 -- ephemeral CLI env expansion
+# Ephemeral CLI env expansion
 # ---------------------------------------------------------------------------
 
 
 def test_cli_env_no_literal_quotes():
     """
-    E4 reproducer: a double-quoted env value (the old
+    A double-quoted env value (the old
     ``NCCL_NET='"AWS Libfabric"'`` shape) must not reach the flux command as
     an argv token containing a literal ``"`` -- the shell would have removed
     those quotes, and so must the in-process expansion.
@@ -168,7 +168,7 @@ def test_cli_env_no_literal_quotes():
 
 def test_cli_env_preserves_duplicate_ld_library_path(monkeypatch):
     """
-    E4: two ``LD_LIBRARY_PATH`` entries must merge the way a sequence of
+    Two ``LD_LIBRARY_PATH`` entries must merge the way a sequence of
     ``export`` statements would -- the later entry incorporating the earlier
     -- rather than the second silently dropping the first. Order must match
     the shell (``B:A:<original>``).
@@ -196,7 +196,7 @@ def test_cli_env_preserves_duplicate_ld_library_path(monkeypatch):
 
 def test_cli_env_expands_var_references(monkeypatch):
     """
-    E4: ``${VAR}`` / ``$VAR`` references in an env value arrive expanded to
+    ``${VAR}`` / ``$VAR`` references in an env value arrive expanded to
     the real value (there is no shell on the CLI path to do it later).
     """
     monkeypatch.setenv("HOME", "/home/tester")

@@ -43,7 +43,7 @@ def setup_logging(logger: logging.Logger, verbose: bool):
 def select_scheduler(
     args: argparse.Namespace, logger: logging.Logger, system: System
 ) -> Scheduler:
-    # Pick batch scheduler, in priority order (review finding G3):
+    # Pick batch scheduler, in priority order:
     #   1. --local
     #   2. an explicit --scheduler CLI argument
     #   3. a `-p scheduler=<x>` system-parameter override, or -- absent that --

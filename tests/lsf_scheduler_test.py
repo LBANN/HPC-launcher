@@ -12,19 +12,19 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-Regression tests for the LSF backend (review findings E1, E2, E3):
+Regression tests for the LSF backend:
 
-- E1: bsub flags were built as single dict keys with an embedded space
+- bsub flags were built as single dict keys with an embedded space
   (``f"-nnodes {n}"``), which both launch paths execute as argv *without* a
   shell, so bsub saw the single literal token ``-nnodes 2`` instead of
   ``-nnodes`` and ``2`` as separate arguments. The ``-W`` value also had a
   trailing newline baked into the (buggy) embedded key.
-- E2: bsub-only flags lived in ``common_launch_args``, which leaked them
+- bsub-only flags lived in ``common_launch_args``, which leaked them
   into the internal ``jsrun`` line written into the batch script.
-- E3: ``LSFScheduler.get_job_id`` raised ``NotImplementedError`` instead of
+- ``LSFScheduler.get_job_id`` raised ``NotImplementedError`` instead of
   parsing bsub's "Job <N> is submitted..." output.
 
-These are pure Tier A tests: no torch, no scheduler binaries. Commands and
+No torch or scheduler binaries needed. Commands and
 scripts are constructed directly against a ``GenericSystem`` stub.
 """
 from hpc_launcher.schedulers.lsf import LSFScheduler
@@ -34,7 +34,7 @@ from hpc_launcher.schedulers.lsf import LSFScheduler
 BSUB_ONLY_FLAGS = ("-nnodes", "-q", "-J", "--shared-launch", "-W", "-G")
 
 # jsrun flags the scheduler is expected to still emit on the internal run
-# line (unaffected by the E1/E2 restructuring).
+# line (unaffected by the bsub-flag restructuring).
 JSRUN_FLAGS = (
     "--nrs",
     "--rs_per_host",

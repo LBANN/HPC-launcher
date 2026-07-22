@@ -12,8 +12,8 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-Regression tests for exit-code propagation (review finding C1) and Ctrl-C /
-SIGINT handling (review finding C2).
+Regression tests for exit-code propagation and Ctrl-C /
+SIGINT handling.
 """
 import signal
 import subprocess
@@ -30,8 +30,8 @@ from hpc_launcher.schedulers.scheduler import LaunchResult
 @pytest.mark.parametrize("code", [0, 1, 3])
 def test_blocking_exit_code_propagated(code, tmp_path):
     """
-    A blocking ``launch --local`` run must exit with the child's exit code
-    (C1). Previously the launcher discarded the child's return code and always
+    A blocking ``launch --local`` run must exit with the child's exit code.
+    Previously the launcher discarded the child's return code and always
     exited 0, so failing jobs looked successful to shell pipelines / CI.
     """
     cmd = [
@@ -57,7 +57,7 @@ def test_blocking_exit_code_propagated(code, tmp_path):
 
 def test_launch_result_unit(tmp_path, monkeypatch, stub_system):
     """
-    Pure-unit form of C1: ``Scheduler.launch`` must surface the return code of
+    Pure-unit form: ``Scheduler.launch`` must surface the return code of
     ``run_process_with_live_output`` (the process that runs the generated
     launch script) inside the returned ``LaunchResult``.
     """
@@ -90,7 +90,7 @@ def test_launch_result_unit(tmp_path, monkeypatch, stub_system):
 
 def test_sigint_kills_child(tmp_path):
     """
-    C2: after the launcher receives SIGINT, its scheduler child (and any
+    After the launcher receives SIGINT, its scheduler child (and any
     grandchildren it spawned) must be killed within a bounded time and the
     launcher must exit non-zero (130 = 128 + SIGINT).
 

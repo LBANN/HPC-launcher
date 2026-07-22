@@ -47,4 +47,4 @@ if affinity is not None:
 # intentionally NOT applied here. Doing so at import time capped device 0
 # regardless of which GPU the worker later selected, and forced a
 # ``torch.cuda`` call onto the package import path. It is now applied inside
-# the trampoline after the per-rank device is chosen (review finding A2).
+# the trampoline after the per-rank device is chosen.

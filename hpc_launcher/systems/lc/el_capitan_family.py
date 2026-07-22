@@ -48,7 +48,7 @@ def _rocm_path_version() -> Optional[tuple[int, int, int]]:
     The ROCm version encoded in ``$ROCM_PATH``. The path is resolved
     through ``os.path.realpath`` first so the conventional unversioned
     ``/opt/rocm`` symlink still yields a version when it points at a
-    ``rocm-X.Y.Z`` tree (review finding G2).
+    ``rocm-X.Y.Z`` tree.
     """
     rocm_path = os.getenv("ROCM_PATH")
     if not rocm_path:
@@ -60,8 +60,7 @@ def _torch_hip_version() -> Optional[tuple[int, int, int]]:
     """
     The ROCm version bundled with the installed torch wheel, from
     ``torch.version.hip``. The import is deliberately lazy and guarded:
-    CLI startup and non-torch users must never require torch (review
-    finding E8).
+    CLI startup and non-torch users must never require torch.
     """
     try:
         import torch
@@ -89,8 +88,8 @@ def _rocm_runtime_version() -> _RocmRuntime:
     """
     Resolve the ROCm runtime version torch-first: a torch wheel bundles
     its own ROCm runtime -- the one RCCL actually links against -- so
-    ``torch.version.hip`` wins over the version encoded in ``ROCM_PATH``
-    (review finding E8). Logs a prominent warning when the two disagree.
+    ``torch.version.hip`` wins over the version encoded in ``ROCM_PATH``.
+    Logs a prominent warning when the two disagree.
     """
     torch_version = _torch_hip_version()
     path_version = _rocm_path_version()
@@ -128,7 +127,7 @@ def _find_aws_ofi_plugin_dir(version: tuple[int, int, int]) -> Optional[str]:
     Tries the exact ``rocm-X.Y.Z`` tree first, then falls back to any
     ``rocm-X.Y.*`` sibling with the same major.minor: the plugin trees are
     not installed for every patch level, and a torch wheel's HIP build
-    number (e.g. 7.2.24191) never names one exactly (review finding E8).
+    number (e.g. 7.2.24191) never names one exactly.
 
     :return: The plugin lib directory, or ``None`` when no tree matches.
     """
@@ -250,7 +249,7 @@ class ElCapitan(System):
             else:
                 logger.warn(f"WARNING: invalid path provided in LBANN_USE_THIS_OFI_PLUGIN: {different_ofi_plugin}. Ensure one is loaded or performance will be degraded.")
 
-        # Resolve the ROCm runtime version torch-first (review finding E8):
+        # Resolve the ROCm runtime version torch-first:
         # a torch wheel bundles its own ROCm runtime -- the one RCCL
         # actually runs against -- so it takes precedence over the version
         # of whatever environment module set ROCM_PATH. Note that a torch
@@ -263,8 +262,7 @@ class ElCapitan(System):
             llvm_lib_path = os.path.join(f"{rocm_path}", "llvm", "lib")
             if rocm.mismatch:
                 # Mixing another ROCm's llvm/lib into a process that runs
-                # the torch wheel's bundled ROCm is an ABI hazard (review
-                # finding E8).
+                # the torch wheel's bundled ROCm is an ABI hazard.
                 logger.warning(
                     f"Not prepending {llvm_lib_path} to LD_LIBRARY_PATH: the "
                     "ROCm version in ROCM_PATH differs from the torch wheel's "
@@ -279,9 +277,9 @@ class ElCapitan(System):
                 )
 
         if rocm.version is None:
-            # Never crash on an undeterminable ROCm version (review finding
-            # G2): skip the version-dependent configuration. Stay quiet
-            # when there is no sign of ROCm use at all.
+            # Never crash on an undeterminable ROCm version: skip the
+            # version-dependent configuration. Stay quiet when there is no
+            # sign of ROCm use at all.
             if rocm_path is not None or optimize_rccl_protocol:
                 logger.warning(
                     "Could not determine the ROCm runtime version (torch "
@@ -319,7 +317,7 @@ class ElCapitan(System):
             # found (probe hit or explicit override): forcing NCCL_NET
             # without the plugin present hard-crashes RCCL initialization
             # with "Failed to initialize any NET plugin", even for
-            # single-node jobs (review finding E7).
+            # single-node jobs.
             if aws_ofi_plugin is not None:
                 # Unless overriden by an external env variable set the NCCL_NET to ensure that the libfabric interface is used, e.g.: libfabric, IB, Socket
                 msg = "HPC-launcher forces slingshot systems to use the detected libfabric NCCL/RCCL plugin.  This behavior can be overridden by setting NCCL_NET=Socket in the calling environment."

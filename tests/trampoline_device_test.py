@@ -12,18 +12,18 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-Tests for trampoline device handling (review findings E5 and A2).
+Tests for trampoline device handling.
 
-E5: ``torchrun_hpc_trampoline.main()`` used to pass
+``torchrun_hpc_trampoline.main()`` used to pass
 ``device_id=torch.device("cpu", ...)`` to ``dist.init_process_group`` even on
 the CPU/gloo path, which torch >= 2.x rejects, crashing every multi-rank
 CPU/gloo job at initialization.
 
-A2: the optional GPU memory-fraction cap used to be applied at
+The optional GPU memory-fraction cap used to be applied at
 ``import hpc_launcher.torch`` time with no device argument, so it capped
 device 0 regardless of which GPU the worker went on to use.
 
-These are Tier B tests: they need a CPU-capable torch. The import is guarded
+These tests need a CPU-capable torch. The import is guarded
 with the shared ``require_torch()`` helper.
 """
 import os
@@ -49,7 +49,7 @@ def _free_port() -> int:
 
 
 # ---------------------------------------------------------------------------
-# E5 - _process_group_kwargs helper
+# _process_group_kwargs helper
 # ---------------------------------------------------------------------------
 def test_pg_kwargs_cpu_omits_device_id():
     require_torch()
@@ -92,7 +92,7 @@ def test_pg_kwargs_cuda_includes_device_id():
 
 
 # ---------------------------------------------------------------------------
-# E5 - end-to-end CPU/gloo two-rank regression
+# End-to-end CPU/gloo two-rank regression
 # ---------------------------------------------------------------------------
 def test_cpu_gloo_two_ranks_init(tmp_path):
     """
@@ -101,7 +101,7 @@ def test_cpu_gloo_two_ranks_init(tmp_path):
     rank runs a tiny user script that asserts ``dist.is_initialized()``,
     all-reduces a CPU tensor and writes a success marker.
 
-    Before the E5 fix this crashed both ranks with
+    Before the fix this crashed both ranks with
     ``ValueError: init_process_group device_id parameter must be an
     accelerator with an index``. Loopback TCP rendezvous is expected to work
     in CI and in the sandbox.
@@ -134,8 +134,8 @@ def test_cpu_gloo_two_ranks_init(tmp_path):
     base_env["SLURM_NTASKS"] = "2"
     base_env["SLURM_NNODES"] = "1"
     base_env["TORCHRUN_HPC_RDV_PROTOCOL"] = f"tcp://127.0.0.1:{port}"
-    # Force the CPU/gloo path deterministically (this is the E5 regression
-    # path). Empty *_VISIBLE_DEVICES makes torch.cuda.is_available() False on
+    # Force the CPU/gloo path deterministically (the path that used to pass
+    # a CPU device_id). Empty *_VISIBLE_DEVICES makes torch.cuda.is_available() False on
     # both CUDA and ROCm builds.
     base_env["HIP_VISIBLE_DEVICES"] = ""
     base_env["CUDA_VISIBLE_DEVICES"] = ""
@@ -187,7 +187,7 @@ def test_cpu_gloo_two_ranks_init(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# A2 - memory fraction applied to the selected device
+# Memory fraction applied to the selected device
 # ---------------------------------------------------------------------------
 def test_memory_fraction_applied_to_selected_device(monkeypatch):
     require_torch()

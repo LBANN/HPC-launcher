@@ -66,7 +66,7 @@ class LocalScheduler(Scheduler):
         if self.work_dir:
             # The working directory can carry a user-controlled job name (it is
             # embedded in an auto-generated folder name), so quote it before it
-            # is interpreted by /bin/sh in the cd (finding D1).
+            # is interpreted by /bin/sh in the cd.
             header += f"\ncd {shlex.quote(os.path.abspath(self.work_dir))}\n"
 
         # Quote the command arguments so that values containing shell

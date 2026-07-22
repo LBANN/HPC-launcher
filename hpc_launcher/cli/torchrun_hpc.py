@@ -93,7 +93,7 @@ def main():
     # Default the launch directory *before* validation. torchrun-hpc always runs
     # from a launch directory, so it is never an ephemeral interactive job; doing
     # this defaulting first keeps validation from wrongly rejecting
-    # --out/--err/-o/--save-hostlist (finding H3).
+    # --out/--err/-o/--save-hostlist.
     if args.bg and args.launch_dir is None:  # or args.batch_script
         # If running a batch job with no launch directory argument,
         # run in the generated timestamped directory
@@ -148,7 +148,6 @@ def main():
         )
         exit(1)
 
-    # (launch-dir defaulting now happens before validation above -- finding H3)
     _, folder_name = scheduler.create_launch_folder_name(
         args.command, "torchrun_hpc", args.launch_dir)
 

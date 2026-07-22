@@ -68,7 +68,7 @@ def test_autodetect_generic(mock_gethostname):
 
 
 # ---------------------------------------------------------------------------
-# G1 -- anti-drift: every family table's hostname keys must match the
+# Anti-drift: every family table's hostname keys must match the
 # hostnames autodetect.py routes to that family, so a typo like
 # `rzanzel`/`rzansel` can never silently reappear.
 # ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ def test_family_keys_match_autodetect(hostname, expected_class):
     Every hostname key registered in a family's known-systems table
     (sierra_family, el_capitan_family, cts2, corona) must autodetect to
     that family's ``System`` subclass, under its own name. This is the
-    regression guard for the ``rzanzel``/``rzansel`` typo (finding G1): if
+    regression guard for the ``rzanzel``/``rzansel`` typo: if
     a hostname string in ``autodetect.py``'s table ever drifts from the
     corresponding family table's key again, the mismatched case fails
     here instead of silently falling back to ``GenericSystem``.
@@ -110,7 +110,7 @@ def test_family_keys_match_autodetect(hostname, expected_class):
 
 
 # ---------------------------------------------------------------------------
-# G3 -- scheduler selection consults the autodetection probe result and
+# Scheduler selection consults the autodetection probe result and
 # `-p scheduler=<x>` overrides, instead of GenericSystem always hardcoding
 # SLURM.
 # ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ def test_generic_system_uses_probed_scheduler(monkeypatch):
     reporting flux must actually be used: previously
     ``GenericSystem.preferred_scheduler`` hardcoded ``SlurmScheduler``
     regardless of the probe result, and ``select_scheduler`` never
-    consulted it either (finding G3).
+    consulted it either.
     """
     monkeypatch.setattr(socket, "gethostname", lambda: "totally-unknown-host")
     monkeypatch.setattr(autodetect, "find_scheduler", lambda: "flux")
@@ -143,7 +143,7 @@ class _KnownSlurmSystem(System):
     A stand-in "known" system (fresh, per-instance parameters -- unlike the
     real LC family tables, nothing here is module-global/shared) whose
     ``preferred_scheduler`` is SLURM, used to prove that an explicit
-    ``-p scheduler=`` override still wins (finding G3).
+    ``-p scheduler=`` override still wins.
     """
 
     def __init__(self):
@@ -173,7 +173,7 @@ class _KnownSlurmSystem(System):
 def test_scheduler_param_override(mock_autodetect):
     """
     ``-p scheduler=flux`` must be honored even on a system whose
-    ``preferred_scheduler`` is SLURM (finding G3).
+    ``preferred_scheduler`` is SLURM.
     """
     parser = argparse.ArgumentParser()
     common_args.setup_arguments(parser)

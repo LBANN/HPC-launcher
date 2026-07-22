@@ -41,7 +41,7 @@ class ParseKVAction(argparse.Action):
 def _normalize_override_key(key: str) -> str:
     """
     Normalize an ``-x/--xargs`` override key to the dashed spelling the
-    schedulers store internally (finding H2).
+    schedulers store internally.
 
     - An optional leading ``~`` (the marker that removes a key rather than
       setting it) is preserved on the front of the result.
@@ -71,7 +71,7 @@ def _normalize_override_key(key: str) -> str:
 class ParseOverrideKVAction(argparse.Action):
     """
     Parse ``-x/--xargs`` override tokens into the ``{key: value}`` dictionary
-    consumed as ``override_launch_args`` by the schedulers (finding H2).
+    consumed as ``override_launch_args`` by the schedulers.
 
     Each token is one of:
 
@@ -391,7 +391,7 @@ def validate_arguments(args: argparse.Namespace):
     # key presence rather than ``.get('command') is not None`` so that the
     # forgot-the-command case (key present, value ``None``) is caught here with a
     # clean validation error instead of crashing later when ``None`` reaches the
-    # command join (finding H1).
+    # command join.
     if 'command' in args_dict:
         if not args.command and not args.batch_script:
             raise ValueError(

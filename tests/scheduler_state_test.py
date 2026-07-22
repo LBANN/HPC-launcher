@@ -12,10 +12,10 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-Regression tests for F1 and F2: scheduler argument dictionaries and the
-System auxiliary environment-variable list must be per-instance state, not
-shared class-level state. Tier A: no torch, no scheduler binaries, no
-autodetection -- systems are constructed directly.
+Regression tests: scheduler argument dictionaries and the System auxiliary
+environment-variable list must be per-instance state, not shared class-level
+state. No torch, no scheduler binaries, no autodetection -- systems are
+constructed directly.
 """
 from hpc_launcher.schedulers.flux import FluxScheduler
 from hpc_launcher.schedulers.slurm import SlurmScheduler

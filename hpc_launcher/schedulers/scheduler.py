@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Rendezvous port selection (finding E6)
+# Rendezvous port selection
 # ---------------------------------------------------------------------------
 
 # Range for the UUID-hash fallback used when an ephemeral bind is not
@@ -51,7 +51,7 @@ def pick_rendezvous_port() -> int:
     port 0, reading back the port it assigned, and closing it. Because each
     launch asks independently, two concurrent jobs almost never receive the
     same port -- which is what fixes the cross-job rendezvous-store
-    collisions of the old hardcoded ``23456`` (finding E6).
+    collisions of the old hardcoded ``23456``.
 
     On any failure (for instance a sandbox that forbids ``bind``), fall back
     to hashing a fresh UUID into a high, unprivileged port range so that two
@@ -75,7 +75,7 @@ def pick_rendezvous_port() -> int:
 
 
 # ---------------------------------------------------------------------------
-# Ephemeral CLI environment expansion (finding E4)
+# Ephemeral CLI environment expansion
 # ---------------------------------------------------------------------------
 
 # A ``$NAME`` or ``${NAME}`` parameter reference (POSIX variable name).
@@ -224,8 +224,8 @@ class Scheduler:
     override_launch_args: Optional[dict] = None
 
     # Rendezvous TCP port for this launch. Chosen once, lazily, and cached so
-    # every env entry of a single launch agrees while two launches differ
-    # (finding E6). Not a constructor argument.
+    # every env entry of a single launch agrees while two launches differ.
+    # Not a constructor argument.
     _rendezvous_port: Optional[int] = field(
         default=None, init=False, repr=False, compare=False
     )
@@ -349,7 +349,7 @@ class Scheduler:
             # is discarded). The scheduler parses them and, being written to a
             # file executed by /bin/sh, they are exposed to the shell, so quote
             # every interpolated value to keep user-controlled data (e.g. a job
-            # name) a single inert token rather than shell syntax (finding D1).
+            # name) a single inert token rather than shell syntax.
             prefix = self.batch_script_prefix()
             for k,v in self.submit_only_args.items():
                 if not for_launch_cmd and k == '--dependency':
@@ -406,7 +406,7 @@ class Scheduler:
         The rendezvous TCP port for this launch, chosen once (lazily) and
         cached on the instance so that every environment entry generated for
         a single launch agrees on the port, while two separate launches (two
-        scheduler instances) get different ports (finding E6).
+        scheduler instances) get different ports.
 
         ``TORCHRUN_HPC_MASTER_PORT`` remains the documented user override:
         the trampoline honors it when set, so exporting it explicitly still
@@ -424,7 +424,7 @@ class Scheduler:
         Collapse an ordered environment list into the final
         ``{name: value}`` mapping a POSIX shell would produce after running
         the equivalent sequence of ``export`` statements -- but without a
-        shell (finding E4).
+        shell.
 
         On the ephemeral blocking path env vars are moved onto the scheduler
         CLI (e.g. flux ``--env=``), where no shell interprets them. Passing
@@ -558,7 +558,7 @@ class Scheduler:
         # written into the shell script below (unlike ``launch_command``'s
         # cmd_args, which are argv elements executed without a shell). Quote
         # every value so it reaches the run command as a single verbatim token
-        # instead of being re-parsed by /bin/sh (finding D1).
+        # instead of being re-parsed by /bin/sh.
         # For batch jobs add any common args to the internal command
         if not blocking:
             for k,v in self.common_launch_args.items():
@@ -577,7 +577,7 @@ class Scheduler:
             # The launch-dir path can carry a user-controlled job name (it is
             # embedded in an auto-generated folder name); quote the literal path
             # so it cannot inject shell syntax, while leaving the trailing
-            # ${PYTHONPATH} reference to expand as intended (finding D1).
+            # ${PYTHONPATH} reference to expand as intended.
             script += f"export PYTHONPATH={shlex.quote(callee_directory)}:" + "${PYTHONPATH}\n"
         if save_hostlist:
             hostlist_file = os.path.join(launch_dir, "hpc_launcher_hostlist.txt")
@@ -602,7 +602,7 @@ class Scheduler:
         # Quote each command argument so values containing shell metacharacters
         # (spaces, ';', '&', '$(...)', backticks, redirections, ...) survive as
         # a single verbatim token rather than being split or interpreted when
-        # the scheduler executes this script under /bin/sh (finding D1).
+        # the scheduler executes this script under /bin/sh.
         for arg in args:
             script += f" {shlex.quote(arg)}"
 
@@ -761,7 +761,7 @@ class Scheduler:
             # when it exists AND is a different file from the destination. A
             # re-run with the same ``-l``/``-o`` resolves source and destination
             # to the same path; copying it onto itself raises SameFileError, so
-            # in that case we simply regenerate the script in place (finding H4).
+            # in that case we simply regenerate the script in place.
             is_input_batch_script = os.path.exists(script_file) and not (
                 os.path.exists(dest) and os.path.samefile(script_file, dest)
             )
@@ -857,7 +857,7 @@ class Scheduler:
             command = os.path.abspath(command)
 
         # Warn about relative-path arguments that will not resolve once the job
-        # changes into the launch directory (finding H5). The job runs from the
+        # changes into the launch directory. The job runs from the
         # launch folder, but command arguments are emitted verbatim, so a
         # relative path that exists in the invocation directory but not under the
         # launch directory would silently fail to open. Document behavior in

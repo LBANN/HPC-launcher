@@ -126,7 +126,7 @@ class SlurmScheduler(Scheduler):
     def cli_env_arg(self, env_list) -> None:
         # Expand ${VAR} references, merge duplicate keys, and dequote values
         # like the shell-script path would before folding them into Slurm's
-        # single --export=ALL,k=v,... token (finding E4).
+        # single --export=ALL,k=v,... token.
         env_vars = [f"{k}={v}" for k, v in self.expand_cli_env(env_list).items()]
         if "--export" in self.submit_only_args:
             self.submit_only_args["--export"] += "," + ",".join(env_vars)
@@ -188,7 +188,7 @@ class SlurmScheduler(Scheduler):
         return (world_size, rank, local_world_size, local_rank)
 
     # Instance method (not a classmethod): it reads the per-instance
-    # rendezvous port so all env entries of one launch agree (finding E6).
+    # rendezvous port so all env entries of one launch agree.
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
         env_list = []
         env_list.append(("RANK", self.get_parallel_rank_env_variable()))

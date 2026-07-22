@@ -12,8 +12,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-Tier A tests for the El Capitan family ROCm / RCCL environment block
-(review findings G2, E7, E8).
+Tests for the El Capitan family ROCm / RCCL environment block.
 
 No real torch and no real ``/collab`` plugin trees are used: ``torch`` is
 replaced in ``sys.modules`` with a stub exposing ``version.hip`` (the
@@ -68,8 +67,7 @@ def rocm_test_env(monkeypatch, tmp_path):
         monkeypatch.delenv(var, raising=False)
     _fake_torch(monkeypatch, None)
     root = tmp_path / "rccl-plugins"
-    # raising=False: the constant is introduced by the E8 rework; harmless
-    # before that.
+    # raising=False: harmless if the constant does not exist.
     monkeypatch.setattr(
         el_capitan_family, "_AWS_OFI_RCCL_ROOT", str(root), raising=False
     )
@@ -91,7 +89,7 @@ def _ld_library_path_values(env_list):
 
 
 def test_unversioned_rocm_path_no_crash_symlink(monkeypatch, tmp_path):
-    """G2: an unversioned ROCM_PATH symlink resolves through realpath."""
+    """An unversioned ROCM_PATH symlink resolves through realpath."""
     real = tmp_path / "rocm-6.4.2"
     real.mkdir()
     link = tmp_path / "rocm"
@@ -110,7 +108,7 @@ def test_unversioned_rocm_path_no_crash_symlink(monkeypatch, tmp_path):
 def test_unversioned_rocm_path_no_crash_no_version_anywhere(
     monkeypatch, tmp_path, caplog
 ):
-    """G2 reproducer: no version in ROCM_PATH and no torch must not crash."""
+    """No version in ROCM_PATH and no torch available must not crash."""
     plain = tmp_path / "rocm"
     plain.mkdir()
     monkeypatch.setenv("ROCM_PATH", str(plain))
@@ -127,7 +125,7 @@ def test_unversioned_rocm_path_no_crash_no_version_anywhere(
 
 
 def test_version_gate_tuple_compare(monkeypatch, tmp_path):
-    """G2: ROCm 8.0 must take the >=7.1 branch (tuple comparison)."""
+    """ROCm 8.0 must take the >=7.1 branch (tuple comparison)."""
     rocm = tmp_path / "rocm-8.0.1"
     rocm.mkdir()
     monkeypatch.setenv("ROCM_PATH", str(rocm))
@@ -146,7 +144,7 @@ def test_version_gate_tuple_compare(monkeypatch, tmp_path):
 
 def test_version_prefers_torch_hip(monkeypatch, tmp_path, rocm_test_env, caplog):
     """
-    E8: torch's bundled ROCm (7.2) wins over a mismatched ROCM_PATH
+    Torch's bundled ROCm (7.2) wins over a mismatched ROCM_PATH
     (6.4.2): the probe looks in the 7.2 tree, the >=7.1 NCCL branch is
     taken, a mismatch warning is logged, and the mismatched ROCM_PATH's
     llvm/lib is NOT prepended to LD_LIBRARY_PATH.
@@ -174,7 +172,7 @@ def test_version_prefers_torch_hip(monkeypatch, tmp_path, rocm_test_env, caplog)
 
 def test_nccl_net_not_forced_without_plugin(monkeypatch, rocm_test_env, caplog):
     """
-    E7: with no plugin anywhere and no override, NCCL_NET and
+    With no plugin anywhere and no override, NCCL_NET and
     NCCL_NET_PLUGIN must not be forced (forcing them hard-crashes RCCL
     init on plugin-less wheels); a warning naming the remedy is logged.
     """
@@ -196,7 +194,7 @@ def test_nccl_net_not_forced_without_plugin(monkeypatch, rocm_test_env, caplog):
 
 def test_nccl_net_set_when_plugin_present(monkeypatch, rocm_test_env):
     """
-    E7/E8: with a matching plugin tree the NCCL knobs are set -- and this
+    With a matching plugin tree the NCCL knobs are set -- and this
     works with ROCM_PATH entirely unset (the torch wheel case).
     """
     _fake_torch(monkeypatch, "7.2.0")
@@ -214,7 +212,7 @@ def test_nccl_net_set_when_plugin_present(monkeypatch, rocm_test_env):
 
 def test_nccl_net_plugin_fuzzy_tree_match(monkeypatch, rocm_test_env):
     """
-    E8 wrinkle: ROCm 7.2.1 requested but only a rocm-7.2.0 plugin tree
+    ROCm 7.2.1 requested but only a rocm-7.2.0 plugin tree
     exists -- the probe must accept the same-major.minor sibling.
     """
     _fake_torch(monkeypatch, "7.2.1")
