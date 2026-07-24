@@ -38,36 +38,6 @@ class ParseKVAction(argparse.Action):
                 raise argparse.ArgumentError(self, str(message))
 
 
-def _normalize_override_key(key: str) -> str:
-    """
-    Normalize an ``-x/--xargs`` override key to the dashed spelling the
-    schedulers store internally.
-
-    - An optional leading ``~`` (the marker that removes a key rather than
-      setting it) is preserved on the front of the result.
-    - A key that is already dashed (``--ntasks``, ``-nnodes``) is returned
-      verbatim, so the attached forms (``-x--ntasks=8``, ``--xargs=--ntasks=8``)
-      keep exact control -- needed e.g. for LSF's single-dash long flags like
-      ``-nnodes``.
-    - An undashed multi-character key gains a ``--`` prefix (``ntasks`` ->
-      ``--ntasks``); an undashed single-character key gains a ``-`` prefix
-      (``q`` -> ``-q``).
-
-    :param key: The raw key token (possibly ``~``-prefixed).
-    :return: The normalized key.
-    """
-    prefix = ""
-    if key.startswith("~"):
-        prefix = "~"
-        key = key[1:]
-    if key.startswith("-"):
-        # Already dashed: attached/verbatim form, leave as given.
-        return prefix + key
-    if len(key) == 1:
-        return prefix + "-" + key
-    return prefix + "--" + key
-
-
 class ParseOverrideKVAction(argparse.Action):
     """
     Parse ``-x/--xargs`` override tokens into the ``{key: value}`` dictionary
@@ -75,16 +45,19 @@ class ParseOverrideKVAction(argparse.Action):
 
     Each token is one of:
 
-    - ``key=value`` -> ``{normalize(key): value}``. The split is on the *first*
-      ``=`` only, so values may themselves contain ``=`` (``-x foo=a=b`` sets
-      ``--foo`` to ``a=b``). A trailing ``=`` (``key=``) yields an empty value,
+    - ``key=value`` -> ``{key: value}``. The split is on the *first* ``=``
+      only, so values may themselves contain ``=`` (``-x foo=a=b`` sets
+      ``foo`` to ``a=b``). A trailing ``=`` (``key=``) yields an empty value,
       i.e. a bare flag.
-    - ``~key`` -> ``{normalize(~key): ""}``, which removes ``key`` if the
-      scheduler had set it.
+    - ``~key`` -> ``{~key: ""}``, which removes ``key`` if the scheduler had
+      set it.
 
-    Keys are normalized to their dashed spelling (see
-    :func:`_normalize_override_key`), so ``-x ntasks=8`` becomes ``--ntasks=8``
-    while attached dashed forms pass through verbatim.
+    Keys are passed through verbatim, dashes included: overriding or removing
+    a flag the scheduler sets requires its exact spelling (``--ntasks``,
+    LSF's single-dash ``-nnodes``, ...). Because argparse refuses a
+    space-separated token that starts with ``-``, dashed keys must use the
+    attached forms ``-x--ntasks=8`` or ``--xargs=--ntasks=8`` (removal,
+    ``-x ~--ntasks``, needs no such workaround).
     """
 
     def __call__(self, parser, namespace, values, option_string=None):
@@ -102,7 +75,7 @@ class ParseOverrideKVAction(argparse.Action):
                     f"invalid override '{each}': expected 'key=value' to set a "
                     f"key or '~key' to remove one",
                 )
-            overrides[_normalize_override_key(key)] = value
+            overrides[key] = value
 
 
 def create_scheduler_arguments(**kwargs) -> dict[str, str]:
@@ -217,10 +190,10 @@ def setup_arguments(parser: argparse.ArgumentParser):
         action=ParseOverrideKVAction,
         help="Override scheduler/launch arguments (repeatable; may take several "
         "space-separated tokens: -x k1=v1 k2=v2). Each token is key=value to set "
-        "a key or ~key to remove one. Undashed keys are normalized to the "
-        "scheduler spelling (ntasks=8 -> --ntasks=8, q=pbatch -> -q=pbatch); use "
-        "an attached dashed form (-x--ntasks=8 or --xargs=--ntasks=8) to pass an "
-        "exact flag verbatim (e.g. LSF's single-dash -nnodes). Values may contain "
+        "a key or ~key to remove one. Keys are passed through verbatim, dashes "
+        "included; overriding a flag the scheduler sets requires its exact "
+        "spelling, via an attached form (-x--ntasks=8 or --xargs=--ntasks=8) "
+        "since a space-separated token cannot start with '-'. Values may contain "
         "'=' (split on the first '=' only). Note a double dash -- is needed "
         "before the command if -x is the last option.",
         metavar="KEY=VALUE",

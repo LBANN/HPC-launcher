@@ -79,16 +79,19 @@ These options determine the number of nodes, accelerators, and ranks for the job
 - Overrides (or adds) scheduler/launch arguments. Repeatable, and may take
   several space-separated `key=value` tokens: `-x k1=v1 k2=v2` or
   `-x k1=v1 -x k2=v2`.
-- **Undashed keys are normalized** to the scheduler's own spelling:
-  `-x ntasks=8` becomes `--ntasks=8`; a single-character key gets a single
-  dash, e.g. `-x q=pbatch` becomes `-q=pbatch`.
-- **Attached dashed forms are passed through verbatim**, for exact control:
-  `-x--ntasks=8` or `--xargs=--ntasks=8`. Use these for single-dash long flags
-  such as LSF's `-nnodes` (e.g. `-x-nnodes=2`).
+- **Keys are passed through verbatim**, dashes included: overriding (or
+  removing) a flag the launcher would otherwise set requires its exact
+  spelling (`--ntasks` for SLURM, single-dash `-nnodes` for LSF, ...); any
+  other key is added to the launch arguments exactly as given.
+- **Dashed keys must use an attached form**: `-x--ntasks=8`,
+  `--xargs=--ntasks=8`, or `-x-nnodes=2`. The space-separated form
+  (`-x --ntasks=8`) is rejected because a token starting with `-` is parsed
+  as another option.
 - **Removal**: a leading tilde removes a key the launcher would otherwise set,
-  e.g. `-x ~ntasks` removes `--ntasks`.
+  e.g. `-x ~--ntasks` removes `--ntasks`. (A tilde-prefixed token may be
+  space-separated; the tilde keeps it from looking like an option.)
 - Values may contain `=`; the split is on the **first** `=` only, so
-  `-x foo=a=b` sets `--foo` to `a=b`.
+  `-x foo=a=b` sets `foo` to `a=b`.
 - A double dash `--` is needed before the command if `-x` is the last option
   (otherwise the command token would be consumed as another `key=value`).
 
@@ -414,9 +417,11 @@ if __name__ == "__main__":
 
 ### Common Issues
 
-1. **NCCL Errors**: Try setting NCCL debug environment variables
+1. **NCCL Errors**: Try setting NCCL debug environment variables in the
+   calling environment (note `-x` passes scheduler arguments, not environment
+   variables)
    ```bash
-   torchrun-hpc -x NCCL_DEBUG=INFO -N 2 -n 4 train.py
+   NCCL_DEBUG=INFO torchrun-hpc -N 2 -n 4 train.py
    ```
 
 2. **OOM Errors**: Use memory fraction limiting

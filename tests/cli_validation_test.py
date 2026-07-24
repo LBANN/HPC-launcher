@@ -16,8 +16,8 @@ CLI validation and usability regression tests.
 
 - A missing command produces a clean validation error instead of a
   ``TypeError`` crash deep in the scheduler.
-- The ``-x/--xargs`` override grammar (undashed keys normalized to dashed,
-  attached forms verbatim, ``~key`` removal, values containing ``=``).
+- The ``-x/--xargs`` override grammar (keys passed through verbatim, attached
+  dashed forms, ``~key`` removal, values containing ``=``).
 - ``--out/--err/-o/--save-hostlist`` are accepted when the run gets a launch
   directory (torchrun-hpc always does), but still rejected for a genuinely
   ephemeral blocking ``launch``.
@@ -76,23 +76,26 @@ def test_missing_command_is_clean_error():
 @pytest.mark.parametrize(
     "tokens,expected",
     [
-        # undashed multi-character key -> --key
-        (["-x", "ntasks=8"], {"--ntasks": "8"}),
+        # undashed key is kept verbatim (no dashes added)
+        (["-x", "ntasks=8"], {"ntasks": "8"}),
         # multiple space-separated tokens after a single -x
-        (["-x", "k1=v1", "k2=v2"], {"--k1": "v1", "--k2": "v2"}),
-        # removal: ~key -> normalized ~--key (empty value)
-        (["-x", "~ntasks"], {"~--ntasks": ""}),
+        (["-x", "k1=v1", "k2=v2"], {"k1": "v1", "k2": "v2"}),
+        # removal: ~key is kept verbatim (empty value)
+        (["-x", "~--ntasks"], {"~--ntasks": ""}),
+        # a dashed key can be removed space-separated (the ~ hides the dash
+        # from argparse)
+        (["-x", "~-nnodes"], {"~-nnodes": ""}),
         # attached short form is kept verbatim
         (["-x--ntasks=8"], {"--ntasks": "8"}),
         # attached long form via = is kept verbatim
         (["--xargs=--ntasks=8"], {"--ntasks": "8"}),
         # value may contain '=' (split on the first '=' only)
-        (["-x", "foo=a=b"], {"--foo": "a=b"}),
-        # undashed single-character key -> -k
-        (["-x", "q=pbatch"], {"-q": "pbatch"}),
+        (["-x", "foo=a=b"], {"foo": "a=b"}),
+        # single-character key is also kept verbatim
+        (["-x", "q=pbatch"], {"q": "pbatch"}),
     ],
 )
-def test_xargs_dashed_key_forms(tokens, expected):
+def test_xargs_verbatim_key_forms(tokens, expected):
     """The parsed ``override_args`` dict matches the decided ``-x`` grammar."""
     args = _override_parser().parse_args(tokens)
     assert args.override_args == expected
@@ -104,12 +107,21 @@ def test_xargs_bad_token_is_clean_error():
         _override_parser().parse_args(["-x", "notakeyvalue"])
 
 
-def test_xargs_flag_lands_in_generated_script(tmp_path):
+@pytest.mark.parametrize(
+    "override_tokens,expected",
+    [
+        # attached dashed form: the exact flag spelling lands in the script
+        (["-x--myflag=myval"], "#SBATCH --myflag=myval"),
+        # undashed key: passed through verbatim, no dashes added
+        (["-x", "myflag=myval"], "#SBATCH myflag=myval"),
+    ],
+)
+def test_xargs_flag_lands_in_generated_script(tmp_path, override_tokens, expected):
     """
-    End-to-end: an undashed ``-x`` override reaches the generated batch script
-    with its normalized (dashed) spelling. Uses ``--scheduler
-    slurm --bg --setup-only`` so the override is emitted as a header directive
-    and the internal run command, without submitting anything.
+    End-to-end: an ``-x`` override reaches the generated batch script with the
+    exact spelling the user gave. Uses ``--scheduler slurm --bg --setup-only``
+    so the override is emitted as a header directive and the internal run
+    command, without submitting anything.
     """
     proc = subprocess.run(
         LAUNCH
@@ -118,16 +130,16 @@ def test_xargs_flag_lands_in_generated_script(tmp_path):
             "-N1", "-n1",
             "--bg", "--setup-only",
             "-l", str(tmp_path),
-            "-x", "myflag=myval",
-            "--", "echo", "hi",
-        ],
+        ]
+        + override_tokens
+        + ["--", "echo", "hi"],
         capture_output=True,
     )
     stderr = proc.stderr.decode(errors="replace")
     assert proc.returncode == 0, stderr
     script = (tmp_path / "launch.sh").read_text()
-    assert "--myflag=myval" in script, (
-        f"normalized override did not land in the script:\n{script}"
+    assert expected in script, (
+        f"override did not land verbatim in the script:\n{script}"
     )
 
 
