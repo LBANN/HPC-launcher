@@ -39,7 +39,7 @@ def test_torchrun_hpc_relimport():
 
     scheduler = get_schedulers()[scheduler_type]
     num_nodes_in_allocation = scheduler.num_nodes_in_allocation()
-    if not num_nodes_in_allocation is None and num_nodes_in_allocation == 1:
+    if not num_nodes_in_allocation is None and num_nodes_in_allocation == 0:
         pytest.skip(
             "Executed inside of an allocation with insufficient resources")
 
@@ -66,8 +66,9 @@ def test_torchrun_hpc_relimport():
                           cwd=cwd)
     exp_dir = None
 
+    result = proc.stdout.splitlines()[-1].strip()
     assert proc.returncode == 0
-    assert proc.stdout.strip() == "8"
+    assert result == "8"
 
     if exp_dir:
         shutil.rmtree(exp_dir, ignore_errors=True)
