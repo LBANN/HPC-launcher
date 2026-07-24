@@ -23,6 +23,69 @@ import os
 from hpc_launcher.schedulers import get_schedulers
 
 
+def _process_group_kwargs(backend, init_method, world_size, rank, device,
+                          local_device_id):
+    """
+    Build the keyword arguments for ``torch.distributed.init_process_group``.
+
+    The ``device_id`` argument is only meaningful for accelerator devices:
+    torch >= 2.x rejects a CPU ``device_id`` with ``ValueError:
+    init_process_group device_id parameter must be an accelerator with an
+    index``. Passing it unconditionally crashed every multi-rank CPU/gloo job
+    at initialization. Include ``device_id`` only when an
+    accelerator is actually in use.
+    """
+    kwargs = dict(
+        backend=backend,
+        init_method=init_method,
+        world_size=world_size,
+        rank=rank,
+    )
+    if device != "cpu" and torch.cuda.is_available():
+        kwargs["device_id"] = torch.device(device, local_device_id)
+    return kwargs
+
+
+def _select_local_device_id(local_rank):
+    """
+    Round-robin the visible GPUs to choose the device this rank will use.
+
+    Reads the first populated ``*_VISIBLE_DEVICES`` variable and, when GPUs
+    are visible, assigns ``local_rank % len(visible)``; otherwise falls back
+    to ``local_rank``.
+    """
+    avail_gpus = []
+    for e in [
+            "CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES",
+            "HIP_VISIBLE_DEVICES"
+    ]:
+        if os.getenv(e):
+            avail_gpus = os.getenv(e).split(",")
+            break
+    if avail_gpus:
+        return local_rank % len(avail_gpus)
+    return local_rank
+
+
+def _apply_memory_fraction(local_device_id):
+    """
+    Apply the optional GPU memory-fraction cap to the device this rank has
+    actually selected.
+
+    This previously ran at ``import hpc_launcher.torch`` time with no device
+    argument, which capped device 0 regardless of which GPU the worker went
+    on to use. Applying it here, after ``local_device_id``
+    has been chosen, caps the correct device. It is a no-op on CPU-only ranks
+    and when the fraction is left at the default 1.0.
+    """
+    if not torch.cuda.is_available():
+        return
+    fraction_max_gpu_mem = float(os.getenv("HPC_LAUNCHER_MAX_GPU_MEM", 1.0))
+    if fraction_max_gpu_mem != 1.0:
+        torch.cuda.set_per_process_memory_fraction(
+            fraction_max_gpu_mem, device=local_device_id)
+
+
 def main():
     # Strip off the name of this script and pass the rest to runpy
     args = sys.argv[1:]
@@ -53,26 +116,15 @@ def main():
         backend = "gloo"
         device = "cpu"
 
-    # Standard operating mode assumes that there is one rank per GPU
-    # Check to see how many GPUS are actually available to this rank
-    avail_gpus = 0
-    gpus = []
-    for e in [
-            "CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES",
-            "HIP_VISIBLE_DEVICES"
-    ]:
-        if os.getenv(e):
-            gpus = os.getenv(e)
-            break
-    if gpus:
-        avail_gpus = gpus.split(",")
-
-    # Round-robin assign the visibile GPUs
-    if avail_gpus:
-        local_device_id = local_rank % len(avail_gpus)
-    else:
-        local_device_id = local_rank
+    # Standard operating mode assumes that there is one rank per GPU.
+    # Round-robin the visible GPUs to select this rank's device.
+    local_device_id = _select_local_device_id(local_rank)
     os.environ["LOCAL_RANK"] = f"{local_device_id}"
+
+    # Apply the optional GPU memory-fraction cap to the selected device. This
+    # used to run at import time against device 0 regardless of the device the
+    # worker ends up using.
+    _apply_memory_fraction(local_device_id)
 
     torch_dist_initialized = dist.is_initialized()
     rdv_protocol = os.getenv("TORCHRUN_HPC_RDV_PROTOCOL")
@@ -105,12 +157,10 @@ def main():
                     f"[Rank {rank} of {world_size}]: Initializing distributed PyTorch using protocol: {rdv_protocol}"
                 )
             # TODO(later): Fix how we handle CUDA visible devices and MPI bind
-            dist.init_process_group(backend,
-                                    init_method=rdv_protocol,
-                                    world_size=world_size,
-                                    rank=rank,
-                                    device_id=torch.device(
-                                        device, local_device_id))
+            pg_kwargs = _process_group_kwargs(backend, rdv_protocol,
+                                              world_size, rank, device,
+                                              local_device_id)
+            dist.init_process_group(**pg_kwargs)
 
             if rdv_protocol == "mpi://" and rank == 0:
                 print("[Rank {} of {}]: MPI Version: {}".format(

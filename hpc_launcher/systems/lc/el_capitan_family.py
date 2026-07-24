@@ -14,12 +14,144 @@
 from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.schedulers.flux import FluxScheduler
 from hpc_launcher.systems.system import System, SystemParams
+import glob
 import os
 import re
+from typing import NamedTuple, Optional
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_rocm_version(text: str) -> Optional[tuple[int, int, int]]:
+    """
+    Extract a ROCm version triple from strings such as ``rocm-6.4.2``,
+    ``rocm-7.1``, or a ``torch.version.hip`` string like
+    ``7.2.24191-cf58cf3856``. A missing patch component is treated as 0.
+
+    :return: ``(major, minor, patch)``, or ``None`` when no
+             ``major.minor`` version is present at all.
+    """
+    match = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", text)
+    if not match:
+        return None
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3) or 0))
+
+
+def _version_str(version: tuple[int, int, int]) -> str:
+    return ".".join(str(v) for v in version)
+
+
+def _rocm_path_version() -> Optional[tuple[int, int, int]]:
+    """
+    The ROCm version encoded in ``$ROCM_PATH``. The path is resolved
+    through ``os.path.realpath`` first so the conventional unversioned
+    ``/opt/rocm`` symlink still yields a version when it points at a
+    ``rocm-X.Y.Z`` tree.
+    """
+    rocm_path = os.getenv("ROCM_PATH")
+    if not rocm_path:
+        return None
+    return _parse_rocm_version(os.path.basename(os.path.realpath(rocm_path)))
+
+
+def _torch_hip_version() -> Optional[tuple[int, int, int]]:
+    """
+    The ROCm version bundled with the installed torch wheel, from
+    ``torch.version.hip``. The import is deliberately lazy and guarded:
+    CLI startup and non-torch users must never require torch.
+    """
+    try:
+        import torch
+    except Exception:
+        return None
+    hip = getattr(getattr(torch, "version", None), "hip", None)
+    if not hip:
+        return None
+    return _parse_rocm_version(str(hip))
+
+
+class _RocmRuntime(NamedTuple):
+    """Resolution of the ROCm runtime version a launched job will use."""
+
+    # The resolved version, used for all version-dependent configuration
+    version: Optional[tuple[int, int, int]]
+    # Where the version came from: "torch" or "ROCM_PATH" (None if unknown)
+    source: Optional[str]
+    # True when torch and ROCM_PATH both report a version and they
+    # disagree at the major.minor level
+    mismatch: bool
+
+
+def _rocm_runtime_version() -> _RocmRuntime:
+    """
+    Resolve the ROCm runtime version torch-first: a torch wheel bundles
+    its own ROCm runtime -- the one RCCL actually links against -- so
+    ``torch.version.hip`` wins over the version encoded in ``ROCM_PATH``.
+    Logs a prominent warning when the two disagree.
+    """
+    torch_version = _torch_hip_version()
+    path_version = _rocm_path_version()
+    mismatch = (
+        torch_version is not None
+        and path_version is not None
+        and torch_version[:2] != path_version[:2]
+    )
+    if mismatch:
+        logger.warning(
+            "ROCm version mismatch: torch's bundled ROCm runtime is "
+            f"{_version_str(torch_version)} (torch.version.hip) but "
+            f"ROCM_PATH={os.getenv('ROCM_PATH')} is ROCm "
+            f"{_version_str(path_version)}. The torch wheel's bundled ROCm "
+            "wins: the RCCL/NCCL configuration is derived from ROCm "
+            f"{torch_version[0]}.{torch_version[1]}."
+        )
+    if torch_version is not None:
+        return _RocmRuntime(torch_version, "torch", mismatch)
+    if path_version is not None:
+        return _RocmRuntime(path_version, "ROCM_PATH", mismatch)
+    return _RocmRuntime(None, None, False)
+
+
+# Root of the LC-provided aws-ofi-rccl plugin installs; the probe looks in
+# "{root}/{SYS_TYPE}/rocm-X.Y.Z/install/lib". Module-level so tests can
+# point it at a scratch tree.
+_AWS_OFI_RCCL_ROOT = "/collab/usr/global/tools/rccl"
+
+
+def _find_aws_ofi_plugin_dir(version: tuple[int, int, int]) -> Optional[str]:
+    """
+    Locate the aws-ofi-rccl plugin lib directory for a ROCm version.
+
+    Tries the exact ``rocm-X.Y.Z`` tree first, then falls back to any
+    ``rocm-X.Y.*`` sibling with the same major.minor: the plugin trees are
+    not installed for every patch level, and a torch wheel's HIP build
+    number (e.g. 7.2.24191) never names one exactly.
+
+    :return: The plugin lib directory, or ``None`` when no tree matches.
+    """
+    major, minor, patch = version
+    base = f'{_AWS_OFI_RCCL_ROOT}/{os.getenv("SYS_TYPE")}'
+    exact = os.path.join(base, f"rocm-{major}.{minor}.{patch}", "install", "lib")
+    if os.path.isdir(exact):
+        return exact
+    candidates = [
+        path
+        for path in glob.glob(
+            os.path.join(base, f"rocm-{major}.{minor}.*", "install", "lib")
+        )
+        if os.path.isdir(path)
+    ]
+    if not candidates:
+        return None
+
+    def _tree_version(path: str) -> tuple[int, int, int]:
+        tree = os.path.basename(os.path.dirname(os.path.dirname(path)))
+        return _parse_rocm_version(tree) or (0, 0, 0)
+
+    # Prefer the highest available patch level for determinism.
+    return max(candidates, key=_tree_version)
 
 # Known LC systems
 _mi250x_node = SystemParams(64, 8, "gfx90a", 64.0, 4, "flux")
@@ -117,22 +249,49 @@ class ElCapitan(System):
             else:
                 logger.warn(f"WARNING: invalid path provided in LBANN_USE_THIS_OFI_PLUGIN: {different_ofi_plugin}. Ensure one is loaded or performance will be degraded.")
 
-        if os.getenv("ROCM_PATH") is not None:
-            rocm_path = os.getenv("ROCM_PATH")
-            env_list.append(
-                (
-                    "LD_LIBRARY_PATH",
-                    os.path.join(f"{rocm_path}", "llvm", "lib")
-                    + ":${LD_LIBRARY_PATH}",
-                )
-            )
-            rocm_ver = os.path.basename(rocm_path)
+        # Resolve the ROCm runtime version torch-first:
+        # a torch wheel bundles its own ROCm runtime -- the one RCCL
+        # actually runs against -- so it takes precedence over the version
+        # of whatever environment module set ROCM_PATH. Note that a torch
+        # wheel may also require ROCM_PATH to be unset entirely, so nothing
+        # below except the llvm/lib prepend may depend on ROCM_PATH.
+        rocm = _rocm_runtime_version()
+        rocm_path = os.getenv("ROCM_PATH")
 
+        if rocm_path is not None:
+            llvm_lib_path = os.path.join(f"{rocm_path}", "llvm", "lib")
+            if rocm.mismatch:
+                # Mixing another ROCm's llvm/lib into a process that runs
+                # the torch wheel's bundled ROCm is an ABI hazard.
+                logger.warning(
+                    f"Not prepending {llvm_lib_path} to LD_LIBRARY_PATH: the "
+                    "ROCm version in ROCM_PATH differs from the torch wheel's "
+                    "bundled ROCm runtime."
+                )
+            else:
+                env_list.append(
+                    (
+                        "LD_LIBRARY_PATH",
+                        llvm_lib_path + ":${LD_LIBRARY_PATH}",
+                    )
+                )
+
+        if rocm.version is None:
+            # Never crash on an undeterminable ROCm version: skip the
+            # version-dependent configuration. Stay quiet when there is no
+            # sign of ROCm use at all.
+            if rocm_path is not None or optimize_rccl_protocol:
+                logger.warning(
+                    "Could not determine the ROCm runtime version (torch "
+                    f"reports no HIP runtime and ROCM_PATH={rocm_path} does "
+                    "not resolve to a rocm-X.Y.Z tree); skipping the "
+                    "ROCm-version-dependent RCCL/NCCL configuration."
+                )
+        else:
             if optimize_rccl_protocol and not aws_ofi_plugin:
                 # Check for and include the AWS_OFI_PLUGIN if it exists
-                sys_type = os.getenv("SYS_TYPE")
-                aws_ofi_plugin = f'/collab/usr/global/tools/rccl/{sys_type}/{rocm_ver}/install/lib'
-                if os.path.isdir(aws_ofi_plugin):
+                aws_ofi_plugin = _find_aws_ofi_plugin_dir(rocm.version)
+                if aws_ofi_plugin is not None:
                     logger.info(f"Setting path to default AWS_OFI_RCCL plugin {aws_ofi_plugin} to accelerate RCCL communication protocol.")
                     env_list.append(
                         (
@@ -142,25 +301,35 @@ class ElCapitan(System):
                         )
                     )
                 else:
-                    logger.warn(f"WARNING: using RCCL communication protocol and no default AWS_OFI_RCCL plugin was detected.  Checked {aws_ofi_plugin}. Ensure one is loaded or performance will be degraded.")
+                    checked = f'{_AWS_OFI_RCCL_ROOT}/{os.getenv("SYS_TYPE")}/rocm-{rocm.version[0]}.{rocm.version[1]}.*/install/lib'
+                    logger.warning(
+                        "No AWS OFI RCCL (libfabric) plugin was found for ROCm "
+                        f"{_version_str(rocm.version)} (checked {checked}). "
+                        "NCCL_NET is left unset, so RCCL will fall back to its "
+                        "built-in transports: multi-node jobs will not use the "
+                        "Slingshot fabric plugin and may underperform or fail "
+                        "to scale. Install the plugin or point "
+                        "LBANN_USE_THIS_OFI_PLUGIN at an existing plugin lib "
+                        "directory."
+                    )
 
-            match = re.match(r'rocm-(\d+)\.(\d+).(\d+)', rocm_ver)
-            if match:
-                rocm_major = int(match.group(1))
-                rocm_minor = int(match.group(2))
-                # rocm_patch = int(match.group(3))
-
-            # Unless overriden by an external env variable set the NCCL_NET to ensure that the libfabric interface is used, e.g.: libfabric, IB, Socket
-            msg = "By default HPC-launcher will force slingshot systems to use the libfabric NCCL/RCCL plugin or fail.  This behavior can be overridden by setting NCCL_NET=Socket in the calling environment."
-            if rocm_major >= 7 and rocm_minor >= 1:
-                # Add AWS_OFI_NCCL for ROCm 7.1 - Ensure that it pick up the correct library object
-                if not os.getenv("NCCL_NET_PLUGIN"):
-                    env_list.append(("NCCL_NET_PLUGIN", "librccl-net.so"))
-                if not os.getenv("NCCL_NET"):
-                    env_list.append(("NCCL_NET", "libfabric", msg))
-            else:
-                if not os.getenv("NCCL_NET"):
-                    env_list.append(("NCCL_NET", '\"AWS Libfabric\"', msg))
+            # Only force the libfabric NET plugin when one was actually
+            # found (probe hit or explicit override): forcing NCCL_NET
+            # without the plugin present hard-crashes RCCL initialization
+            # with "Failed to initialize any NET plugin", even for
+            # single-node jobs.
+            if aws_ofi_plugin is not None:
+                # Unless overriden by an external env variable set the NCCL_NET to ensure that the libfabric interface is used, e.g.: libfabric, IB, Socket
+                msg = "HPC-launcher forces slingshot systems to use the detected libfabric NCCL/RCCL plugin.  This behavior can be overridden by setting NCCL_NET=Socket in the calling environment."
+                if rocm.version[:2] >= (7, 1):
+                    # Add AWS_OFI_NCCL for ROCm 7.1 - Ensure that it pick up the correct library object
+                    if not os.getenv("NCCL_NET_PLUGIN"):
+                        env_list.append(("NCCL_NET_PLUGIN", "librccl-net.so"))
+                    if not os.getenv("NCCL_NET"):
+                        env_list.append(("NCCL_NET", "libfabric", msg))
+                else:
+                    if not os.getenv("NCCL_NET"):
+                        env_list.append(("NCCL_NET", '\"AWS Libfabric\"', msg))
 
         if optimize_rccl_protocol:
             # Performance tuning for HPE Slingshot Cassini NIC (Audited on 3/31/25) - Only use with RCCL

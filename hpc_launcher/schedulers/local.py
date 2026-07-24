@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 import os
+import shlex
 import logging
 from hpc_launcher.schedulers import parse_env_list
 
@@ -53,23 +54,34 @@ class LocalScheduler(Scheduler):
             "export RANK=0",
         ]
         if save_hostlist:
+            hostlist_file = os.path.join(launch_dir, "hpc_launcher_hostlist.txt")
             envvars += [
                 "export HPC_LAUNCHER_HOSTLIST=$(hostname)\n",
                 'if [ "${RANK}" = "0" ]; then\n',
-                "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n"),
+                "    echo ${HPC_LAUNCHER_HOSTLIST} > " + shlex.quote(hostlist_file) + "\n",
                 "fi\n\n",
             ]
         header = "\n".join(envvars)
 
         if self.work_dir:
-            header += f"\ncd {os.path.abspath(self.work_dir)}\n"
+            # The working directory can carry a user-controlled job name (it is
+            # embedded in an auto-generated folder name), so quote it before it
+            # is interpreted by /bin/sh in the cd.
+            header += f"\ncd {shlex.quote(os.path.abspath(self.work_dir))}\n"
+
+        # Quote the command arguments so that values containing shell
+        # metacharacters (spaces, ';', '()', quotes, ...) survive as a single
+        # token rather than being re-interpreted by /bin/sh. Without this the
+        # child's real exit status cannot be observed (e.g. a shell syntax
+        # error would mask it), which defeats exit-code propagation.
+        run_args = " ".join(shlex.quote(a) for a in args)
 
         return f"""#!/bin/sh
 # Setup
 {header}
 
 # Run
-{command} {" ".join(args)}
+{command} {run_args}
 """
 
     def get_job_id(self, output: str) -> Optional[str]:
@@ -83,7 +95,9 @@ class LocalScheduler(Scheduler):
         env_list = []
         if protocol.lower() == "tcp":
             env_list.append(("TORCHRUN_HPC_MASTER_ADDR", "localhost"))
-            env_list.append(("TORCHRUN_HPC_MASTER_PORT", "23456"))
+            env_list.append(
+                ("TORCHRUN_HPC_MASTER_PORT", str(self.rendezvous_port()))
+            )
             return env_list
         else:
             msg = f"Unsupported rendezvous protocol {protocol} for scheduler {type(self).__name__}"

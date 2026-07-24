@@ -90,6 +90,20 @@ def main():
             args.system_params = {}
         args.system_params["fraction_max_gpu_mem"] = args.fraction_max_gpu_mem
 
+    # Default the launch directory *before* validation. torchrun-hpc always runs
+    # from a launch directory, so it is never an ephemeral interactive job; doing
+    # this defaulting first keeps validation from wrongly rejecting
+    # --out/--err/-o/--save-hostlist.
+    if args.bg and args.launch_dir is None:  # or args.batch_script
+        # If running a batch job with no launch directory argument,
+        # run in the generated timestamped directory
+        args.launch_dir = ""
+    if args.launch_dir is None and not args.bg:
+        args.launch_dir = ""
+        logger.info(
+            f"torchrun-hpc needs to run jobs from a launch directory -- automatically setting the -l (--launch-dir) CLI argument"
+        )
+
     # Process special arguments that can autoselect the number of ranks / GPUs
     system = common_args.process_arguments(args, logger)
     optimize_comm_protocol = ""
@@ -134,16 +148,6 @@ def main():
         )
         exit(1)
 
-    if args.bg and args.launch_dir is None:  # or args.batch_script
-        # If running a batch job with no launch directory argument,
-        # run in the generated timestamped directory
-        args.launch_dir = ""
-    if args.launch_dir is None and not args.bg:
-        args.launch_dir = ""
-        logger.info(
-            f"torchrun-hpc needs to run jobs from a launch directory -- automatically setting the -l (--launch-dir) CLI argument"
-        )
-
     _, folder_name = scheduler.create_launch_folder_name(
         args.command, "torchrun_hpc", args.launch_dir)
 
@@ -174,7 +178,7 @@ def main():
 
     logger.info(f"Running job in directory: {folder_name}")
 
-    jobid = scheduler.launch(
+    result = scheduler.launch(
         system,
         folder_name,
         script_file,
@@ -189,11 +193,15 @@ def main():
         args.launch_dir != None and args.save_hostlist,
     )
 
-    if jobid:
-        msg = f"Job ID: {jobid} launched from {folder_name}"
+    if result.job_id:
+        msg = f"Job ID: {result.job_id} launched from {folder_name}"
         logger.info(msg)
         if not args.verbose:
             print(msg)
+
+    # Propagate the job's exit status: a successful non-blocking submission has
+    # no return code yet (job still running) and exits 0.
+    sys.exit(result.returncode or 0)
 
 
 if __name__ == "__main__":

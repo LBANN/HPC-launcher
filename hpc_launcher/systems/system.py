@@ -93,8 +93,8 @@ class System:
                 logger.warning("Could not auto-detect current system parameters")
         # Optional system level flag to indicate primary communication method for distributed jobs
         self.job_comm_protocol = None
-
-    _aux_env_list = []
+        # Per-instance list of extra environment variables added via the CLI
+        self._aux_env_list = []
 
     def extend_environment_variables(self, env_list: list[tuple[str, str]]):
         """
@@ -172,7 +172,20 @@ class GenericSystem(System):
 
     @property
     def preferred_scheduler(self) -> type[Scheduler]:
-        # SLURM is a relatively safe bet for a scheduler
+        # Prefer the autodetection probe result (`find_scheduler()`, threaded
+        # through `SystemParams.scheduler` -- see `autodetect.py`) when one
+        # is available; SLURM remains a relatively safe bet
+        # otherwise.
+        from hpc_launcher.schedulers import get_schedulers
         from hpc_launcher.schedulers.slurm import SlurmScheduler
 
+        probed_scheduler = None
+        if self.active_system_params is not None:
+            probed_scheduler = self.active_system_params.scheduler
+
+        schedulers = get_schedulers()
+        # `None` is itself a valid key in `get_schedulers()` (-> LocalScheduler),
+        # so guard against it explicitly rather than using dict.get()'s default.
+        if probed_scheduler and probed_scheduler in schedulers:
+            return schedulers[probed_scheduler]
         return SlurmScheduler

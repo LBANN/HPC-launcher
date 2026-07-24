@@ -76,10 +76,24 @@ These options determine the number of nodes, accelerators, and ranks for the job
 | `--xargs` | `-x` | Specify scheduler and launch arguments | Format: `KEY=VALUE` |
 
 ### Notes on `--xargs`:
-- Will override any known key
-- Use format: `--xargs k1=v1 k2=v2` or `--xargs k1=v1 --xargs k2=v2`
-- Double dash `--` needed if this is the last argument
-- Arguments with leading tilde `~` will be removed if found
+- Overrides (or adds) scheduler/launch arguments. Repeatable, and may take
+  several space-separated `key=value` tokens: `-x k1=v1 k2=v2` or
+  `-x k1=v1 -x k2=v2`.
+- **Keys are passed through verbatim**, dashes included: overriding (or
+  removing) a flag the launcher would otherwise set requires its exact
+  spelling (`--ntasks` for SLURM, single-dash `-nnodes` for LSF, ...); any
+  other key is added to the launch arguments exactly as given.
+- **Dashed keys must use an attached form**: `-x--ntasks=8`,
+  `--xargs=--ntasks=8`, or `-x-nnodes=2`. The space-separated form
+  (`-x --ntasks=8`) is rejected because a token starting with `-` is parsed
+  as another option.
+- **Removal**: a leading tilde removes a key the launcher would otherwise set,
+  e.g. `-x ~--ntasks` removes `--ntasks`. (A tilde-prefixed token may be
+  space-separated; the tilde keeps it from looking like an option.)
+- Values may contain `=`; the split is on the **first** `=` only, so
+  `-x foo=a=b` sets `foo` to `a=b`.
+- A double dash `--` is needed before the command if `-x` is the last option
+  (otherwise the command token would be consumed as another `key=value`).
 
 ## Schedule Options
 
@@ -114,6 +128,16 @@ Batch scheduler script parameters.
 - **Not set + blocking job**: Runs without creating files
 - **Not set + non-blocking job**: Creates launch file and logs in current directory
 - **Note**: Double dash `--` needed if this is the last argument
+
+> **Important — the job runs from the launch directory.** `torchrun-hpc` always
+> runs from a launch directory (one is auto-created when `-l` is not given), and
+> the generated job changes into it before running your command. The training
+> script path is made absolute automatically, but **its arguments are passed
+> through verbatim**, so a *relative* path argument (a config file, a dataset)
+> is resolved relative to the launch directory, not the directory you launched
+> from. The launcher logs a warning when it detects such a relative-path
+> argument. To avoid the problem, pass **absolute paths** for script arguments,
+> or use `-l .` to run in the current directory.
 
 ## System Options
 
@@ -393,9 +417,11 @@ if __name__ == "__main__":
 
 ### Common Issues
 
-1. **NCCL Errors**: Try setting NCCL debug environment variables
+1. **NCCL Errors**: Try setting NCCL debug environment variables in the
+   calling environment (note `-x` passes scheduler arguments, not environment
+   variables)
    ```bash
-   torchrun-hpc -x NCCL_DEBUG=INFO -N 2 -n 4 train.py
+   NCCL_DEBUG=INFO torchrun-hpc -N 2 -n 4 train.py
    ```
 
 2. **OOM Errors**: Use memory fraction limiting

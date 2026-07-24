@@ -24,16 +24,19 @@ from hpc_launcher.systems import autodetect, configure
 from hpc_launcher.systems.lc.sierra_family import Sierra
 
 @pytest.mark.parametrize("launch_dir", ["", "."])
-def test_output_capture_local(launch_dir: bool):
+def test_output_capture_local(launch_dir: str):
     # Configure scheduler
     system, nodes, procs_per_node, gpus_per_proc = configure.configure_launch(None, 1, 1, 1, None, None)
     scheduler = LocalScheduler(nodes, procs_per_node, gpus_per_proc)
 
     command = sys.executable
     script = "output_capture.py"
-    # Set the request for the launch dir to the empty string to use a auto-generated folder
+    # Remember what was actually requested ("" for an auto-generated
+    # folder, "." for the current directory) since create_launch_folder_name
+    # below rebinds launch_dir to the resolved path.
+    requested_launch_dir = launch_dir
     _, launch_dir = scheduler.create_launch_folder_name(
-        command, "launch", ""
+        command, "launch", requested_launch_dir
     )
 
     script_file = scheduler.create_launch_folder(launch_dir, True)
@@ -52,9 +55,12 @@ def test_output_capture_local(launch_dir: bool):
     assert os.path.isfile(os.path.join(launch_dir, "err.log"))
     assert open(os.path.join(launch_dir, "out.log"), "r").read() == "output\n"
     assert open(os.path.join(launch_dir, "err.log"), "r").read() == "error\n"
-    if launch_dir != "" or launch_dir != ".":
+    if requested_launch_dir == "":
+        # Auto-generated folder: safe to remove wholesale.
         shutil.rmtree(launch_dir, ignore_errors=True)
     else:
+        # launch_dir resolved to the current working directory itself --
+        # only remove the files this test created, not the directory.
         os.unlink(f"{launch_dir}/out.log")
         os.unlink(f"{launch_dir}/err.log")
         os.unlink(f"{launch_dir}/launch.sh")
@@ -128,8 +134,8 @@ def test_output_capture_scheduler(scheduler_class, processes):
 
 
 if __name__ == "__main__":
-    test_output_capture_local(False)
-    test_output_capture_local(True)
+    test_output_capture_local("")
+    test_output_capture_local(".")
     if shutil.which("srun"):
         test_output_capture_scheduler(SlurmScheduler, 1)
         test_output_capture_scheduler(SlurmScheduler, 2)

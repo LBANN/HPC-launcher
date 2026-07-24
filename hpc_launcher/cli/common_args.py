@@ -38,6 +38,46 @@ class ParseKVAction(argparse.Action):
                 raise argparse.ArgumentError(self, str(message))
 
 
+class ParseOverrideKVAction(argparse.Action):
+    """
+    Parse ``-x/--xargs`` override tokens into the ``{key: value}`` dictionary
+    consumed as ``override_launch_args`` by the schedulers.
+
+    Each token is one of:
+
+    - ``key=value`` -> ``{key: value}``. The split is on the *first* ``=``
+      only, so values may themselves contain ``=`` (``-x foo=a=b`` sets
+      ``foo`` to ``a=b``). A trailing ``=`` (``key=``) yields an empty value,
+      i.e. a bare flag.
+    - ``~key`` -> ``{~key: ""}``, which removes ``key`` if the scheduler had
+      set it.
+
+    Keys are passed through verbatim, dashes included: overriding or removing
+    a flag the scheduler sets requires its exact spelling (``--ntasks``,
+    LSF's single-dash ``-nnodes``, ...). Because argparse refuses a
+    space-separated token that starts with ``-``, dashed keys must use the
+    attached forms ``-x--ntasks=8`` or ``--xargs=--ntasks=8`` (removal,
+    ``-x ~--ntasks``, needs no such workaround).
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if not getattr(namespace, self.dest):
+            setattr(namespace, self.dest, dict())
+        overrides = getattr(namespace, self.dest)
+        for each in values:
+            if "=" in each:
+                key, value = each.split("=", 1)
+            elif each.startswith("~"):
+                key, value = each, ""
+            else:
+                raise argparse.ArgumentError(
+                    self,
+                    f"invalid override '{each}': expected 'key=value' to set a "
+                    f"key or '~key' to remove one",
+                )
+            overrides[key] = value
+
+
 def create_scheduler_arguments(**kwargs) -> dict[str, str]:
     cmdline_args = {}
     for field in fields(Scheduler):
@@ -147,8 +187,15 @@ def setup_arguments(parser: argparse.ArgumentParser):
         "--xargs",
         dest="override_args",
         nargs='+',
-        action=ParseKVAction,
-        help="Specifies scheduler and launch arguments (note it will override any known key): --xargs k1=v1 k2=v2 \n or --xargs k1=v1 --xargs k2=v2. \n Also note that a double dash -- is needed if this is the last argument. \n Arguments with a leading tilde ~ will be removed if found",
+        action=ParseOverrideKVAction,
+        help="Override scheduler/launch arguments (repeatable; may take several "
+        "space-separated tokens: -x k1=v1 k2=v2). Each token is key=value to set "
+        "a key or ~key to remove one. Keys are passed through verbatim, dashes "
+        "included; overriding a flag the scheduler sets requires its exact "
+        "spelling, via an attached form (-x--ntasks=8 or --xargs=--ntasks=8) "
+        "since a space-separated token cannot start with '-'. Values may contain "
+        "'=' (split on the first '=' only). Note a double dash -- is needed "
+        "before the command if -x is the last option.",
         metavar="KEY=VALUE",
     )
 
@@ -313,7 +360,12 @@ def validate_arguments(args: argparse.Namespace):
     # 4. The user specifies a minimum amount of GPU memory
 
     args_dict = vars(args)
-    if args_dict.get('command') is not None:
+    # Only CLIs that define a ``command`` positional should run this check. Use
+    # key presence rather than ``.get('command') is not None`` so that the
+    # forgot-the-command case (key present, value ``None``) is caught here with a
+    # clean validation error instead of crashing later when ``None`` reaches the
+    # command join.
+    if 'command' in args_dict:
         if not args.command and not args.batch_script:
             raise ValueError(
                 "Either a command or a batch script has to be provided"

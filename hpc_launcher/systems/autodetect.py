@@ -211,7 +211,7 @@ def autodetect_current_system(quiet: bool = False) -> System:
     if sys in ("ipa", "matrix", "rzvector"):
         return CTS2(sys)
 
-    if sys in ("lassen", "sierra", "rzanzel"):
+    if sys in ("lassen", "sierra", "rzansel"):
         return Sierra(sys)
 
     if sys == "corona":

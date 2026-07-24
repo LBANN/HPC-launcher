@@ -11,16 +11,19 @@
 # https://github.com/LBANN and https://github.com/LLNL/LBANN.
 #
 # SPDX-License-Identifier: (Apache-2.0)
-from collections import OrderedDict
-from dataclasses import dataclass
+from collections import OrderedDict, ChainMap
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 from io import StringIO
 import os
+import re
 import sys
 import time
 import tempfile
 import subprocess
+import shlex
 import shutil
+import socket
 import uuid
 from hpc_launcher.cli.console_pipe import run_process_with_live_output
 from hpc_launcher.schedulers import parse_env_list
@@ -29,9 +32,145 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Rendezvous port selection
+# ---------------------------------------------------------------------------
+
+# Range for the UUID-hash fallback used when an ephemeral bind is not
+# possible (e.g. a sandbox that forbids ``bind``). High, unprivileged ports.
+_RENDEZVOUS_PORT_FALLBACK_MIN = 20000
+_RENDEZVOUS_PORT_FALLBACK_MAX = 65000
+
+
+def pick_rendezvous_port() -> int:
+    """
+    Choose a TCP port for the distributed rendezvous, once per launch.
+
+    Ask the OS for a free ephemeral port by binding a throwaway socket to
+    port 0, reading back the port it assigned, and closing it. Because each
+    launch asks independently, two concurrent jobs almost never receive the
+    same port -- which is what fixes the cross-job rendezvous-store
+    collisions of the old hardcoded ``23456``.
+
+    On any failure (for instance a sandbox that forbids ``bind``), fall back
+    to hashing a fresh UUID into a high, unprivileged port range so that two
+    launches still almost certainly differ.
+
+    Known limitation (accepted in the plan): the port is chosen on the
+    *launch* host, so a port free here may already be in use on the rank-0
+    compute node. This narrows -- but does not fully eliminate -- the
+    collision window; the previous fixed port collided for *every* pair of
+    coincident jobs.
+
+    :return: A TCP port number in ``[1024, 65535]``.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("", 0))
+            return sock.getsockname()[1]
+    except OSError:
+        span = _RENDEZVOUS_PORT_FALLBACK_MAX - _RENDEZVOUS_PORT_FALLBACK_MIN + 1
+        return _RENDEZVOUS_PORT_FALLBACK_MIN + (uuid.uuid4().int % span)
+
+
+# ---------------------------------------------------------------------------
+# Ephemeral CLI environment expansion
+# ---------------------------------------------------------------------------
+
+# A ``$NAME`` or ``${NAME}`` parameter reference (POSIX variable name).
+_ENV_VAR_REF = re.compile(
+    r"\$\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)\}"
+    r"|\$(?P<bare>[A-Za-z_][A-Za-z0-9_]*)"
+)
+
+
+def _expand_env_refs(text: str, lookup) -> str:
+    """
+    Expand ``$NAME`` / ``${NAME}`` references in ``text`` against
+    ``lookup``. Unknown names expand to the empty string, as ``sh`` does.
+    """
+    def _replace(match: "re.Match") -> str:
+        name = match.group("braced") or match.group("bare")
+        return lookup.get(name, "")
+
+    return _ENV_VAR_REF.sub(_replace, text)
+
+
+def shell_expand_assignment(value: str, lookup) -> str:
+    """
+    Emulate what a POSIX shell produces for the right-hand side of an
+    ``export NAME=<value>`` statement: parameter expansion followed by quote
+    removal, *without* invoking a shell. Field splitting and pathname
+    expansion do not apply to an assignment's RHS, so the result is always a
+    single value -- exactly what a single ``--env=NAME=...`` argv element
+    needs.
+
+    - Text inside single quotes is literal (no ``$`` expansion); the quotes
+      are removed.
+    - Text inside double quotes has ``$NAME`` / ``${NAME}`` expanded; the
+      quotes are removed.
+    - Unquoted text has ``$NAME`` / ``${NAME}`` expanded.
+
+    Simplification (documented): backslash escaping is not interpreted --
+    the env values this handles (paths, plugin names, ``${VAR}``-built
+    library paths) never rely on it. This is a deliberately small emulation,
+    not a full shell word-expansion engine.
+
+    :param value: The raw value as authored for the shell-script path.
+    :param lookup: A mapping consulted for parameter expansion (typically
+                   the accumulated overlay chained over ``os.environ``).
+    :return: The expanded, dequoted value.
+    """
+    out = []
+    i, n = 0, len(value)
+    while i < n:
+        c = value[i]
+        if c == "'":
+            j = value.find("'", i + 1)
+            if j == -1:  # unbalanced quote: take the remainder literally
+                out.append(value[i + 1:])
+                break
+            out.append(value[i + 1:j])
+            i = j + 1
+        elif c == '"':
+            j = value.find('"', i + 1)
+            if j == -1:  # unbalanced quote: expand the remainder
+                out.append(_expand_env_refs(value[i + 1:], lookup))
+                break
+            out.append(_expand_env_refs(value[i + 1:j], lookup))
+            i = j + 1
+        else:
+            j = i
+            while j < n and value[j] not in "'\"":
+                j += 1
+            out.append(_expand_env_refs(value[i:j], lookup))
+            i = j
+    return "".join(out)
+
 if TYPE_CHECKING:
     # If type-checking, import the other class
     from hpc_launcher.systems.system import System
+
+
+@dataclass
+class LaunchResult:
+    """
+    The result of a :meth:`Scheduler.launch` call.
+
+    :ivar job_id: The scheduler job ID for a non-blocking (background)
+                  submission, or ``None`` when there is no job ID (blocking
+                  runs, interactive runs, dry/setup-only runs, or a failed
+                  submission).
+    :ivar returncode: The exit status the launcher should propagate. This is
+                      the child's exit code for blocking/interactive runs,
+                      ``0`` for setup-only/dry-run, ``None`` for a successful
+                      non-blocking submission whose job is still running, and
+                      non-zero when a submission fails.
+    """
+
+    job_id: Optional[str] = None
+    returncode: Optional[int] = None
 
 
 @dataclass
@@ -75,19 +214,72 @@ class Scheduler:
     command_line: Optional[list[str]] = None
 
     # Command line flags given to a batch or interactive submit command
-    submit_only_args = OrderedDict()
+    submit_only_args: OrderedDict = field(default_factory=OrderedDict)
     # Commands given to active run command
-    run_only_args = OrderedDict()
+    run_only_args: OrderedDict = field(default_factory=OrderedDict)
     # Flags given to both submit and run commands
-    common_launch_args = OrderedDict()
+    common_launch_args: OrderedDict = field(default_factory=OrderedDict)
 
     # CLI flags for override
     override_launch_args: Optional[dict] = None
+
+    # Rendezvous TCP port for this launch. Chosen once, lazily, and cached so
+    # every env entry of a single launch agrees while two launches differ.
+    # Not a constructor argument.
+    _rendezvous_port: Optional[int] = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def build_scheduler_specific_arguments(
             self, system: "System", blocking: bool = True
     ):
         return NotImplementedError
+
+    @staticmethod
+    def _kv_arg_tokens(k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+        """
+        Default flag/value formatting: a bare flag (``k``) when ``v`` is
+        falsy, otherwise a single GNU-style ``k=v`` token (e.g. Slurm's
+        ``--nodes=2``, Flux's ``--env=FOO``).
+
+        :param k: The flag.
+        :param v: The flag's value, or a falsy value (``None``/``""``) for a
+                  bare flag.
+        :param quote_value: If True, shell-quote the value before joining
+                             (used when the returned token(s) will be written
+                             into a batch-script line that a shell later
+                             parses; not used for argv passed directly to
+                             ``exec``, which needs no quoting).
+        :return: A list containing the single formatted token.
+        """
+        if not v:
+            return [k]
+        val = shlex.quote(v) if quote_value else v
+        return [f"{k}={val}"]
+
+    def format_submit_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+        """
+        Formats a single (flag, value) pair from ``submit_only_args`` into
+        the token(s) used on the submit command's argv or a batch-script
+        directive line. Default: GNU-style ``k=v`` as one token. Override
+        for schedulers whose submit flags don't accept ``=`` (e.g. LSF's
+        ``bsub`` short options, which need ``-nnodes`` and ``2`` as two
+        separate tokens).
+
+        :param k: The flag.
+        :param v: The flag's value, or a falsy value for a bare flag.
+        :param quote_value: See :meth:`_kv_arg_tokens`.
+        :return: A list of one or more tokens representing this flag/value pair.
+        """
+        return self._kv_arg_tokens(k, v, quote_value)
+
+    def format_common_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+        """As :meth:`format_submit_arg`, for ``common_launch_args``."""
+        return self._kv_arg_tokens(k, v, quote_value)
+
+    def format_run_arg(self, k: str, v: Optional[str], quote_value: bool = False) -> list[str]:
+        """As :meth:`format_submit_arg`, for ``run_only_args``."""
+        return self._kv_arg_tokens(k, v, quote_value)
 
     def build_command_string_and_batch_script(
             self, system: "System", blocking: bool = True, cli_env_only: bool = False,
@@ -152,21 +344,25 @@ class Scheduler:
                     self.common_launch_args[k] = v
 
         if not blocking: # Only add batch script header items on non-blocking calls
+            # These header lines are only ever emitted into the shell script
+            # produced by ``launcher_script`` (in ``launch_command`` the header
+            # is discarded). The scheduler parses them and, being written to a
+            # file executed by /bin/sh, they are exposed to the shell, so quote
+            # every interpolated value to keep user-controlled data (e.g. a job
+            # name) a single inert token rather than shell syntax.
             prefix = self.batch_script_prefix()
             for k,v in self.submit_only_args.items():
                 if not for_launch_cmd and k == '--dependency':
                     continue
-                if not v:
-                    header.write(f"{prefix} {k}\n")
-                else:
-                    header.write(f"{prefix} {k}={v}\n")
+                header.write(
+                    f"{prefix} " + " ".join(self.format_submit_arg(k, v, quote_value=True)) + "\n"
+                )
             for k,v in self.common_launch_args.items():
                 if not for_launch_cmd and k == '--dependency':
                     continue
-                if not v:
-                    header.write(f"{prefix} {k}\n")
-                else:
-                    header.write(f"{prefix} {k}={v}\n")
+                header.write(
+                    f"{prefix} " + " ".join(self.format_common_arg(k, v, quote_value=True)) + "\n"
+                )
 
         if len(env_vars):
             if blocking and cli_env_only:
@@ -205,6 +401,62 @@ class Scheduler:
         """
         raise NotImplementedError
 
+    def rendezvous_port(self) -> int:
+        """
+        The rendezvous TCP port for this launch, chosen once (lazily) and
+        cached on the instance so that every environment entry generated for
+        a single launch agrees on the port, while two separate launches (two
+        scheduler instances) get different ports.
+
+        ``TORCHRUN_HPC_MASTER_PORT`` remains the documented user override:
+        the trampoline honors it when set, so exporting it explicitly still
+        pins the port.
+
+        :return: The chosen TCP port.
+        """
+        if self._rendezvous_port is None:
+            self._rendezvous_port = pick_rendezvous_port()
+        return self._rendezvous_port
+
+    @staticmethod
+    def expand_cli_env(env_list: list[tuple]) -> "OrderedDict[str, str]":
+        """
+        Collapse an ordered environment list into the final
+        ``{name: value}`` mapping a POSIX shell would produce after running
+        the equivalent sequence of ``export`` statements -- but without a
+        shell.
+
+        On the ephemeral blocking path env vars are moved onto the scheduler
+        CLI (e.g. flux ``--env=``), where no shell interprets them. Passing
+        the raw script-authored values there would (a) leave literal quotes
+        in the value, (b) collapse duplicate keys, silently dropping one of
+        two ``LD_LIBRARY_PATH`` entries, and (c) never expand ``${VAR}``.
+
+        This processes the list IN ORDER, keeping an overlay of what has been
+        assigned so far on top of ``os.environ``. Each value is expanded and
+        dequoted against ``os.environ`` plus the overlay-so-far, so a later
+        ``LD_LIBRARY_PATH=B:${LD_LIBRARY_PATH}`` naturally incorporates an
+        earlier ``LD_LIBRARY_PATH=A:...`` exactly as the shell would (yielding
+        ``B:A:<original>``). The final overlay has one fully expanded entry
+        per key, in first-seen order. The values are verbatim argv elements
+        (destined for ``exec``), so they are NOT shell-quoted.
+
+        :param env_list: The env entries, each a ``(name, value[, comment])``
+                         tuple; bare comment/no-op entries (length < 2) are
+                         skipped.
+        :return: The expanded, deduplicated mapping.
+        """
+        overlay: "OrderedDict[str, str]" = OrderedDict()
+        for e in env_list:
+            if len(e) < 2:
+                continue
+            k, v = e[0], e[1]
+            # overlay takes precedence over os.environ for expansion, so a
+            # later entry sees the values assigned by earlier entries.
+            lookup = ChainMap(overlay, os.environ)
+            overlay[k] = shell_expand_assignment(str(v), lookup)
+        return overlay
+
     def cli_env_arg(self, env_list: list[tuple[str,str]]) -> None:
         """
         How should environment variables be passed to launched command.
@@ -231,25 +483,16 @@ class Scheduler:
 
         # Both commands get the submit args
         for k,v in self.common_launch_args.items():
-            if not v:
-                cmd_args += [k]
-            else:
-                cmd_args += [f"{k}={v}"]
+            cmd_args += self.format_common_arg(k, v)
         for k,v in self.submit_only_args.items():
-            if not v:
-                cmd_args += [k]
-            else:
-                cmd_args += [f"{k}={v}"]
+            cmd_args += self.format_submit_arg(k, v)
         if not blocking:
             return self.nonblocking_launch_command() + cmd_args
 
         # For interactive jobs add the run args (if the scheduler permits it)
         if self.enable_run_args_on_launch_command():
             for k,v in self.run_only_args.items():
-                if not v:
-                    cmd_args += [k]
-                else:
-                    cmd_args += [f"{k}={v}"]
+                cmd_args += self.format_run_arg(k, v)
         return self.blocking_launch_command() + cmd_args
 
     def export_hostlist(self) -> str:
@@ -311,20 +554,19 @@ class Scheduler:
         (header_lines, cmd_args) = self.build_command_string_and_batch_script(
             system, blocking, False, for_launch_cmd=False
         )
+        # This ``cmd_args`` list is joined into the internal run command that is
+        # written into the shell script below (unlike ``launch_command``'s
+        # cmd_args, which are argv elements executed without a shell). Quote
+        # every value so it reaches the run command as a single verbatim token
+        # instead of being re-parsed by /bin/sh.
         # For batch jobs add any common args to the internal command
         if not blocking:
             for k,v in self.common_launch_args.items():
-                if not v:
-                    cmd_args += [k]
-                else:
-                    cmd_args += [f"{k}={v}"]
+                cmd_args += self.format_common_arg(k, v, quote_value=True)
         # For jobs that require a parallel internal command add any run args
         if self.require_parallel_internal_run_command(blocking):
             for k,v in self.run_only_args.items():
-                if not v:
-                    cmd_args += [k]
-                else:
-                    cmd_args += [f"{k}={v}"]
+                cmd_args += self.format_run_arg(k, v, quote_value=True)
 
         # Configure header and command line with scheduler job options
         script += header_lines
@@ -332,12 +574,17 @@ class Scheduler:
         if launch_dir != os.getcwd():
             callee_directory = os.path.dirname(launch_dir)
             logger.info(f"Callee directory: {callee_directory} - and {launch_dir}")
-            script += f"export PYTHONPATH={callee_directory}:" + "${PYTHONPATH}\n"
+            # The launch-dir path can carry a user-controlled job name (it is
+            # embedded in an auto-generated folder name); quote the literal path
+            # so it cannot inject shell syntax, while leaving the trailing
+            # ${PYTHONPATH} reference to expand as intended.
+            script += f"export PYTHONPATH={shlex.quote(callee_directory)}:" + "${PYTHONPATH}\n"
         if save_hostlist:
+            hostlist_file = os.path.join(launch_dir, "hpc_launcher_hostlist.txt")
             script += f'export RANK={self.get_parallel_rank_env_variable()}\n'
             script += self.export_hostlist()
             script += 'if [ "${RANK}" = "0" ]; then\n'
-            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + os.path.join(launch_dir, f"hpc_launcher_hostlist.txt\n")
+            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + shlex.quote(hostlist_file) + "\n"
             script += "fi\n\n"
 
         if system.active_system_params:
@@ -352,8 +599,12 @@ class Scheduler:
 
         script += f"{command}"
 
+        # Quote each command argument so values containing shell metacharacters
+        # (spaces, ';', '&', '$(...)', backticks, redirections, ...) survive as
+        # a single verbatim token rather than being split or interpreted when
+        # the scheduler executes this script under /bin/sh.
         for arg in args:
-            script += f" {arg}"
+            script += f" {shlex.quote(arg)}"
 
         script += "\n"
 
@@ -504,9 +755,19 @@ class Scheduler:
 
         # Create a temporary file or a script file, if given
         if script_file is not None:
-            if os.path.exists(script_file):
+            # Destination the script would be written/copied to inside the folder.
+            dest = os.path.abspath(os.path.join(folder_name, os.path.basename(script_file)))
+            # Only treat ``script_file`` as an *input* batch script to copy in
+            # when it exists AND is a different file from the destination. A
+            # re-run with the same ``-l``/``-o`` resolves source and destination
+            # to the same path; copying it onto itself raises SameFileError, so
+            # in that case we simply regenerate the script in place.
+            is_input_batch_script = os.path.exists(script_file) and not (
+                os.path.exists(dest) and os.path.samefile(script_file, dest)
+            )
+            if is_input_batch_script:
                 # A batch file was provided
-                filename = os.path.abspath(os.path.join(folder_name, os.path.basename(script_file)))
+                filename = dest
                 # Plan to copy provided file into the launch directory
                 copy_script_to_filename = True
             else:
@@ -560,7 +821,7 @@ class Scheduler:
         dry_run: bool = False,
         save_hostlist: bool = False,
         immutable_launch_script: bool = False,
-    ) -> str:
+    ) -> "LaunchResult":
         """
         Launches the given command and arguments uaing this launcher.
 
@@ -576,7 +837,8 @@ class Scheduler:
         :param run_from_launch_dir: If True, runs the command from the launch directory.
         :params save_hostlist: Add local scripting to capture the list of hosts the command is launched on
         :params immutable_launch_script: It True, do not modify the script and put any system env arguments on the CLI command
-        :return: The queued job ID as a string.
+        :return: A :class:`LaunchResult` carrying the job ID (if any) and the
+                 exit status the caller should propagate.
         """
 
         self.override_launch_args = override_launch_args
@@ -594,6 +856,30 @@ class Scheduler:
         if command and os.path.isfile(command):
             command = os.path.abspath(command)
 
+        # Warn about relative-path arguments that will not resolve once the job
+        # changes into the launch directory. The job runs from the
+        # launch folder, but command arguments are emitted verbatim, so a
+        # relative path that exists in the invocation directory but not under the
+        # launch directory would silently fail to open. Document behavior in
+        # launch_cli.md; here we surface a clear warning.
+        if folder_name and args:
+            launch_dir_abs = os.path.abspath(folder_name)
+            cwd = os.getcwd()
+            if launch_dir_abs != cwd:
+                for arg in args:
+                    if not arg or os.path.isabs(arg):
+                        continue
+                    in_cwd = os.path.exists(os.path.join(cwd, arg))
+                    in_launch_dir = os.path.exists(os.path.join(launch_dir_abs, arg))
+                    if in_cwd and not in_launch_dir:
+                        logger.warning(
+                            f"Argument '{arg}' is a relative path that exists in "
+                            f"the current directory but not in the launch "
+                            f"directory '{launch_dir_abs}'. The job runs from the "
+                            f"launch directory, so this path will not resolve; "
+                            f"pass an absolute path (or use '-l .') instead."
+                        )
+
         use_launch_folder = folder_name or filename
         cmd = self.launch_command(system, blocking, not use_launch_folder or immutable_launch_script)
 
@@ -606,7 +892,7 @@ class Scheduler:
 
             if setup_only:
                 logger.warning(f'To launch, run: {" ".join(full_cmdline)}')
-                return ""
+                return LaunchResult(job_id=None, returncode=0)
 
             logger.info(f'Launching {" ".join(full_cmdline)}')
 
@@ -618,7 +904,8 @@ class Scheduler:
                     logging.error(
                         f"Interactive scheduler exited with error code {process.returncode}"
                     )
-            return None
+                return LaunchResult(job_id=None, returncode=process.returncode)
+            return LaunchResult(job_id=None, returncode=0)
         else:
             full_cmdline = cmd + [filename]
             logger.info(f"Script filename: {filename}")
@@ -637,25 +924,25 @@ class Scheduler:
 
             if setup_only:
                 logger.warning(f'To launch, run: {" ".join(full_cmdline)}')
-                return ""
+                return LaunchResult(job_id=None, returncode=0)
 
             logger.info(f'Launching {" ".join(full_cmdline)}')
 
             if dry_run:
-                return None
+                return LaunchResult(job_id=None, returncode=0)
 
             if blocking:  # Launch job and trace outputs live
                with open(self.out_log_file, "wb") as out_file:
                    with open(self.err_log_file, "wb") as err_file:
 
-                       run_process_with_live_output(
+                       returncode = run_process_with_live_output(
                            full_cmdline,
                            out_file=out_file,
                            err_file=err_file,
                            color_stderr=color_stderr,
                        )
-               # In this mode, there is no job ID
-               return None
+               # In this mode, there is no job ID; propagate the child's status.
+               return LaunchResult(job_id=None, returncode=returncode)
             else:
                 # Run batch script and get job ID
                 process = subprocess.run(full_cmdline, capture_output=True)
@@ -664,5 +951,9 @@ class Scheduler:
                         f"Batch scheduler exited with error code {process.returncode}"
                     )
                     sys.stderr.buffer.write(process.stderr)
-                    return None
-                return self.get_job_id(process.stdout.decode())
+                    return LaunchResult(job_id=None, returncode=process.returncode or 1)
+                # Successful non-blocking submission: the job is still running,
+                # so there is no exit code to report yet.
+                return LaunchResult(
+                    job_id=self.get_job_id(process.stdout.decode()), returncode=None
+                )
