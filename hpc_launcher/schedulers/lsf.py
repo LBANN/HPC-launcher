@@ -276,8 +276,12 @@ class LSFScheduler(Scheduler):
         return (world_size, rank, local_world_size, local_rank)
 
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
+        # No RANK entry: OMPI_COMM_WORLD_RANK is set by jsrun at task launch
+        # and never in a bsub script, so ``export RANK=${OMPI_COMM_WORLD_RANK}``
+        # in the generated script published an empty rank to every task. The
+        # trampoline publishes RANK per task instead. See SlurmScheduler for
+        # the full rationale.
         env_list = []
-        env_list.append(("RANK", self.get_parallel_rank_env_variable()))
         if protocol.lower() == "tcp":
             if os.getenv("LSB_HOSTS"):
                 # When runing under an allocation use the current node as the coordinator

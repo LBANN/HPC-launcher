@@ -190,8 +190,13 @@ class SlurmScheduler(Scheduler):
     # Instance method (not a classmethod): it reads the per-instance
     # rendezvous port so all env entries of one launch agree.
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
+        # No RANK entry: this list becomes ``export`` lines in the generated
+        # script, which for a --bg submission is the *batch* script running
+        # once at allocation scope, so ``export RANK=${SLURM_PROCID}`` froze
+        # the batch step's 0 into every task. On the ephemeral CLI path it is
+        # expanded on the launch host, where SLURM_PROCID is unset at all.
+        # The trampoline publishes RANK from the rank it already computes.
         env_list = []
-        env_list.append(("RANK", self.get_parallel_rank_env_variable()))
         if protocol.lower() == "tcp":
             env_list.append(
                 (

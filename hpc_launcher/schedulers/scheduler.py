@@ -536,6 +536,29 @@ class Scheduler:
         else:
             return False
 
+    def script_runs_once_per_task(self, blocking: bool) -> bool:
+        """
+        Does the generated launch script execute once per task, or once for
+        the whole allocation?
+
+        These are the only two possibilities, and they are the complement of
+        :meth:`require_parallel_internal_run_command`: if the script has to
+        carry the parallel run command (``srun``/``flux run``/``jsrun``) then
+        the script itself is what the submit command runs -- once, at
+        allocation scope -- and the tasks are forked from inside it.
+        Otherwise the launch command *is* the parallel launcher and the script
+        is the per-task program.
+
+        Anything in the script that names a rank is only meaningful in the
+        second case; at allocation scope the scheduler's per-task variables
+        are either unset (Flux, LSF) or a meaningless constant (Slurm's
+        one-task batch step reports ``SLURM_PROCID=0``).
+
+        :param blocking: Whether the launch command waits for the job.
+        :return: True if the script body runs once per task.
+        """
+        return not self.require_parallel_internal_run_command(blocking)
+
     def enable_run_args_on_launch_command(self) -> bool:
         """
         Allow scheduler to explicitly enable or disable appending the runtime
@@ -620,11 +643,27 @@ class Scheduler:
             script += f"export PYTHONPATH={shlex.quote(callee_directory)}:" + "${PYTHONPATH}\n"
         if save_hostlist:
             hostlist_file = os.path.join(launch_dir, "hpc_launcher_hostlist.txt")
-            script += f'export RANK={self.get_parallel_rank_env_variable()}\n'
             script += self.export_hostlist()
-            script += 'if [ "${RANK}" = "0" ]; then\n'
-            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + shlex.quote(hostlist_file) + "\n"
-            script += "fi\n\n"
+            write_hostlist = (
+                "echo ${HPC_LAUNCHER_HOSTLIST} > " + shlex.quote(hostlist_file) + "\n"
+            )
+            if self.script_runs_once_per_task(blocking):
+                # This script *is* the per-task program, so exactly one task
+                # may write the file. Test the scheduler's own per-task
+                # variable directly: a ``RANK`` snapshot taken by an earlier
+                # ``export`` is what stopped working the moment the same block
+                # moved to allocation scope.
+                script += f'if [ "{self.get_parallel_rank_env_variable()}" = "0" ]; then\n'
+                script += "    " + write_hostlist
+                script += "fi\n\n"
+            else:
+                # The script runs once, ahead of the parallel run command, so
+                # it is already the single writer -- and no rank variable is
+                # set for it to test. The old guard compared Slurm's
+                # meaningless batch-step ``SLURM_PROCID=0`` (true by luck) or
+                # an unset Flux/LSF variable (so the file was silently never
+                # created).
+                script += write_hostlist + "\n"
 
         if system.active_system_params:
             system_params = system.active_system_params

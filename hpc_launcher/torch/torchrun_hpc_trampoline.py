@@ -67,6 +67,51 @@ def _select_local_device_id(local_rank):
     return local_rank
 
 
+def _rank_identity(world_size, rank, local_world_size, local_rank):
+    """
+    Build the rank-identity environment this process publishes to the user's
+    script.
+
+    Rank identity is published *here*, by the component that is told what it
+    is, rather than by the generated launch script. ``export
+    RANK=${SLURM_PROCID}`` in a script is only correct when that script is
+    itself executed once per task. For a ``--bg`` submission it is the batch
+    script, which runs once at allocation scope before any task exists, so
+    every task inherited a single frozen value -- ``0`` under Slurm (whose
+    batch step is a real one-task step), empty under Flux (``FLUX_TASK_RANK``
+    is actively unset for an initial program) and empty under LSF. The
+    trampoline is executed once per task by construction and already computes
+    this rank for ``init_process_group``.
+
+    ``LOCAL_RANK`` is the rank's node-local rank, which is *not* the index of
+    the GPU it selected. The two agree only when the process can see at least
+    ``local_world_size`` devices; the launcher passes ``--gpus-per-task``
+    (default 1) and the scheduler confines each task to its own GPU, so the
+    selected device index is 0 for every rank on the node while their
+    node-local ranks run 0..N-1. Local-leader checks, per-node-rank sharding
+    and per-local-rank log names all need the latter.
+    :func:`_select_local_device_id` remains the device selector and its
+    round-robin is deliberately unchanged.
+
+    ``NODE_RANK`` is derived from the two under the same uniform-distribution
+    assumption the schedulers' ``get_parallel_configuration`` already makes
+    when it computes ``local_world_size`` as ``world_size // nodes``.
+
+    :param world_size: Total number of ranks in the job.
+    :param rank: This process's global rank.
+    :param local_world_size: Number of ranks on this node.
+    :param local_rank: This process's rank within its node.
+    :return: A mapping of environment variable name to value.
+    """
+    node_rank = rank // local_world_size if local_world_size else 0
+    return {
+        "WORLD_SIZE": f"{world_size}",
+        "RANK": f"{rank}",
+        "LOCAL_RANK": f"{local_rank}",
+        "NODE_RANK": f"{node_rank}",
+    }
+
+
 def _apply_memory_fraction(local_device_id):
     """
     Apply the optional GPU memory-fraction cap to the device this rank has
@@ -117,9 +162,16 @@ def main():
         device = "cpu"
 
     # Standard operating mode assumes that there is one rank per GPU.
-    # Round-robin the visible GPUs to select this rank's device.
+    # Round-robin the visible GPUs to select this rank's device. This is a
+    # device index, not this rank's identity -- see _rank_identity.
     local_device_id = _select_local_device_id(local_rank)
-    os.environ["LOCAL_RANK"] = f"{local_device_id}"
+
+    # Publish this rank's identity, overwriting anything the launch script may
+    # have left in the environment. Even when the world size is 1 the called
+    # application may set torch distributed up itself, and some codes (e.g.
+    # Huggingface accelerate) look for these fields.
+    os.environ.update(
+        _rank_identity(world_size, rank, local_world_size, local_rank))
 
     # Apply the optional GPU memory-fraction cap to the selected device. This
     # used to run at import time against device 0 regardless of the device the
@@ -168,10 +220,9 @@ def main():
                 print("[Rank {} of {}]: MPI Implementation: {}".format(
                     rank, world_size, MPI.Get_library_version()))
 
-    # If the world size is only 1, torch distributed doesn't have to be initialized
-    # however, the called application may try to setup torch distributed -- provide env variables
-    # Additionally, some codes (e.g. Huggingface accelerate) will look for these fields
-    os.environ["WORLD_SIZE"] = f"{world_size}"
+    # The rendezvous coordinates go alongside the identity published above, so
+    # an application that sets torch distributed up itself finds a complete
+    # environment.
     if os.getenv("TORCHRUN_HPC_MASTER_ADDR"):
         os.environ["MASTER_ADDR"] = os.getenv("TORCHRUN_HPC_MASTER_ADDR")
     else:

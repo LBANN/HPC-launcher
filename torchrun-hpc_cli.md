@@ -363,10 +363,26 @@ The command sets standard PyTorch distributed environment variables:
 |----------|-------------|
 | `WORLD_SIZE` | Total number of processes |
 | `RANK` | Global rank of the process |
-| `LOCAL_RANK` | Local rank on the node |
+| `LOCAL_RANK` | Rank of the process within its node (`0` .. *procs-per-node* - 1). An identity, **not** a device index -- see below |
 | `MASTER_ADDR` | Address of rank 0 node |
 | `MASTER_PORT` | Port for communication |
-| `NODE_RANK` | Rank of the current node |
+| `NODE_RANK` | Rank of the current node (`RANK // ` *procs-per-node*) |
+
+These are set inside each task, by the process that knows its own rank, so
+they hold the same correct values for interactive runs and for `--bg`
+submissions.
+
+### `LOCAL_RANK` is not a device index
+
+torchrun-hpc asks the scheduler for `--gpus-per-proc` GPUs *per task*, and the
+scheduler confines each task to exactly those GPUs. A rank's own GPUs are
+therefore numbered from `0` within its process no matter what its local rank
+is: with the default `--gpus-per-proc 1` every rank on the node sees a single
+device, `cuda:0`, and that device is its own.
+
+Use `LOCAL_RANK` to identify the rank on its node -- local-leader election,
+per-node-rank data sharding, per-rank log file names -- and index into the
+*visible* device list to choose a device. The example below does both.
 
 ## PyTorch Script Requirements
 
@@ -384,15 +400,22 @@ import os
 def main():
     args = sys.argv[1:]
     torch_dist_initialized = dist.is_initialized()
+    avail_gpus = []
     for e in ["CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"]:
         if os.getenv(e):
-            gpus = os.getenv(e)
+            avail_gpus = os.getenv(e).split(",")
+            break
 
-    if gpus:
-        avail_gpus = gpus.split(",")
-
+    # Who am I: global rank, my place on my node, and which node that is.
     local_rank = int(os.environ['LOCAL_RANK'])
-    print(f"Local Rank: {local_rank}")
+    node_rank = int(os.environ['NODE_RANK'])
+    print(f"Local Rank: {local_rank} on node {node_rank}")
+
+    # Which device do I use: an index into the devices *this process* can see.
+    # With the default --gpus-per-proc 1 that list has one entry, so this is 0
+    # for every rank on the node -- each rank's single visible device is its
+    # own GPU. It is NOT the same number as local_rank.
+    device_id = local_rank % len(avail_gpus) if avail_gpus else 0
 
     if torch_dist_initialized:
         print(
@@ -405,16 +428,16 @@ def main():
 
     # Set the device
     if torch.cuda.is_available():
-        torch.cuda.set_device(local_rank)
+        torch.cuda.set_device(device_id)
 
     # Create model and move to device
-    model = YourModel().cuda(local_rank)
+    model = YourModel().cuda(device_id)
 
     # Wrap with DDP
     model = torch.nn.parallel.DistributedDataParallel(
         model,
-        device_ids=[local_rank],
-        output_device=local_rank
+        device_ids=[device_id],
+        output_device=device_id
     )
 
     # Your training code here

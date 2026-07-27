@@ -33,6 +33,7 @@ visible list, exposed as LOCAL_RANK). Choosing a primary is not the same as
 restricting the process to it, and this file is about the difference.
 """
 import os
+import socket
 import subprocess
 import sys
 
@@ -206,6 +207,100 @@ def test_primary_device_index_in_range(visible, local_rank, expected,
     monkeypatch.delenv("HIP_VISIBLE_DEVICES", raising=False)
 
     assert tramp._select_local_device_id(local_rank) == expected
+
+
+def test_local_rank_is_not_the_primary_device_index(tmp_path):
+    """
+    The primary device index and ``LOCAL_RANK`` are different quantities and
+    must not collapse into one (round-2 review K2).
+
+    Round-robin selection over the visible list is correct -- that is what
+    ``test_primary_device_index_in_range`` above pins -- but with the
+    launcher's default ``--gpus-per-proc 1`` each task is confined to a single
+    device, so the selected index is ``0`` for *every* rank on the node. If
+    ``LOCAL_RANK`` is that index, every rank claims to be local rank 0 and
+    local-leader election, per-node-rank sharding and per-local-rank log names
+    all quietly break, while each rank is nonetheless holding a distinct GPU.
+
+    Four real ranks are launched (a rendezvous over loopback with the gloo
+    backend, as in ``trampoline_device_test.py``). The visibility environment
+    is set so that the trampoline is handed a one-device list -- the real
+    per-task view -- while torch itself sees no accelerator, which is the only
+    way to have both properties in an environment with no working GPU
+    collective: ``ROCR_VISIBLE_DEVICES`` carries the granted device with the
+    ROCR->HIP rename disabled, and both ``CUDA_VISIBLE_DEVICES`` and
+    ``HIP_VISIBLE_DEVICES`` are emptied so every torch build takes the CPU
+    path.
+    """
+    require_torch()
+
+    user_script = tmp_path / "report_local_rank.py"
+    user_script.write_text(
+        "import os\n"
+        "with open(os.environ['LOCAL_RANK_REPORT'], 'w') as fh:\n"
+        "    fh.write(os.environ.get('LOCAL_RANK', '<UNSET>'))\n"
+    )
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+
+    base_env = os.environ.copy()
+    base_env["TORCHRUN_HPC_SCHEDULER"] = "slurm"
+    base_env["SLURM_NTASKS"] = "4"
+    base_env["SLURM_NNODES"] = "1"
+    base_env["TORCHRUN_HPC_RDV_PROTOCOL"] = f"tcp://127.0.0.1:{port}"
+    base_env["PYTHONPATH"] = REPO_ROOT + os.pathsep + base_env.get("PYTHONPATH", "")
+    # One granted device, as --gpus-per-proc 1 produces, but no accelerator
+    # for torch: see the docstring.
+    base_env["TORCHRUN_HPC_UNSWAP_ROCR_HIP_VIS_DEV"] = "TRUE"
+    base_env["ROCR_VISIBLE_DEVICES"] = "0"
+    base_env["CUDA_VISIBLE_DEVICES"] = ""
+    base_env["HIP_VISIBLE_DEVICES"] = ""
+
+    procs, reports = [], []
+    for rank in range(4):
+        env = base_env.copy()
+        env["SLURM_PROCID"] = str(rank)
+        env["SLURM_LOCALID"] = str(rank)
+        report = tmp_path / f"local_rank_{rank}.txt"
+        env["LOCAL_RANK_REPORT"] = str(report)
+        reports.append(report)
+        procs.append(
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "hpc_launcher.torch.torchrun_hpc_trampoline",
+                    str(user_script),
+                ],
+                env=env,
+                cwd=str(tmp_path),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+            )
+        )
+
+    outputs = []
+    try:
+        for proc in procs:
+            outputs.append(proc.communicate(timeout=300))
+    except subprocess.TimeoutExpired:
+        for proc in procs:
+            proc.kill()
+        pytest.fail("the four ranks did not complete their rendezvous")
+
+    for rank, proc in enumerate(procs):
+        assert proc.returncode == 0, f"rank {rank}: {outputs[rank][0]}"
+
+    seen = [r.read_text() for r in reports]
+    assert seen == ["0", "1", "2", "3"], (
+        f"four ranks on one node reported LOCAL_RANK {seen}; each rank holds "
+        "a distinct GPU but they cannot all be local rank 0 -- LOCAL_RANK is "
+        "the rank's place on the node, not the index of the device it picked"
+    )
 
 
 def test_primary_device_selection_does_not_restrict_visibility(monkeypatch):
