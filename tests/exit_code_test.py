@@ -20,10 +20,13 @@ import subprocess
 import sys
 import threading
 import time
+import types
 
 import pytest
 
+from hpc_launcher.schedulers import scheduler as scheduler_mod
 from hpc_launcher.schedulers.local import LocalScheduler
+from hpc_launcher.schedulers.slurm import SlurmScheduler
 from hpc_launcher.schedulers.scheduler import LaunchResult
 
 
@@ -86,6 +89,144 @@ def test_launch_result_unit(tmp_path, monkeypatch, stub_system):
     assert isinstance(result, LaunchResult)
     assert result.returncode == 3
     assert result.job_id is None
+
+
+# ---------------------------------------------------------------------------
+# Non-blocking (batch) submission: only the exit status decides success
+# ---------------------------------------------------------------------------
+
+# A routine, *non-fatal* sbatch diagnostic. Slurm prints this on an otherwise
+# successful submission whenever --nodes/--ntasks/--ntasks-per-node are
+# mutually inconsistent; the launcher always passes all three, and ``-x`` lets
+# a user desync them (e.g. ``-N2 --procs-per-node 3 -x--ntasks=8``). Site
+# ``job_submit`` Lua plugins print bank/QoS notices the same way.
+_SBATCH_WARNING = (
+    b"sbatch: Warning: can't honor --ntasks-per-node set to 3 which doesn't "
+    b"match the requested tasks 8 with the number of requested nodes 2. "
+    b"Ignoring --ntasks-per-node.\n"
+)
+_SBATCH_SUCCESS = b"Submitted batch job 987654\n"
+
+
+def _submit_batch(monkeypatch, tmp_path, stub_system, returncode, stdout, stderr):
+    """
+    Drive ``Scheduler.launch`` down its non-blocking (batch submission)
+    branch with a stubbed submit command that produces exactly the given exit
+    status and streams, and return the resulting ``LaunchResult``.
+
+    Only ``subprocess.run`` as seen by the scheduler module is replaced, so
+    everything up to and including the submit-command construction is the
+    real code path.
+    """
+
+    def _fake_run(cmd, *args, **kwargs):
+        return subprocess.CompletedProcess(cmd, returncode, stdout, stderr)
+
+    monkeypatch.setattr(
+        scheduler_mod, "subprocess", types.SimpleNamespace(run=_fake_run)
+    )
+
+    scheduler = SlurmScheduler(nodes=1, procs_per_node=1, gpus_per_proc=0)
+    _, folder_name = scheduler.create_launch_folder_name(
+        "hostname", "launch", str(tmp_path)
+    )
+    filename = scheduler.create_launch_folder(folder_name, False)
+
+    return scheduler.launch(
+        stub_system,
+        folder_name,
+        filename,
+        "hostname",
+        [],
+        blocking=False,
+    )
+
+
+def test_batch_submission_stderr_is_not_a_failure(
+    tmp_path, monkeypatch, stub_system, capfd
+):
+    """
+    A submit command that exits 0 has *succeeded*, whatever it wrote to
+    stderr. The non-blocking path used to treat any non-empty stderr as an
+    error (``if process.returncode or process.stderr``), which produced the
+    self-contradictory "exited with error code 0", skipped ``get_job_id``,
+    discarded the submit command's stdout entirely, and -- once the C1 fix
+    added ``returncode or 1`` -- made ``launch --bg`` exit 1.
+
+    The damage is not cosmetic: the job really is queued and consuming
+    allocation, but its ID is never reported, so it cannot be cancelled,
+    monitored, or chained with ``--dependency``.
+    """
+    result = _submit_batch(
+        monkeypatch,
+        tmp_path,
+        stub_system,
+        returncode=0,
+        stdout=_SBATCH_SUCCESS,
+        stderr=_SBATCH_WARNING,
+    )
+
+    assert isinstance(result, LaunchResult)
+    assert result.job_id == "987654", (
+        "the job ID was discarded because the successful submission printed "
+        "a warning to stderr"
+    )
+    # No exit code yet: the job is still running. ``launch`` exits 0 on this.
+    assert result.returncode is None, result.returncode
+
+    # The warning is still shown to the user -- forwarded, just not construed
+    # as failure -- and no bogus error line accompanies it.
+    captured = capfd.readouterr()
+    assert "can't honor --ntasks-per-node" in captured.err
+    assert "error code 0" not in captured.err
+
+
+def test_batch_submission_failure_reports_failure(
+    tmp_path, monkeypatch, stub_system, capfd
+):
+    """
+    The C1 invariant, which the stderr fix must not undo: a submit command
+    that exits non-zero must report failure, with a non-``None`` non-zero
+    return code (``LaunchResult.returncode`` of ``None`` means "submitted,
+    still running" and makes the CLI exit 0), and no job ID.
+
+    Both streams reach the user: a genuine failure often explains itself on
+    stdout, which the old error path threw away.
+    """
+    result = _submit_batch(
+        monkeypatch,
+        tmp_path,
+        stub_system,
+        returncode=1,
+        stdout=b"sbatch: some context on stdout\n",
+        stderr=b"sbatch: error: Batch job submission failed: Invalid account\n",
+    )
+
+    assert result.job_id is None
+    assert result.returncode is not None, "a failed submission must not exit 0"
+    assert result.returncode == 1
+
+    captured = capfd.readouterr()
+    assert "Batch job submission failed" in captured.err
+    assert "some context on stdout" in captured.out + captured.err
+
+
+def test_batch_submission_quiet_success(tmp_path, monkeypatch, stub_system):
+    """
+    The plain case, for symmetry with the two above: exit 0 and nothing on
+    stderr yields the job ID and no exit code.
+    """
+    result = _submit_batch(
+        monkeypatch,
+        tmp_path,
+        stub_system,
+        returncode=0,
+        stdout=_SBATCH_SUCCESS,
+        stderr=b"",
+    )
+
+    assert result.job_id == "987654"
+    assert result.returncode is None
 
 
 def test_sigint_kills_child(tmp_path):

@@ -913,7 +913,9 @@ class Scheduler:
                 process = subprocess.run(full_cmdline, capture_output=True)
                 sys.stdout.buffer.write(process.stdout)
                 sys.stderr.buffer.write(process.stderr)
-                if process.returncode or process.stderr:
+                # Only the exit status decides success: plenty of successful
+                # programs (and schedulers) log to stderr.
+                if process.returncode:
                     logging.error(
                         f"Interactive scheduler exited with error code {process.returncode}"
                     )
@@ -959,12 +961,22 @@ class Scheduler:
             else:
                 # Run batch script and get job ID
                 process = subprocess.run(full_cmdline, capture_output=True)
-                if process.returncode or process.stderr:
+                # Always show the user what the submit command said on stderr,
+                # but never treat it as a failure signal: schedulers routinely
+                # warn on an otherwise successful submission (e.g. sbatch's
+                # "can't honor --ntasks-per-node ... Ignoring" notice, or a site
+                # job_submit plugin's slurm.log_user() message). Only the exit
+                # status decides -- otherwise a queued job's ID is thrown away
+                # and the launcher reports "error code 0".
+                sys.stderr.buffer.write(process.stderr)
+                if process.returncode:
                     logging.error(
                         f"Batch scheduler exited with error code {process.returncode}"
                     )
-                    sys.stderr.buffer.write(process.stderr)
-                    return LaunchResult(job_id=None, returncode=process.returncode or 1)
+                    # A genuine failure often explains itself on stdout; do not
+                    # swallow it.
+                    sys.stdout.buffer.write(process.stdout)
+                    return LaunchResult(job_id=None, returncode=process.returncode)
                 # Successful non-blocking submission: the job is still running,
                 # so there is no exit code to report yet.
                 return LaunchResult(
