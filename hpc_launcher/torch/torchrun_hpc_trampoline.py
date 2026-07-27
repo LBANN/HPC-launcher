@@ -16,7 +16,6 @@ import hpc_launcher.torch
 import torch
 import torch.distributed as dist
 import runpy
-import atexit
 import sys
 import os
 
@@ -170,6 +169,32 @@ def _apply_memory_fraction(local_device_id):
             fraction_max_gpu_mem, device=local_device_id)
 
 
+def _destroy_process_group():
+    """
+    Release the process group, best effort, on the way out of the job.
+
+    Called from a ``finally`` so that it also runs when the user's script
+    raises or exits non-zero, which previously skipped it. This is not a
+    deadlock fix -- a rank that dies takes its sockets with it, and a peer
+    blocked in a gloo collective sees the close almost immediately -- but the
+    accelerator backends police themselves on their own timers, so releasing
+    the group explicitly avoids depending on any one transport's behaviour.
+
+    Failures are reported and swallowed. An exception raised inside a
+    ``finally`` replaces the one being propagated, and a teardown problem must
+    not displace the user's traceback or rewrite the exit status.
+    """
+    if not dist.is_initialized():
+        return
+    try:
+        dist.destroy_process_group()
+    except Exception as e:
+        print(
+            f"torchrun-hpc: ignoring error while destroying the process group: {e}",
+            file=sys.stderr,
+        )
+
+
 def main():
     # Strip off the name of this script and pass the rest to runpy
     args = sys.argv[1:]
@@ -282,15 +307,17 @@ def main():
     # folder, so without this a sibling module is simply not importable.
     sys.path.insert(0, _user_code_path_entry(args[0], is_module))
 
-    # Run underlying script
-    if is_module:
-        runpy.run_module(args[0], run_name="__main__", alter_sys=True)
-    else:
-        runpy.run_path(args[0], run_name="__main__")
-
-    if dist.is_initialized():
-        # Deal with destroying the process group here
-        dist.destroy_process_group()
+    # Run underlying script. The teardown belongs in a finally: an exception
+    # (or a non-zero sys.exit) from the user's code used to skip it entirely.
+    # Nothing here handles the exception -- it propagates, and with it the
+    # process's non-zero exit status.
+    try:
+        if is_module:
+            runpy.run_module(args[0], run_name="__main__", alter_sys=True)
+        else:
+            runpy.run_path(args[0], run_name="__main__")
+    finally:
+        _destroy_process_group()
 
 
 if __name__ == "__main__":
