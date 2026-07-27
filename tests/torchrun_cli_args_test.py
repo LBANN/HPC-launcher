@@ -37,7 +37,7 @@ from conftest import require_torch
 TORCHRUN = [sys.executable, "-m", "hpc_launcher.cli.torchrun_hpc"]
 
 
-def _generate(tmp_path, *cli_args):
+def _generate(tmp_path, *cli_args, job_name="job"):
     """
     Run torchrun-hpc for a batch Slurm job, stopping after the script is
     written, and return ``(completed_process, script_text)``.
@@ -46,7 +46,7 @@ def _generate(tmp_path, *cli_args):
     installed; Slurm is named explicitly so the emitted header states the
     allocation in a form the assertions can read.
     """
-    launch_dir = tmp_path / "job"
+    launch_dir = tmp_path / job_name
     proc = subprocess.run(
         TORCHRUN
         + [
@@ -147,3 +147,128 @@ def test_launcher_flags_before_the_script_still_apply(tmp_path):
 
     # With no arguments of its own, the script's path ends the run line.
     assert _run_line(script).rstrip().endswith(str(train)), _run_line(script)
+
+
+# ---------------------------------------------------------------------------
+# Abbreviated flags behave exactly like the spelling they abbreviate
+# ---------------------------------------------------------------------------
+def test_launcher_flag_abbreviations_are_accepted(tmp_path):
+    """
+    argparse accepts any unambiguous prefix of an option, so ``--nod 4`` is
+    ``--nodes 4``. That is the premise the next two tests rest on: users can
+    and do write abbreviations, so anything that inspects flags by exact
+    spelling will disagree with what was actually parsed.
+    """
+    require_torch()
+    train = _write_train_script(tmp_path)
+
+    proc, script = _generate(tmp_path, "--nod", "4", "-n", "2", str(train))
+
+    assert proc.returncode == 0, proc.stderr
+    assert "#SBATCH --nodes=4" in script, script
+
+
+def test_module_flag_spellings_are_equivalent(tmp_path):
+    """
+    ``-m``, ``--module`` and the abbreviation ``--mod`` must all produce the
+    same invocation.
+
+    Deciding module mode from one exact spelling while the parser accepts
+    several is the failure this guards: the flag registers as "not module
+    mode" for the launcher but still reaches the command line, and the job
+    ends up trying to import the trampoline itself as a module by absolute
+    path -- broken on every node, at run time rather than launch time.
+    """
+    require_torch()
+
+    run_lines = {}
+    for spelling in ("-m", "--module", "--mod"):
+        job = "job" + spelling.strip("-")
+        proc, script = _generate(tmp_path, "-N1", "-n2", spelling,
+                                 "mypkg.train", job_name=job)
+        assert proc.returncode == 0, f"{spelling}: {proc.stderr}"
+        # The launch directory differs per spelling; normalize it away so the
+        # comparison is about the shape of the invocation.
+        run_lines[spelling] = _run_line(script).replace(
+            str(tmp_path / job), "<LAUNCH_DIR>")
+
+    assert len(set(run_lines.values())) == 1, (
+        "module flag spellings produced different invocations:\n"
+        + "\n".join(f"  {k}: {v}" for k, v in run_lines.items())
+    )
+
+
+def test_module_mode_runs_the_trampoline_by_path(tmp_path):
+    """
+    In module mode the trampoline is still executed as a script, and ``-m``
+    applies to the user's module -- ``python <trampoline> -m mypkg.train``.
+
+    The shape that must not appear is ``python -m <trampoline path>``, which
+    asks Python to import a filesystem path as a module and fails everywhere.
+    """
+    require_torch()
+
+    proc, script = _generate(tmp_path, "-N1", "-n2", "--mod", "mypkg.train")
+    assert proc.returncode == 0, proc.stderr
+
+    tokens = _run_line(script).split()
+    trampoline = [t for t in tokens if t.endswith("torchrun_hpc_trampoline.py")]
+    assert len(trampoline) == 1, tokens
+    index = tokens.index(trampoline[0])
+
+    assert tokens[index - 1] != "-m", (
+        f"the trampoline is being imported as a module by path: {tokens}"
+    )
+    assert tokens[index + 1:index + 3] == ["-m", "mypkg.train"], (
+        f"module mode did not reach the trampoline as '-m mypkg.train': {tokens}"
+    )
+
+
+@pytest.mark.parametrize(
+    "conflicting_flag",
+    [
+        # torchrun spellings for the same topology the launcher already
+        # allocated, including the abbreviation an exact-match check misses.
+        "--nnode=2",
+        "--nnodes=2",
+        "--nproc_per_node=8",
+    ],
+)
+def test_flag_cannot_silently_contradict_the_allocation(tmp_path,
+                                                        conflicting_flag):
+    """
+    The scheduler allocation is authoritative: a job asked for one node must
+    not end up being told to run on two.
+
+    There are two defensible ways to honor that -- reject the flag, or accept
+    it and reconcile it with the allocation -- so the assertion allows either
+    and rules out the third outcome, where the flag is quietly passed along
+    and the job runs on a topology the scheduler never allocated. Written as
+    a rejection-only test this would start failing the day flag forwarding is
+    added, even if the forwarding were correct.
+    """
+    require_torch()
+    train = _write_train_script(tmp_path)
+
+    proc, script = _generate(tmp_path, "-N1", "-n2", conflicting_flag,
+                             str(train))
+
+    if proc.returncode != 0:
+        # Rejected. It must be a clean, actionable error naming the flag.
+        assert "Traceback" not in proc.stderr, proc.stderr
+        flag_name = conflicting_flag.split("=")[0]
+        assert flag_name in proc.stderr, (
+            f"rejection did not name {flag_name}:\n{proc.stderr}"
+        )
+        return
+
+    # Accepted. The allocation must still be the one the launcher requested,
+    # and the flag must not have been passed through to contradict it.
+    assert "#SBATCH --nodes=1" in script, (
+        f"{conflicting_flag} changed the allocation:\n{script}"
+    )
+    run_line = _run_line(script)
+    assert conflicting_flag not in run_line, (
+        f"{conflicting_flag} was forwarded verbatim and contradicts the "
+        f"one-node allocation:\n{run_line}"
+    )
