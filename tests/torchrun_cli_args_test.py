@@ -272,3 +272,67 @@ def test_flag_cannot_silently_contradict_the_allocation(tmp_path,
         f"{conflicting_flag} was forwarded verbatim and contradicts the "
         f"one-node allocation:\n{run_line}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Choosing a rendezvous protocol does not change how argv is validated
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "rendezvous",
+    [
+        pytest.param([], id="default"),
+        pytest.param(["-r", "tcp"], id="tcp"),
+        pytest.param(["-r", "mpi"], id="mpi"),
+    ],
+)
+def test_unusable_flag_is_rejected_on_every_rendezvous_path(tmp_path,
+                                                            rendezvous):
+    """
+    An unusable flag must be refused up front no matter which rendezvous
+    protocol was chosen, and must never be mistaken for the command.
+
+    A path that skips validation does not fail earlier or louder, it fails
+    later and worse: the first non-option token gets treated as the program
+    to run, so the launcher takes the allocation, starts the job, and only
+    then does every rank fail trying to execute a file named ``--tee``. The
+    allocation is consumed and the user gets a FileNotFoundError per rank
+    instead of one message from the front end.
+
+    Running without ``-l`` is what makes the second half observable: the
+    launch directory is named after whatever the launcher believes the
+    command to be, so if the flag were taken as the command, a directory
+    named after it would appear here.
+
+    This does not depend on mpi4py being installed -- the flag is rejected
+    while parsing, before the mpi path checks for its dependencies.
+    """
+    require_torch()
+    _write_train_script(tmp_path)
+    before = set(os.listdir(tmp_path))
+
+    proc = subprocess.run(
+        TORCHRUN
+        + ["--local", "-N1", "-n2", "--setup-only"]
+        + rendezvous
+        + ["--tee", "3", "train.py"],
+        cwd=str(tmp_path),
+        capture_output=True,
+        universal_newlines=True,
+    )
+
+    assert proc.returncode != 0, (
+        f"an unusable flag was accepted:\n{proc.stdout}\n{proc.stderr}"
+    )
+    assert "Traceback" not in proc.stderr, (
+        f"rejection should be a clean front-end error:\n{proc.stderr}"
+    )
+    assert "--tee" in proc.stderr, (
+        f"the error did not name the offending flag:\n{proc.stderr}"
+    )
+
+    created = set(os.listdir(tmp_path)) - before
+    assert not created, (
+        f"the launcher created {sorted(created)} before rejecting the "
+        "command line; the flag was treated as the command rather than "
+        "refused"
+    )
