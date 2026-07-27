@@ -497,8 +497,9 @@ class Scheduler:
         # Both commands get the submit args
         for k,v in self.common_launch_args.items():
             cmd_args += self.format_common_arg(k, v)
-        for k,v in self.submit_only_args.items():
-            cmd_args += self.format_submit_arg(k, v)
+        if self.emit_submit_args_on_launch_command(blocking):
+            for k,v in self.submit_only_args.items():
+                cmd_args += self.format_submit_arg(k, v)
         if not blocking:
             return self.nonblocking_launch_command() + cmd_args
 
@@ -506,6 +507,16 @@ class Scheduler:
         if self.enable_run_args_on_launch_command():
             for k,v in self.run_only_args.items():
                 cmd_args += self.format_run_arg(k, v)
+
+        # With no launch directory there is no launch script, so the parallel
+        # run command has nowhere else to go and belongs on the command line.
+        # Schedulers whose blocking launch command is already the parallel
+        # launcher (srun, flux run) report False here and are unaffected.
+        if not self.work_dir and self.require_parallel_internal_run_command(blocking):
+            cmd_args += self.internal_script_run_command().split()
+            for k, v in self.run_only_args.items():
+                cmd_args += self.format_run_arg(k, v)
+
         return self.blocking_launch_command() + cmd_args
 
     def export_hostlist(self) -> str:
@@ -530,6 +541,21 @@ class Scheduler:
         Allow scheduler to explicitly enable or disable appending the runtime
         arguments to the launch command.
         :return: bool indicating if run arguments are appended to launch command
+        """
+        return True
+
+    def emit_submit_args_on_launch_command(self, blocking: bool) -> bool:
+        """
+        Should the submit-only arguments be appended to the launch command?
+
+        True for schedulers whose submit and run commands are the same
+        program, so that a flag accepted by one is accepted by the other
+        (srun, flux run). LSF is the exception: inside an existing allocation
+        its blocking launch command is jsrun, which shares no options with
+        bsub.
+
+        :return: bool indicating if submit arguments are appended to the
+                 launch command
         """
         return True
 

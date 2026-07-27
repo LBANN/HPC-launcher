@@ -11,8 +11,9 @@
 # https://github.com/LBANN and https://github.com/LLNL/LBANN.
 #
 # SPDX-License-Identifier: (Apache-2.0)
+from collections import OrderedDict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 from io import StringIO
 import os
 import re
@@ -77,11 +78,18 @@ class LSFScheduler(Scheduler):
             self.submit_only_args["-U"] = f"{self.reservation}"
 
         if self.work_dir:
-            if blocking:
-                # Use on the command line
-                self.submit_only_args["--chdir"] = f"{self.work_dir}"
+            if blocking and self.launch_command_is_run_command():
+                # Inside an existing allocation the blocking launch command is
+                # jsrun, not bsub, and jsrun's working-directory option is
+                # --chdir. This is the branch the original --chdir assignment
+                # was written for; it was mis-guarded on `blocking` alone, so
+                # it also reached the `bsub -Is` command, which has no such
+                # option.
+                self.run_only_args["--chdir"] = f"{self.work_dir}"
             else:
-                # Add to the batch script #BSUB
+                # bsub spells it -cwd, both as a command-line option on the
+                # interactive `bsub -Is` command and as a #BSUB directive in
+                # the batch script.
                 self.submit_only_args["-cwd"] = f"{self.work_dir}"
 
         return
@@ -101,6 +109,22 @@ class LSFScheduler(Scheduler):
         val = shlex.quote(v) if quote_value else v
         return [k, val]
 
+    def format_run_arg(
+        self, k: str, v: Union[None, str, list[str]], quote_value: bool = False
+    ) -> list[str]:
+        # jsrun's long options take "--flag=value" (the base class default),
+        # but a repeatable short option -- currently only "-E", which takes one
+        # NAME=value per occurrence -- is stored with a *list* value so that
+        # several entries can share a single dict key. Emit one flag/value
+        # token pair per element; an attached "-E=NAME=value" would make the
+        # first '=' part of the value.
+        if isinstance(v, list):
+            tokens = []
+            for item in v:
+                tokens += [k, shlex.quote(item) if quote_value else item]
+            return tokens
+        return self._kv_arg_tokens(k, v, quote_value)
+
     def batch_script_prefix(self) -> str:
         return "#BSUB"
 
@@ -113,31 +137,53 @@ class LSFScheduler(Scheduler):
     def nonblocking_launch_command(self) -> list[str]:
         return ["bsub"]
 
+    @staticmethod
+    def _parse_env_pairs(entries: list[str]) -> "OrderedDict[str, str]":
+        """
+        Parse ``NAME=value`` entries back into a mapping, in order. Entries
+        without a ``=`` (e.g. the leading ``ALL`` of a bsub ``-env`` list) are
+        not variables and are dropped.
+        """
+        pairs: "OrderedDict[str, str]" = OrderedDict()
+        for entry in entries:
+            if "=" not in entry:
+                continue
+            name, value = entry.split("=", 1)
+            pairs[name] = value
+        return pairs
+
     def cli_env_arg(self, env_list) -> None:
         # Expand ${VAR} references, merge duplicate keys, and dequote values
-        # like the shell-script path would before folding them into bsub's
-        # --env "ALL, ..." token.
-        env_vars = [f"{k}={v}" for k, v in self.expand_cli_env(env_list).items()]
+        # like the shell-script path would before folding them onto the
+        # command line.
+        env_vars = self.expand_cli_env(env_list)
 
-        key_found = False
-        # Iterate over a snapshot: the loop body mutates submit_only_args (this
-        # method can be called twice per launch -- once for env vars, once for
-        # passthrough vars).
-        for key in list(self.submit_only_args):
-            if key.startswith("--env"):
-                existing_env = key.split(" ")
-                new_env = existing_env[2:]
-                stripped_env = [s.strip(",") for s in new_env]
-                cleaned_env = [s.strip('"') for s in stripped_env]
-                revised_env = cleaned_env + env_vars
-                new_key = '--env "ALL, ' + ", ".join(revised_env) + '"'
-                self.submit_only_args[new_key] = None
-                del self.submit_only_args[key]
-                key_found = True
-                break
-
-        if not key_found:
-            self.submit_only_args['--env "ALL, ' + ", ".join(env_vars) + '"'] = None
+        # This method is called up to twice per launch (once for the system's
+        # environment variables, once for the passthrough ones), so each call
+        # merges into whatever the previous one left behind rather than adding
+        # a second flag. Re-parsing the stored value keeps the accumulated
+        # state in the argument dict itself, with no extra scheduler field.
+        if self.launch_command_is_run_command():
+            # jsrun: -E takes a single NAME=value per occurrence and is
+            # repeated. The bsub-only args are not emitted on this command
+            # (see launch_command), so the environment has to travel with the
+            # run args instead.
+            merged = self._parse_env_pairs(self.run_only_args.get("-E") or [])
+            merged.update(env_vars)
+            self.run_only_args["-E"] = [f"{k}={v}" for k, v in merged.items()]
+        else:
+            # bsub: -env takes one comma-separated list -- "ALL" to inherit
+            # the submitting environment, then the additions. Flag and value
+            # are separate argv elements; the double quotes usually written
+            # around the list belong to the shell, and there is no shell on
+            # this path. Joined without spaces so that no argv element carries
+            # an embedded space (the separator LSF parses is the comma).
+            existing = self.submit_only_args.get("-env") or ""
+            merged = self._parse_env_pairs(existing.split(","))
+            merged.update(env_vars)
+            self.submit_only_args["-env"] = ",".join(
+                ["ALL"] + [f"{k}={v}" for k, v in merged.items()]
+            )
         return
 
     def export_hostlist(self) -> str:
@@ -148,6 +194,32 @@ class LSFScheduler(Scheduler):
             return True
         else:
             return False
+
+    def launch_command_is_run_command(self) -> bool:
+        """
+        Is the *blocking* launch command the run command (jsrun) rather than
+        the submit command (bsub)? True exactly when we are already inside an
+        allocation, which is the standard Lassen workflow of running from an
+        ``lalloc``/``bsub -Is`` shell. Same condition
+        :meth:`enable_run_args_on_launch_command` keys off, named for what the
+        callers below actually ask about.
+
+        :return: True if a blocking launch runs jsrun directly.
+        """
+        return self.enable_run_args_on_launch_command()
+
+    def emit_submit_args_on_launch_command(self, blocking: bool) -> bool:
+        """
+        Inside an existing allocation the blocking launch command is ``jsrun``,
+        which shares no options with ``bsub`` -- handing it ``-nnodes``,
+        ``--shared-launch``, ``-W``, ``-J``, ``-q`` or ``-G`` is an immediate
+        parse error. Emit the submit-only arguments only when the command
+        being built really is ``bsub``.
+
+        :param blocking: Whether the launch command waits for the job.
+        :return: True if submit-only arguments belong on this command line.
+        """
+        return not (blocking and self.launch_command_is_run_command())
 
     def require_parallel_internal_run_command(self, blocking: bool) -> bool:
         if not blocking or (blocking and not os.getenv("LSB_HOSTS")):
