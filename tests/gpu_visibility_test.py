@@ -156,6 +156,17 @@ def test_trampoline_preserves_granted_devices(granted_var, granted_value,
     ROCm the launcher deliberately moves ROCR_VISIBLE_DEVICES into
     HIP_VISIBLE_DEVICES on import; that rename is expected, but the *set* of
     devices must survive it intact.
+
+    Every visibility variable that ends up set must name the full granted
+    list, rather than the union of them all naming it between them. A union
+    cannot see a narrowing performed through a *different* variable than the
+    one the rank was granted: a trampoline handed
+    ``CUDA_VISIBLE_DEVICES=0,1,2,3`` that confined the rank by writing
+    ``HIP_VISIBLE_DEVICES=0`` would leave the union intact and pass, while on
+    a ROCm build the process really can only reach GPU 0 -- exactly the
+    "invalid device ordinal for cuda:1" failure this file exists to prevent.
+    The rename is still accepted, because it leaves one variable set and that
+    one lists everything granted.
     """
     require_torch()
 
@@ -163,19 +174,27 @@ def test_trampoline_preserves_granted_devices(granted_var, granted_value,
                                            tmp_path)
 
     granted = set(granted_value.split(","))
-    still_visible = set()
-    for var in _VISIBILITY_VARS:
-        if seen.get(var):
-            still_visible.update(seen[var].split(","))
+    set_vars = {var: seen[var] for var in _VISIBILITY_VARS if seen.get(var)}
 
-    assert still_visible == granted, (
+    assert set_vars, (
         f"the rank was granted devices {sorted(granted)} via {granted_var} "
-        f"but its script sees {sorted(still_visible)} (raw: {seen}); the "
-        "devices the scheduler allocated must not be hidden from the rank"
+        f"but its script sees no visibility variable at all (raw: {seen})"
     )
+    for var, value in set_vars.items():
+        assert set(value.split(",")) == granted, (
+            f"the rank was granted devices {sorted(granted)} via "
+            f"{granted_var}, but {var}={value} narrows it to "
+            f"{sorted(set(value.split(',')))} (raw: {seen}); the devices the "
+            "scheduler allocated must not be hidden from the rank, by any "
+            "variable"
+        )
 
     # The primary device is selected by index into the granted list, so it is
     # always a valid index -- but selecting one must not have hidden the rest.
+    # Note this helper runs a single rank, so LOCAL_RANK is 0 either way and
+    # the range check below cannot distinguish a correct node-local rank from
+    # a collapsed one; test_local_rank_is_not_the_primary_device_index is what
+    # covers that.
     assert seen["LOCAL_RANK"] is not None, seen
     assert 0 <= int(seen["LOCAL_RANK"]) < len(granted), seen
 
