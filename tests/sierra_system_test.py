@@ -137,10 +137,38 @@ def test_bind_packed_never_reaches_zero(procs_per_node, monkeypatch, tmp_path):
 
 
 def test_smpiargs_still_set(monkeypatch, tmp_path):
-    """The unrelated --smpiargs customization must survive the fix untouched."""
+    """The unrelated --smpiargs customization must survive untouched."""
     system = Sierra("lassen")
     scheduler = _make_scheduler(procs_per_node=4)
 
     line = _jsrun_line(system, scheduler, monkeypatch, tmp_path)
 
-    assert """--smpiargs='"-gpu"'""" in line
+    assert "--smpiargs=-gpu" in line
+
+
+def test_smpiargs_value_carries_no_literal_quotes(monkeypatch, tmp_path):
+    """
+    The value must reach jsrun as ``-gpu``, not ``"-gpu"``.
+
+    The quotes one would type around this at a shell prompt belong to the
+    shell, and neither consumer has one to strip them. The script path
+    shlex-quotes the value, turning an embedded pair into ``'"-gpu"'`` -- so
+    the shell that runs the script hands jsrun the quotes rather than
+    removing them. The argv path below execs jsrun with no shell at all, so
+    whatever is in the string is what the option gets.
+    """
+    system = Sierra("lassen")
+    scheduler = _make_scheduler(procs_per_node=4)
+
+    line = _jsrun_line(system, scheduler, monkeypatch, tmp_path)
+    assert '"' not in line.split("--smpiargs=")[1].split()[0]
+
+    # The same value on the in-allocation argv path, where it is exec'd.
+    monkeypatch.setenv("LSB_HOSTS", "host1 host2")
+    argv_scheduler = _make_scheduler(procs_per_node=4)
+    argv = argv_scheduler.launch_command(
+        Sierra("lassen"), blocking=True, cli_env_only=True
+    )
+
+    smpiargs = [t for t in argv if t.startswith("--smpiargs")]
+    assert smpiargs == ["--smpiargs=-gpu"], smpiargs

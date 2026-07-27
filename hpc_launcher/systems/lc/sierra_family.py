@@ -86,7 +86,12 @@ class Sierra(System):
         cores_per_proc = max(1, cores_per_socket // procs_per_socket)
         if isinstance(scheduler, LSFScheduler):
             scheduler.run_only_args["--bind"] = "packed:{}".format(cores_per_proc)
-            scheduler.run_only_args["--smpiargs"] = '"-gpu"'
+            # Just the value: the double quotes one would write around it at a
+            # shell prompt are the shell's, and neither path that consumes this
+            # has a shell to strip them. The argv path execs jsrun directly,
+            # and the script path shlex-quotes the value, which preserves any
+            # embedded quotes rather than removing them.
+            scheduler.run_only_args["--smpiargs"] = "-gpu"
         return
 
     @property
