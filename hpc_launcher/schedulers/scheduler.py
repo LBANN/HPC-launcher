@@ -644,14 +644,26 @@ class Scheduler:
         # Configure header and command line with scheduler job options
         script += header_lines
         script += "\n"
-        if launch_dir != os.getcwd():
-            callee_directory = os.path.dirname(launch_dir)
-            logger.info(f"Callee directory: {callee_directory} - and {launch_dir}")
-            # The launch-dir path can carry a user-controlled job name (it is
-            # embedded in an auto-generated folder name); quote the literal path
-            # so it cannot inject shell syntax, while leaving the trailing
-            # ${PYTHONPATH} reference to expand as intended.
-            script += f"export PYTHONPATH={shlex.quote(callee_directory)}:" + "${PYTHONPATH}\n"
+        # The job runs from the launch directory, so re-add the directory the
+        # user launched from: that is what keeps the command's sibling modules
+        # importable (for torchrun-hpc, nothing else adds it at all). Nothing
+        # in the launcher ever chdirs -- the working directory is handed to the
+        # scheduler as an argument -- so the process cwd here is still the
+        # invocation directory. It used to be computed as
+        # ``dirname(launch_dir)``, which coincides with the invocation
+        # directory only when the launch directory sits directly beneath it: an
+        # absolute ``-l /p/lustre1/shared/runs/job1`` instead put that
+        # directory's unrelated (and plausibly group-writable) parent ahead of
+        # site-packages on every rank's import path.
+        invocation_directory = os.getcwd()
+        if launch_dir != invocation_directory:
+            logger.info(
+                f"Callee directory: {invocation_directory} - and {launch_dir}"
+            )
+            # Quote the literal path so it cannot inject shell syntax, while
+            # leaving the trailing ${PYTHONPATH} reference to expand as
+            # intended.
+            script += f"export PYTHONPATH={shlex.quote(invocation_directory)}:" + "${PYTHONPATH}\n"
         if save_hostlist:
             hostlist_file = os.path.join(launch_dir, "hpc_launcher_hostlist.txt")
             script += self.export_hostlist()

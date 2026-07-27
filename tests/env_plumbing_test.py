@@ -28,11 +28,18 @@ Tests for env plumbing:
   scheduler CLI instead. That redirection used to be gated on the run also
   being blocking, so ``--batch-script`` + ``--bg`` delivered the environment
   through neither channel.
+- The generated script puts the invocation directory on ``PYTHONPATH`` so the
+  user's own modules stay importable from the launch directory. It used to
+  compute that as ``dirname(launch_dir)``, which is the invocation directory
+  only for the auto-generated layout -- an absolute ``-l`` exported the launch
+  directory's *parent* instead.
 
 No torch or scheduler binaries needed. Schedulers and a
 ``GenericSystem`` stub are constructed directly; ``os.environ`` is
 monkeypatched where the expansion source matters.
 """
+import os
+import shlex
 import types
 
 import pytest
@@ -353,3 +360,114 @@ def test_immutable_script_passthrough_env_rides_the_cli(scheduler_class, blockin
     assert any(
         "HPC_LAUNCHER_PASSTHROUGH=1" in t for t in _cli_env_tokens(cmd)
     ), f"passthrough environment missing from the command line: {cmd}"
+
+
+# ---------------------------------------------------------------------------
+# PYTHONPATH: the invocation directory, not the launch directory's parent
+# ---------------------------------------------------------------------------
+
+
+def _exported_pythonpath(script: str) -> str:
+    """
+    The single directory the generated script prepends to ``PYTHONPATH``, or
+    ``None`` when the script exports nothing. The line has the shape
+    ``export PYTHONPATH=<quoted dir>:${PYTHONPATH}``; the path is quoted, so
+    unquote it before comparing.
+    """
+    lines = [l for l in script.splitlines() if l.startswith("export PYTHONPATH=")]
+    if not lines:
+        return None
+    assert len(lines) == 1, f"expected at most one PYTHONPATH export:\n{script}"
+    value = lines[0][len("export PYTHONPATH="):]
+    prefix, sep, rest = value.rpartition(":${PYTHONPATH}")
+    assert sep, f"PYTHONPATH export does not preserve the inherited value: {value}"
+    return shlex.split(prefix)[0]
+
+
+@pytest.mark.parametrize("scheduler_class", [SlurmScheduler, FluxScheduler])
+def test_pythonpath_export_is_the_invocation_directory(
+    scheduler_class, tmp_path, monkeypatch
+):
+    """
+    The job runs from the launch directory, so the script re-adds the
+    directory the user launched *from* -- that is what makes ``train.py``'s
+    sibling modules importable, and for ``torchrun-hpc`` the launcher is the
+    only thing that adds it at all.
+
+    It used to export ``dirname(launch_dir)``. With an absolute ``-l``
+    (``torchrun-hpc -l /p/lustre1/shared/runs/job1``) that is the launch
+    directory's *parent*, an unrelated directory: the user's own code stops
+    being importable, and a plausibly group- or world-writable scratch
+    directory is placed ahead of site-packages on every rank's import path,
+    so any ``.py`` dropped there (``random.py``, ``numpy.py``) is imported by
+    the job.
+    """
+    invocation_dir = tmp_path / "home_me"
+    invocation_dir.mkdir()
+    launch_dir = tmp_path / "shared_runs" / "job1"
+    launch_dir.mkdir(parents=True)
+    monkeypatch.chdir(invocation_dir)
+
+    scheduler = scheduler_class(nodes=1, procs_per_node=1, gpus_per_proc=0)
+    script = scheduler.launcher_script(
+        GenericSystem(), "python", ["train.py"], blocking=False,
+        launch_dir=str(launch_dir),
+    )
+
+    exported = _exported_pythonpath(script)
+    assert exported == str(invocation_dir), (
+        f"expected the invocation directory {invocation_dir} on PYTHONPATH, "
+        f"got {exported!r}"
+    )
+    # Specifically not the launch directory's parent, which is what the
+    # dirname() computation produced.
+    assert exported != str(launch_dir.parent)
+
+
+@pytest.mark.parametrize(
+    "launch_subdir",
+    [
+        # The auto-generated layout: <cwd>/launch-<job>_<timestamp>_<uuid>.
+        "launch-myjob_2026-01-01_00h00m00s_deadbeef",
+        # A relative custom -l, resolved against the invocation directory.
+        "myrun",
+    ],
+)
+def test_pythonpath_export_unchanged_for_launch_dirs_under_cwd(
+    launch_subdir, tmp_path, monkeypatch
+):
+    """
+    Non-regression for the two layouts that were already correct (the second
+    only accidentally so: ``abspath`` resolved it against the cwd and
+    ``dirname`` then stripped it back off). Both must still export the
+    invocation directory.
+    """
+    invocation_dir = tmp_path / "home_me"
+    launch_dir = invocation_dir / launch_subdir
+    launch_dir.mkdir(parents=True)
+    monkeypatch.chdir(invocation_dir)
+
+    scheduler = SlurmScheduler(nodes=1, procs_per_node=1, gpus_per_proc=0)
+    script = scheduler.launcher_script(
+        GenericSystem(), "python", ["train.py"], blocking=False,
+        launch_dir=str(launch_dir),
+    )
+
+    assert _exported_pythonpath(script) == str(invocation_dir), script
+
+
+def test_no_pythonpath_export_when_launching_from_the_cwd(tmp_path, monkeypatch):
+    """
+    ``-l .`` runs the job in the invocation directory itself, so there is
+    nothing to re-add and the export is skipped entirely -- no empty or
+    duplicate entry on the import path.
+    """
+    monkeypatch.chdir(tmp_path)
+
+    scheduler = SlurmScheduler(nodes=1, procs_per_node=1, gpus_per_proc=0)
+    script = scheduler.launcher_script(
+        GenericSystem(), "python", ["train.py"], blocking=False,
+        launch_dir=os.getcwd(),
+    )
+
+    assert _exported_pythonpath(script) is None, script
