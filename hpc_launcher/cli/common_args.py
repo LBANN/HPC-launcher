@@ -99,7 +99,8 @@ def setup_arguments(parser: argparse.ArgumentParser):
         "-v",
         action="store_true",
         default=False,
-        help="Run in verbose mode.  Also save the hostlist as if --save-hostlist is set",
+        help="Run in verbose mode, logging additional INFO-level messages "
+        "about job setup and submission.",
     )
 
     # Job size arguments

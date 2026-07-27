@@ -39,7 +39,7 @@ launch [-h] [--verbose] [-N NODES] [-n PROCS_PER_NODE] [--gpus-per-proc GPUS_PER
 | Option | Short Form | Description |
 |--------|------------|-------------|
 | `--help` | `-h` | Show help message and exit |
-| `--verbose` | `-v` | Run in verbose mode. Also save the hostlist as if `--save-hostlist` is set |
+| `--verbose` | `-v` | Run in verbose mode, logging additional INFO-level messages about job setup and submission |
 
 ## Job Size Options
 
@@ -110,7 +110,9 @@ Batch scheduler script parameters.
 - **With argument**: Creates directory named `[LAUNCH_DIR]`
 - **Argument = "."**: Creates launch script in current directory
 - **Not set + blocking job**: Runs without creating files
-- **Not set + non-blocking job**: Creates launch file and logs in current directory
+- **Not set + non-blocking job (`--bg`)**: Creates a timestamped launch
+  directory, the same as `-l` with no argument -- **not** the current
+  directory (see the `--bg` row above)
 - **Note**: Double dash `--` needed if this is the last argument
 
 > **Important — the job runs from the launch directory.** When a launch

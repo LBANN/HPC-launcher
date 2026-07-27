@@ -16,7 +16,7 @@ torchrun-hpc [options] command [args...]
 torchrun-hpc [-h] [--verbose] [-N NODES] [-n PROCS_PER_NODE] [--gpus-per-proc GPUS_PER_PROC]
              [-q QUEUE] [-t TIME_LIMIT] [-g GPUS_AT_LEAST] [--gpumem-at-least GPUMEM_AT_LEAST]
              [--exclusive] [--local] [--comm-backend JOB_COMM_PROTOCOL]
-             [-x KEY=VALUE [KEY=VALUE ...]] [--bg] [--batch-script BATCH_SCRIPT]
+             [-x KEY=VALUE [KEY=VALUE ...]] [--bg]
              [--scheduler {local,flux,slurm,lsf}]
              [-l [LAUNCH_DIR]] [-o OUTPUT_SCRIPT] [--setup-only] [--dry-run]
              [--account ACCOUNT] [--dependency DEPENDENCY] [-J JOB_NAME]
@@ -40,7 +40,7 @@ torchrun-hpc [-h] [--verbose] [-N NODES] [-n PROCS_PER_NODE] [--gpus-per-proc GP
 | Option | Short Form | Description |
 |--------|------------|-------------|
 | `--help` | `-h` | Show help message and exit |
-| `--verbose` | `-v` | Run in verbose mode. Also save the hostlist as if `--save-hostlist` is set |
+| `--verbose` | `-v` | Run in verbose mode, logging additional INFO-level messages about job setup and submission |
 
 ### PyTorch-Specific Options
 
@@ -102,8 +102,17 @@ Arguments that determine when a job will run.
 | Option | Description | Notes |
 |--------|-------------|-------|
 | `--bg` | Run job in background | Launcher won't wait for job start; uses timestamped directory by default |
-| `--batch-script` | Launch a user-provided batch script | |
 | `--scheduler` | Override default batch scheduler | Options: None, local, LocalScheduler, flux, FluxScheduler, slurm, SlurmScheduler, lsf, LSFScheduler |
+
+> **Note:** `--batch-script` is **not supported** by `torchrun-hpc`, even
+> though the shared argument parser still accepts the flag. `torchrun-hpc`'s
+> `command` positional is mandatory (unlike `launch`'s optional `command`),
+> so combining `--batch-script` with a command always fails validation
+> ("A pre-generated batch script file name was provided and an explicit
+> command ... - invalid combination"), and omitting the command to avoid
+> that fails argparse's own "required: command" check instead. There is
+> currently no way to invoke this flag successfully on `torchrun-hpc`; use
+> [`launch`](./launch_cli.md) to run a pre-generated batch script.
 
 ## Script Options
 
@@ -125,8 +134,10 @@ Batch scheduler script parameters.
 - **No argument**: Creates timestamped launch directory
 - **With argument**: Creates directory named `[LAUNCH_DIR]`
 - **Argument = "."**: Creates launch script in current directory
-- **Not set + blocking job**: Runs without creating files
-- **Not set + non-blocking job**: Creates launch file and logs in current directory
+- **Not set**: `torchrun-hpc` **always** creates a timestamped launch
+  directory (see the callout below), whether the job is blocking or run
+  with `--bg` -- unlike `launch`, there is no file-less or
+  current-directory-by-default mode when `-l` is omitted
 - **Note**: Double dash `--` needed if this is the last argument
 
 > **Important — the job runs from the launch directory.** `torchrun-hpc` always
