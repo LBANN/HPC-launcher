@@ -228,6 +228,45 @@ def test_nccl_net_plugin_fuzzy_tree_match(monkeypatch, rocm_test_env):
     assert any(str(plugin_lib) in v for v in _ld_library_path_values(env_list))
 
 
+def test_miopen_paths_omitted_without_tmpdir(monkeypatch):
+    """
+    N5: without ``TMPDIR`` set (common on a plain login shell -- nothing in
+    this codebase ever sets it), the MIOpen cache-path env vars must be
+    omitted entirely, matching Corona's ``if tmpdir:`` guard
+    (``hpc_launcher/systems/lc/corona.py``) for the identical block. Before
+    the fix, ``tmpdir = os.environ.get("TMPDIR")`` was interpolated
+    unconditionally into ``f"{tmpdir}/MIOpen_user_db"``, so an unset
+    ``TMPDIR`` produced the literal string ``"None/MIOpen_user_db"`` in the
+    generated batch script instead of a real path.
+
+    Explicitly ``delenv`` rather than relying on the ambient environment:
+    this test is about ``TMPDIR`` specifically, so it must not inherit
+    whatever value happens to be set in the harness running pytest.
+    """
+    monkeypatch.delenv("TMPDIR", raising=False)
+
+    env_list = ElCapitan("tuolumne").environment_variables()
+
+    env = {e[0]: e[1] for e in _env_pairs(env_list)}
+    assert "MIOPEN_USER_DB_PATH" not in env
+    assert "MIOPEN_CUSTOM_CACHE_DIR" not in env
+    # Belt-and-suspenders: no emitted value may ever contain the literal
+    # string "None" -- the direct symptom of the unguarded f-string bug.
+    for name, value in env.items():
+        assert "None" not in str(value), f"literal 'None' leaked into {name}={value!r}"
+
+
+def test_miopen_paths_use_tmpdir_when_set(monkeypatch, tmp_path):
+    """Happy path: with TMPDIR set, the MIOpen cache vars are TMPDIR-scoped."""
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+
+    env_list = ElCapitan("tuolumne").environment_variables()
+
+    env = {e[0]: e[1] for e in _env_pairs(env_list)}
+    assert env.get("MIOPEN_USER_DB_PATH") == f"{tmp_path}/MIOpen_user_db"
+    assert env.get("MIOPEN_CUSTOM_CACHE_DIR") == f"{tmp_path}/MIOpen_custom_cache"
+
+
 def test_explicit_plugin_override(monkeypatch, tmp_path, rocm_test_env):
     """
     LBANN_USE_THIS_OFI_PLUGIN bypasses probing entirely, even when a
