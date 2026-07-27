@@ -58,12 +58,58 @@ class LocalScheduler(Scheduler):
         A local job is started directly, so there is no submit command to
         prefix it with.
 
-        This is also why the launcher script is the only channel this
-        scheduler has: anything the base class would hand to a command line
-        has nowhere to go. See
-        :meth:`build_command_string_and_batch_script`.
+        This is also why anything the base class would hand to a command
+        line has nowhere to go: the launch script
+        (:meth:`build_command_string_and_batch_script`) carries it instead,
+        or -- when there is no launch script either --
+        :meth:`ephemeral_environment`.
         """
         return []
+
+    def ephemeral_environment(self, system: "System") -> Optional[dict[str, str]]:
+        """
+        Build the child's environment directly, since a local job has neither
+        of the channels the base class relies on.
+
+        An ephemeral run writes no launch script, so the ``export`` lines
+        :meth:`Scheduler.launcher_script` would emit have nowhere to go; and
+        the fallback the base class uses in that case -- putting the block on
+        the submit command line via ``cli_env_arg`` -- needs a command line,
+        which :meth:`launch_command` does not produce. So an ephemeral
+        ``launch --local`` used to run the user's command with none of the
+        system's environment block: no ``NCCL_SOCKET_IFNAME``, no
+        ``FI_CXI_*``, no ``MIOPEN_*``. Nothing about the run showed it --
+        correct output, correct exit code, untuned (or non-functional)
+        communication.
+
+        The values are expanded with :meth:`Scheduler.expand_cli_env`, for
+        the same reason the CLI channel does: they are authored as shell
+        ``export`` right-hand sides, so a ``${LD_LIBRARY_PATH}`` reference or
+        a repeated key only means what it says once a shell -- or this
+        stand-in for one -- has processed the list in order. They go into a
+        copy of the launcher's own environment, matching the script path,
+        where the ``export`` lines likewise amend an inherited environment
+        rather than replace it.
+
+        :param system: The system to take the environment from.
+        :return: The complete environment for the child.
+        """
+        env = dict(os.environ)
+        # One pass over both lists so that a passthrough value referring to a
+        # variable the system block just set resolves against it.
+        env.update(
+            Scheduler.expand_cli_env(
+                list(system.environment_variables())
+                + list(system.passthrough_environment_variables())
+            )
+        )
+        # Emitted by launcher_script for every other mode; it is read by the
+        # torchrun-hpc trampoline to cap per-process GPU memory.
+        if system.active_system_params:
+            fraction = system.active_system_params.fraction_max_gpu_mem
+            if fraction and fraction != 1.0:
+                env["HPC_LAUNCHER_MAX_GPU_MEM"] = str(fraction)
+        return env
 
     def batch_script_prefix(self) -> str:
         """

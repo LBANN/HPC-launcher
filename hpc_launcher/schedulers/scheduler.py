@@ -489,6 +489,32 @@ class Scheduler:
         """
         raise NotImplementedError
 
+    def ephemeral_environment(self, system: "System") -> Optional[dict[str, str]]:
+        """
+        The complete environment to start an ephemeral (no launch folder) job
+        in, or None to hand the job the launcher's own environment unchanged.
+
+        The launcher has exactly three channels for the system's tuned
+        environment block, and an ephemeral run rules out one of them: there
+        is no launch script for :meth:`launcher_script` to write ``export``
+        lines into. Every scheduler that has a submit/run command uses the
+        second -- ``launch_command`` is built with ``cli_env_only=True``, so
+        :meth:`cli_env_arg` puts the block on that command line (Slurm's
+        ``--export=``, Flux's ``--env=``) -- and for those, None is correct:
+        the environment is already travelling.
+
+        This third channel exists for a scheduler with no launch command at
+        all to hang arguments off (``--local``, whose
+        :meth:`launch_command` is ``[]``), which was therefore left with no
+        channel whatsoever and silently ran ephemeral jobs with the system's
+        entire environment block missing.
+
+        :param system: The system to take the environment from.
+        :return: A complete environment mapping for the child, or None to
+                 inherit the launcher's.
+        """
+        return None
+
     def launch_command(
             self, system: "System", blocking: bool = True, cli_env_only: bool = False
     ) -> list[str]:
@@ -998,16 +1024,31 @@ class Scheduler:
             logger.info(f'Launching {" ".join(full_cmdline)}')
 
             if not dry_run:
-                process = subprocess.run(full_cmdline, capture_output=True)
-                sys.stdout.buffer.write(process.stdout)
-                sys.stderr.buffer.write(process.stderr)
+                # Same live tee-ing as the launch-folder blocking branch
+                # below, minus the files: an ephemeral run is defined by
+                # creating none, so the console is the only destination.
+                # This branch used to call
+                # ``subprocess.run(..., capture_output=True)`` and print the
+                # result afterwards, which (a) showed the user nothing until
+                # the job exited -- a blank terminal for the length of a
+                # training run, with every byte held in the launcher's RSS,
+                # and the two streams no longer interleaved in the order they
+                # were written -- and (b) skipped ``console_pipe``'s
+                # ``start_new_session`` and signal forwarding, so a SIGTERM to
+                # the launcher killed the launcher alone and reparented the
+                # still-running job to PID 1.
+                returncode = run_process_with_live_output(
+                    full_cmdline,
+                    color_stderr=color_stderr,
+                    env=self.ephemeral_environment(system),
+                )
                 # Only the exit status decides success: plenty of successful
                 # programs (and schedulers) log to stderr.
-                if process.returncode:
-                    logging.error(
-                        f"Interactive scheduler exited with error code {process.returncode}"
+                if returncode:
+                    logger.error(
+                        f"Interactive scheduler exited with error code {returncode}"
                     )
-                return LaunchResult(job_id=None, returncode=process.returncode)
+                return LaunchResult(job_id=None, returncode=returncode)
             return LaunchResult(job_id=None, returncode=0)
         else:
             full_cmdline = cmd + [filename]
