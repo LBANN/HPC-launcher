@@ -34,6 +34,9 @@ CLI validation and usability regression tests.
 - (round 2, M5) ``--out``/``--err`` with a directory component is a clean
   validation error, not an uncaught ``FileNotFoundError`` with a half-built
   launch directory left behind.
+- (round 2, M3) ``--out`` and ``--err`` naming the same file is a clean
+  validation error, instead of being accepted and then silently reduced to
+  one of the two streams.
 """
 import argparse
 import importlib
@@ -583,4 +586,59 @@ def test_out_err_with_directory_component_is_clean_error(tmp_path, flag):
     )
     assert not launch_dir.exists(), (
         f"a half-built launch directory was left behind:\n{stderr}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# M3 -- --out and --err resolving to the same path must be rejected, not
+# silently reduced to one of the two streams.
+# ---------------------------------------------------------------------------
+def test_out_and_err_at_the_same_path_are_rejected(tmp_path):
+    """
+    ``--out both.log --err both.log`` reads as "give me one combined log",
+    which is a natural thing to ask for -- and used to be accepted and then
+    quietly not done. ``scheduler.py``'s blocking branch opens two
+    independent ``"wb"`` handles on the one path and hands one to each of
+    ``console_pipe``'s two replicator tasks; each writes from its own file
+    offset, so the file ends up holding whichever stream wrote last (here:
+    ``ERRLINE\n``, 8 bytes, with ``OUTLINE`` gone) and, once the streams are
+    large enough to interleave, arbitrary mutual overwriting instead. The
+    console showed both streams and the exit code was 0, so nothing about
+    the run suggested the log was wrong.
+
+    It is rejected rather than merged: sharing a single handle between the
+    two replicators would still tear lines apart, because they write
+    concurrently in ``buffer_size``-byte chunks with no line framing, so
+    "one combined log" would become byte-interleaved rather than
+    interleaved-by-line. An upfront error says so and leaves the user to ask
+    for the merge they actually want (``2>&1``, or ``--out``/``--err`` at
+    distinct paths). It also matches how the neighbouring ``-o`` and
+    ``--out``/``--err`` path-component checks in ``validate_arguments``
+    behave, and -- being a validation check rather than a fix to one
+    branch of ``scheduler.py`` -- it covers ``--bg`` too, where the same
+    two names become the scheduler's own ``--output``/``--error``
+    directives.
+    """
+    launch_dir = tmp_path / "r2"
+    proc = subprocess.run(
+        LAUNCH
+        + [
+            "--local", "-N1",
+            "-l", str(launch_dir),
+            "--out", "both.log",
+            "--err", "both.log",
+            "--", "/bin/sh", "-c", "echo OUTLINE; echo ERRLINE 1>&2",
+        ],
+        capture_output=True,
+    )
+    stderr = proc.stderr.decode(errors="replace")
+    assert proc.returncode != 0, (
+        "--out and --err at the same path were accepted; the log will "
+        "silently contain only one of the two streams"
+    )
+    assert "ValueError" in stderr and "both.log" in stderr, (
+        f"expected a ValueError naming the shared path:\n{stderr}"
+    )
+    assert not (launch_dir / "both.log").exists(), (
+        f"a truncated combined log was written anyway:\n{stderr}"
     )

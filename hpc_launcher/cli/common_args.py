@@ -496,6 +496,33 @@ def validate_arguments(args: argparse.Namespace):
                 f"User provided {flag} filename cannot be a absolute or relative path: {log_file}"
             )
 
+    # "--out X --err X" reads as a request for one combined log, and used to
+    # be accepted and then not honored: the blocking path opens two
+    # independent "wb" handles on the one path and gives one to each of
+    # console_pipe's two replicators, which write from their own file offsets
+    # and overwrite each other. With small outputs one stream simply
+    # disappears; with larger ones the file is arbitrarily interleaved
+    # garbage. Neither is visible from the run -- the console shows both
+    # streams and the exit status is unaffected.
+    #
+    # Rejected rather than merged (by sharing one handle) because the merge a
+    # user is picturing is not the one they would get: the two replicators
+    # read fixed-size chunks concurrently with no line framing, so a shared
+    # handle produces output torn mid-line rather than a readable combined
+    # log. Rejecting here also covers --bg, where these two names become the
+    # scheduler's own --output/--error directives, and keeps --out/--err
+    # consistent with the -o and path-component checks alongside it. By this
+    # point both are bare filenames (the loop above rejected any directory
+    # component), so comparing them directly is comparing the paths they will
+    # resolve to inside the launch folder.
+    if args.out_log_file and args.out_log_file == args.err_log_file:
+        raise ValueError(
+            f"The --out and --err filenames must differ, but both are "
+            f"{args.out_log_file}: the two streams are written independently "
+            f"and would overwrite each other. To combine them, redirect "
+            f"stderr into stdout in the launched command instead."
+        )
+
     if args.output_script and args.batch_script:
         raise ValueError("Cannot specify both an output script name: {args.output_script} and a pre-generated batch script {args.batch_script}.")
 
