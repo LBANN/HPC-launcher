@@ -364,15 +364,28 @@ class Scheduler:
                     f"{prefix} " + " ".join(self.format_common_arg(k, v, quote_value=True)) + "\n"
                 )
 
+        # ``cli_env_only`` means the caller will not be writing a launch script
+        # we control -- an ephemeral run, or a user-supplied ``--batch-script``
+        # that must be copied verbatim -- so the scheduler command line is the
+        # only channel the environment has. That is true regardless of whether
+        # the job blocks: gating this on ``blocking`` as well meant a
+        # non-blocking immutable-script submission (``--batch-script`` with
+        # ``--bg``) fell through to the ``else`` branch, whose ``header`` buffer
+        # is discarded by ``launch_command``, silently dropping the entire
+        # launcher-injected tuning block.
         if len(env_vars):
-            if blocking and cli_env_only:
+            if cli_env_only:
                 self.cli_env_arg(env_vars)
             else:
                 for e in env_vars:
                     header.write(parse_env_list(*e))
 
+        # Same hole for passthrough variables. ``blocking`` is kept as an
+        # additional trigger because a blocking run has always delivered these
+        # on the launch command line (where they work equally well) and jobs
+        # rely on that; ``cli_env_only`` closes the non-blocking immutable case.
         if len(passthrough_env_vars):
-            if blocking:
+            if blocking or cli_env_only:
                 self.cli_env_arg(passthrough_env_vars)
             else:
                 for k, v in passthrough_env_vars:
