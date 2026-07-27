@@ -25,9 +25,20 @@ CLI validation and usability regression tests.
   raising ``shutil.SameFileError``.
 - A relative-path argument that would not resolve from the launch directory
   produces a warning.
+- (round 2, M2) ``--comm-backend`` validates and normalizes case-insensitively
+  in one place shared by ``launch`` and ``torchrun-hpc``, so the two CLIs
+  agree on what a given value means instead of ``launch`` silently
+  forwarding an unrecognized value into a consumer that ignores it.
+- (round 2, M4) ``torchrun-hpc --dry-run`` must not write (or clobber) the
+  trampoline file.
+- (round 2, M5) ``--out``/``--err`` with a directory component is a clean
+  validation error, not an uncaught ``FileNotFoundError`` with a half-built
+  launch directory left behind.
 """
 import argparse
+import importlib
 import os
+import socket
 import subprocess
 import sys
 
@@ -266,4 +277,310 @@ def test_no_relative_arg_warning_when_launch_dir_is_cwd(tmp_path):
     assert proc.returncode == 0, stderr
     assert "relative path" not in stderr, (
         f"unexpected relative-path warning when -l . :\n{stderr}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# M2 -- --comm-backend must validate and normalize case-insensitively, in one
+# place shared by `launch` and `torchrun-hpc`.
+# ---------------------------------------------------------------------------
+def _run_main_el_capitan(monkeypatch, tmp_path, module_name, argv,
+                          hostname="tuolumne0001"):
+    """
+    Run a CLI entry point's ``main()`` in-process (not via ``subprocess``),
+    with the hostname patched so ``autodetect_current_system()`` resolves to
+    ``ElCapitan`` -- the same ``@patch("socket.gethostname", ...)`` pattern
+    ``tests/system_autodetect_test.py`` uses for every El-Capitan-family
+    test.
+
+    In-process rather than ``subprocess`` is required specifically here:
+    M2's bug only shows up once ``ElCapitan.environment_variables()`` runs
+    (it is the sole consumer of ``job_comm_protocol``), and a *subprocess*'s
+    hostname cannot be patched from the parent test process the way
+    ``sys.argv`` can be -- ``socket.gethostname()`` is a real syscall
+    wrapper that ignores both monkeypatching done in another process and the
+    ``HOSTNAME`` environment variable (verified directly: ``env
+    HOSTNAME=lassen0001 python3 -c "import socket;
+    print(socket.gethostname())"`` still prints the real host). Every other
+    test in this module drives the CLI via ``subprocess`` instead; this is
+    the one exception, made only where the hostname patch requires it.
+
+    :return: the code the entry point's ``sys.exit()`` was called with.
+    """
+    from hpc_launcher.systems import autodetect
+
+    module = importlib.import_module(module_name)
+    monkeypatch.setattr(sys, "argv", ["prog"] + list(argv))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(socket, "gethostname", lambda: hostname)
+    autodetect.clear_autodetected_system()
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            module.main()
+    finally:
+        # Reset the module-level cache regardless of outcome, so a failure
+        # here cannot leak a patched hostname's resolved system into a
+        # later, unrelated test.
+        autodetect.clear_autodetected_system()
+    return exc_info.value.code
+
+
+def _nccl_net_plugin_present(launch_dir) -> bool:
+    """Whether the generated script enabled the RCCL/AWS-OFI env block."""
+    script = launch_dir / "launch.sh"
+    return script.exists() and "NCCL_NET_PLUGIN" in script.read_text()
+
+
+@pytest.mark.parametrize("backend", ["NCCL", "nccl", "RCCL", "rccl"])
+def test_launch_comm_backend_nccl_and_rccl_agree(monkeypatch, tmp_path, backend):
+    """
+    ``launch --comm-backend NCCL`` (either case) on an El-Capitan-family
+    system must enable the same RCCL/AWS-OFI environment block as
+    ``--comm-backend RCCL``.
+
+    Before the fix, ``--comm-backend`` was forwarded to
+    ``system.job_comm_protocol`` completely unvalidated, and the sole
+    consumer (``ElCapitan.environment_variables``) only recognizes the
+    literal strings ``"RCCL"``/``"*CCL"`` case-insensitively -- so ``NCCL``
+    was silently treated as "no protocol requested": the generated script
+    was missing ``NCCL_NET_PLUGIN``, ``NCCL_NET=libfabric``, the AWS-OFI
+    plugin on ``LD_LIBRARY_PATH``, and the ``FI_CXI_RDZV_*`` tuning -- nine
+    fewer exports than ``--comm-backend RCCL`` -- with no warning that the
+    requested backend did nothing. ``RCCL``/``rccl`` are included as the
+    contrast case: the consumer already matched them (via its own
+    ``.upper()``), so they must keep working exactly as before.
+    """
+    launch_dir = tmp_path / "r"
+    code = _run_main_el_capitan(
+        monkeypatch, tmp_path, "hpc_launcher.cli.launch",
+        [
+            "--scheduler", "slurm", "-N2", "--bg", "--setup-only",
+            "-l", str(launch_dir), "--comm-backend", backend,
+            "--", "echo", "hi",
+        ],
+    )
+    assert code == 0
+    assert _nccl_net_plugin_present(launch_dir), (
+        f"--comm-backend {backend} did not enable the RCCL/AWS-OFI "
+        f"environment block:\n{(launch_dir / 'launch.sh').read_text()}"
+    )
+
+
+def test_launch_and_torchrun_hpc_agree_on_comm_backend(monkeypatch, tmp_path):
+    """
+    The core of M2: ``launch`` and ``torchrun-hpc`` must not diverge for the
+    same ``--comm-backend`` value.
+
+    Before the fix, ``launch --comm-backend NCCL`` produced a script missing
+    the RCCL/AWS-OFI block (see
+    ``test_launch_comm_backend_nccl_and_rccl_agree``), while ``torchrun-hpc
+    --comm-backend NCCL`` already included it -- not because torchrun-hpc
+    validated the value, but because it unconditionally collapsed *every*
+    non-"MPI" value (typos included) to ``"*CCL"``. The two entry points
+    silently disagreed about identical input, for unrelated reasons on
+    each side.
+    """
+    require_torch()
+
+    launch_dir = tmp_path / "r_launch"
+    code = _run_main_el_capitan(
+        monkeypatch, tmp_path, "hpc_launcher.cli.launch",
+        [
+            "--scheduler", "slurm", "-N2", "--bg", "--setup-only",
+            "-l", str(launch_dir), "--comm-backend", "NCCL",
+            "--", "echo", "hi",
+        ],
+    )
+    assert code == 0
+
+    train = tmp_path / "train.py"
+    train.write_text("print(1)\n")
+    torchrun_dir = tmp_path / "r_torchrun"
+    code = _run_main_el_capitan(
+        monkeypatch, tmp_path, "hpc_launcher.cli.torchrun_hpc",
+        [
+            "--scheduler", "slurm", "-N2", "--bg", "--setup-only",
+            "-l", str(torchrun_dir), "--comm-backend", "NCCL", str(train),
+        ],
+    )
+    assert code == 0
+
+    launch_script = (launch_dir / "launch.sh").read_text()
+    torchrun_script = (torchrun_dir / "launch.sh").read_text()
+    assert _nccl_net_plugin_present(launch_dir) == _nccl_net_plugin_present(torchrun_dir), (
+        "launch and torchrun-hpc disagree on --comm-backend NCCL:\n"
+        f"launch:\n{launch_script}\ntorchrun-hpc:\n{torchrun_script}"
+    )
+    assert _nccl_net_plugin_present(launch_dir), (
+        "both entry points should have enabled the RCCL/AWS-OFI block"
+    )
+
+
+def test_comm_backend_invalid_value_rejected_by_launch(tmp_path):
+    """
+    An unrecognized ``--comm-backend`` value (a typo, e.g.) must be a clean
+    argparse usage error for ``launch``, not a silent no-op that produces a
+    script with an un-accelerated transport and no warning at all. This does
+    not need the El-Capitan hostname patch: argparse validates ``choices``
+    while parsing, before any system autodetection runs, so a plain
+    ``subprocess`` invocation (like the rest of this module) is enough.
+    """
+    before = set(os.listdir(tmp_path))
+    proc = subprocess.run(
+        LAUNCH
+        + [
+            "--scheduler", "slurm", "-N1", "--bg", "--setup-only",
+            "-l", str(tmp_path / "r"),
+            "--comm-backend", "totally-bogus",
+            "--", "echo", "hi",
+        ],
+        capture_output=True,
+    )
+    stderr = proc.stderr.decode(errors="replace")
+    assert proc.returncode != 0, f"invalid --comm-backend was accepted:\n{stderr}"
+    assert "TOTALLY-BOGUS" in stderr, (
+        f"rejection did not name the bad value:\n{stderr}"
+    )
+    assert set(os.listdir(tmp_path)) == before, (
+        "an invalid --comm-backend must be rejected before any launch "
+        f"directory is created; new entries: {set(os.listdir(tmp_path)) - before}"
+    )
+
+
+def test_comm_backend_invalid_value_rejected_by_torchrun_hpc(tmp_path):
+    """Same as above, for torchrun-hpc -- the two entry points must agree."""
+    require_torch()
+    train = tmp_path / "train.py"
+    train.write_text("print(1)\n")
+    before = set(os.listdir(tmp_path))
+
+    proc = subprocess.run(
+        TORCHRUN
+        + [
+            "--local", "-N1", "-n1", "--setup-only",
+            "--comm-backend", "totally-bogus",
+            str(train),
+        ],
+        cwd=str(tmp_path),
+        capture_output=True,
+    )
+    stderr = proc.stderr.decode(errors="replace")
+    assert proc.returncode != 0, f"invalid --comm-backend was accepted:\n{stderr}"
+    assert "TOTALLY-BOGUS" in stderr, (
+        f"rejection did not name the bad value:\n{stderr}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# M4 -- torchrun-hpc --dry-run must not write (or clobber) the trampoline.
+# ---------------------------------------------------------------------------
+def test_dry_run_does_not_write_or_clobber_trampoline(tmp_path):
+    """
+    ``torchrun-hpc --dry-run -l .`` (or any already-existing launch
+    directory) must not write ``torchrun_hpc_trampoline.py``. The
+    ``shutil.copy`` that stages the trampoline was previously guarded only
+    by ``os.path.exists(folder_name)``, not ``args.dry_run``, unlike every
+    other launch-folder artifact (``create_launch_folder``'s
+    ``os.makedirs``, and the script write/submission inside
+    ``scheduler.launch``). The narrowest and most damaging trigger is a
+    pre-existing user file of the same name in the launch directory
+    (overwhelmingly ``-l .``): a plain ``--dry-run`` preview run must not
+    clobber it, and must not write it at all.
+    """
+    require_torch()
+    driver = tmp_path / "train.py"
+    driver.write_text("print('hello')\n")
+    trampoline = tmp_path / "torchrun_hpc_trampoline.py"
+    trampoline.write_text("MY IMPORTANT USER FILE\n")
+
+    proc = subprocess.run(
+        TORCHRUN
+        + [
+            "--dry-run", "--scheduler", "slurm", "-l", ".",
+            "-N", "1", str(driver),
+        ],
+        cwd=str(tmp_path),
+        capture_output=True,
+    )
+    stderr = proc.stderr.decode(errors="replace")
+    assert proc.returncode == 0, stderr
+    assert trampoline.read_text() == "MY IMPORTANT USER FILE\n", (
+        "--dry-run must not clobber an existing torchrun_hpc_trampoline.py"
+    )
+    assert not (tmp_path / "launch.sh").exists(), (
+        "--dry-run must not write launch.sh either (already covered "
+        "elsewhere, asserted here as a sanity check on the same run)"
+    )
+
+
+def test_dry_run_does_not_create_trampoline_when_absent(tmp_path):
+    """
+    Contrast case: when no trampoline file exists yet, ``--dry-run`` must
+    not create one either -- ruling out a fix that only special-cases
+    overwriting and not creation.
+    """
+    require_torch()
+    driver = tmp_path / "train.py"
+    driver.write_text("print('hello')\n")
+    trampoline = tmp_path / "torchrun_hpc_trampoline.py"
+    assert not trampoline.exists()
+
+    proc = subprocess.run(
+        TORCHRUN
+        + [
+            "--dry-run", "--scheduler", "slurm", "-l", ".",
+            "-N", "1", str(driver),
+        ],
+        cwd=str(tmp_path),
+        capture_output=True,
+    )
+    stderr = proc.stderr.decode(errors="replace")
+    assert proc.returncode == 0, stderr
+    assert not trampoline.exists(), (
+        "--dry-run must not write torchrun_hpc_trampoline.py when it did "
+        "not exist before"
+    )
+
+
+# ---------------------------------------------------------------------------
+# M5 -- --out/--err with a directory component must be a clean validation
+# error, not an uncaught FileNotFoundError with a half-built launch dir left
+# behind.
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("flag", ["--out", "--err"])
+def test_out_err_with_directory_component_is_clean_error(tmp_path, flag):
+    """
+    ``launch -N1 --local -l r3 --out logs/o.log -- /bin/echo hi`` must fail
+    at ``validate_arguments`` with a ``ValueError`` naming the offending
+    path -- the same, pre-existing failure mode ``-o`` already uses for a
+    path-bearing output-script name (an uncaught exception, still reported
+    as a Python traceback, but the *right* one: a deliberate validation
+    raise, not an incidental crash) -- rather than creating ``r3/`` and
+    ``r3/launch.sh`` and only then dying with an uncaught
+    ``FileNotFoundError`` at ``open(self.out_log_file, "wb")``, deep inside
+    ``scheduler.py``, well after the launch directory was already built. The
+    contrasting ``-o`` case already failed this same way *before* any
+    directory was created; ``--out``/``--err`` must now match it.
+    """
+    launch_dir = tmp_path / "r3"
+    proc = subprocess.run(
+        LAUNCH
+        + [
+            "--local", "-N1",
+            "-l", str(launch_dir),
+            flag, "logs/o.log",
+            "--", "/bin/echo", "hi",
+        ],
+        capture_output=True,
+    )
+    stderr = proc.stderr.decode(errors="replace")
+    assert proc.returncode != 0, "a path-bearing --out/--err was accepted"
+    assert "FileNotFoundError" not in stderr, (
+        f"the uncaught FileNotFoundError still leaked through:\n{stderr}"
+    )
+    assert "ValueError" in stderr and "logs/o.log" in stderr, (
+        f"expected a ValueError naming the offending path:\n{stderr}"
+    )
+    assert not launch_dir.exists(), (
+        f"a half-built launch directory was left behind:\n{stderr}"
     )

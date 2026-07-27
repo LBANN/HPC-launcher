@@ -104,12 +104,16 @@ def main():
             f"torchrun-hpc needs to run jobs from a launch directory -- automatically setting the -l (--launch-dir) CLI argument"
         )
 
-    # Process special arguments that can autoselect the number of ranks / GPUs
+    # Process special arguments that can autoselect the number of ranks / GPUs.
+    # This already normalizes an explicit --comm-backend NCCL/RCCL to "*CCL"
+    # via common_args.resolve_comm_backend, the same mapping `launch` uses --
+    # see there for why. What is specific to torchrun-hpc is the *default*:
+    # a PyTorch job overwhelmingly uses the accelerator's native collective
+    # library, so unless the user asked for "MPI" (validated/uppercased by
+    # argparse's --comm-backend choices), fall back to that "*CCL"
+    # optimization even when --comm-backend was not given at all.
     system = common_args.process_arguments(args, logger)
-    optimize_comm_protocol = ""
-    if args.job_comm_protocol:
-        optimize_comm_protocol = args.job_comm_protocol
-    if optimize_comm_protocol.upper() == "MPI":
+    if args.job_comm_protocol == "MPI":
         logger.warning(
             f"Using MPI as the primary communication protocol for PyTorch requires additional support"
         )
@@ -157,7 +161,14 @@ def main():
 
     trampoline_file = "torchrun_hpc_trampoline.py"
 
-    if os.path.exists(folder_name):
+    # --dry-run must have no side effects (see the --dry-run help string):
+    # every other launch-folder artifact is already gated on args.dry_run
+    # (create_launch_folder above, and the script write/submission inside
+    # scheduler.launch below), so the trampoline copy must be too. Without
+    # this, `-l .`/`-l <existing-dir>` --dry-run writes a stray
+    # torchrun_hpc_trampoline.py into the user's directory -- or clobbers an
+    # identically-named file the user already had there.
+    if os.path.exists(folder_name) and not args.dry_run:
         copied_trampoline_file = folder_name + "/" + trampoline_file
         package_path = os.path.dirname(os.path.abspath(__file__))
         shutil.copy(

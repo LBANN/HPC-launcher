@@ -23,6 +23,7 @@ import logging
 import os
 
 from dataclasses import fields
+from typing import Optional
 
 class ParseKVAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -76,6 +77,48 @@ class ParseOverrideKVAction(argparse.Action):
                     f"key or '~key' to remove one",
                 )
             overrides[key] = value
+
+
+# Values accepted by --comm-backend, matched case-insensitively (argparse's
+# `type=str.upper` + `choices=` below normalize the case before comparing).
+# Kept here, rather than inline in `setup_arguments`, so `resolve_comm_backend`
+# can document the mapping against the same list.
+#
+# "*CCL" is accepted because the docs used to list it as an option verbatim
+# ("Options: MPI, *CCL (NCCL, RCCL)"), so a user may well have typed it; it is
+# also the internal spelling every consumer matches on. Now that unrecognized
+# values are a usage error rather than a silent no-op, turning a previously
+# working invocation into a hard failure would be a poor trade.
+COMM_BACKEND_CHOICES = ("MPI", "NCCL", "RCCL", "*CCL")
+
+
+def resolve_comm_backend(job_comm_protocol: Optional[str]) -> Optional[str]:
+    """
+    Normalize a validated ``--comm-backend`` value to what
+    ``System.job_comm_protocol`` consumers understand.
+
+    By the time this runs, argparse has already restricted and uppercased
+    ``job_comm_protocol`` to one of ``COMM_BACKEND_CHOICES`` or left it
+    ``None`` -- see the ``--comm-backend`` argument in ``setup_arguments``.
+    The only consumer today (``ElCapitan.environment_variables``) matches
+    ``"RCCL"`` or the generic ``"*CCL"`` marker case-insensitively; it has no
+    notion of ``"NCCL"`` at all. The CLI's own help text already documents
+    NCCL and RCCL as interchangeable spellings of "whichever collective
+    library is native to this system's accelerators" ("MPI or *CCL (NCCL,
+    RCCL)"), so both collapse to ``"*CCL"`` here. This is the one place
+    shared by ``launch`` and ``torchrun-hpc`` (both route through
+    ``process_arguments``), so the two CLIs agree on what a given
+    ``--comm-backend`` value means instead of ``launch`` forwarding ``NCCL``
+    verbatim into a consumer that silently ignores it.
+
+    :param job_comm_protocol: The parsed ``--comm-backend`` value (already
+                               validated/uppercased by argparse), or ``None``.
+    :return: ``job_comm_protocol`` unchanged for ``"MPI"`` or ``None``;
+             ``"*CCL"`` for ``"NCCL"``/``"RCCL"``.
+    """
+    if job_comm_protocol in (None, "MPI"):
+        return job_comm_protocol
+    return "*CCL"
 
 
 def create_scheduler_arguments(**kwargs) -> dict[str, str]:
@@ -178,9 +221,14 @@ def setup_arguments(parser: argparse.ArgumentParser):
     group.add_argument(
         "--comm-backend",
         dest="job_comm_protocol",
-        type=str,
+        type=str.upper,
+        choices=COMM_BACKEND_CHOICES,
         default=None,
-        help="Indicate if the job will primarily use a specific communication protocol and set any relevant environment variables: MPI or *CCL (NCCL, RCCL)",
+        help="Indicate if the job will primarily use a specific communication protocol and set any relevant environment variables. Case-insensitive; one of MPI or *CCL (NCCL, RCCL). An unrecognized value is a "
+        "usage error rather than a silent no-op, since the only consumer of "
+        "this flag (the El Capitan RCCL/AWS-OFI setup) matches a closed set "
+        "of spellings and otherwise skips its environment configuration "
+        "without any other warning.",
     )
 
     group.add_argument(
@@ -424,6 +472,27 @@ def validate_arguments(args: argparse.Namespace):
         if args.save_hostlist:
             raise ValueError("Saving the hostlist was requested for a ephemeral interative job.")
 
+    # Same rejection as -o/--output-script above, and for the same reason:
+    # both are joined onto the launch folder (scheduler.py's
+    # create_launch_folder/create_launch_folder_name) whose intermediate
+    # directories are never created, so a path-bearing --out/--err would
+    # otherwise reach an uncaught FileNotFoundError at `open(..., "wb")`
+    # well after the launch directory (and launch.sh) already exist on
+    # disk -- a raw traceback plus a half-built launch directory instead of
+    # a clean, upfront validation error. Rejecting here (rather than
+    # os.makedirs(..., exist_ok=True) at the point of use) keeps --out/--err
+    # consistent with -o's existing, documented "no path component" rule
+    # instead of quietly adding nested-log-directory support that was never
+    # asked for -- and scheduler.py's log-file handling is out of scope for
+    # this fix. Checked after the ephemeral-job block above so that an
+    # ephemeral job with a path-bearing --out/--err reports the more
+    # fundamental "not allowed in this mode at all" error first.
+    for flag, log_file in (("--out", args.out_log_file), ("--err", args.err_log_file)):
+        if log_file and os.path.dirname(log_file):
+            raise ValueError(
+                f"User provided {flag} filename cannot be a absolute or relative path: {log_file}"
+            )
+
     if args.output_script and args.batch_script:
         raise ValueError("Cannot specify both an output script name: {args.output_script} and a pre-generated batch script {args.batch_script}.")
 
@@ -445,7 +514,7 @@ def process_arguments(args: argparse.Namespace, logger: logging.Logger) -> Syste
             args.gpus_at_least,
             args.gpumem_at_least,
             args.system_params,
-            args.job_comm_protocol,
+            resolve_comm_backend(args.job_comm_protocol),
         )
     )
 

@@ -15,7 +15,7 @@ launch [options] command [args...]
 ```bash
 launch [-h] [--verbose] [-N NODES] [-n PROCS_PER_NODE] [--gpus-per-proc GPUS_PER_PROC]
        [-q QUEUE] [-t TIME_LIMIT] [-g GPUS_AT_LEAST] [--gpumem-at-least GPUMEM_AT_LEAST]
-       [--exclusive] [--local] [--comm-backend JOB_COMM_PROTOCOL]
+       [--exclusive] [--local] [--comm-backend {MPI,NCCL,RCCL,*CCL}]
        [-x KEY=VALUE [KEY=VALUE ...]] [--bg] [--batch-script BATCH_SCRIPT]
        [--scheduler {local,flux,slurm,lsf}]
        [-l [LAUNCH_DIR]] [-o OUTPUT_SCRIPT] [--setup-only] [--dry-run]
@@ -56,7 +56,7 @@ These options determine the number of nodes, accelerators, and ranks for the job
 | `--gpumem-at-least` | | Constraint for accelerator memory needed (in GB) | System must be registered with launcher |
 | `--exclusive` | | Request exclusive access from the scheduler | |
 | `--local` | | Run locally (one process without batch scheduler) | |
-| `--comm-backend` | | Indicate primary communication protocol | Options: MPI, *CCL (NCCL, RCCL) |
+| `--comm-backend` | | Indicate primary communication protocol (case-insensitive) | Choices: `MPI`, `NCCL`, `RCCL`, `*CCL`; any other value is a usage error |
 | `--xargs` | `-x` | Specify scheduler and launch arguments | Format: `KEY=VALUE` |
 
 ### Notes on `--xargs`:
