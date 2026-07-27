@@ -237,8 +237,12 @@ def test_module_mode_runs_the_trampoline_by_path(tmp_path):
 def test_flag_cannot_silently_contradict_the_allocation(tmp_path,
                                                         conflicting_flag):
     """
-    The scheduler allocation is authoritative: a job asked for one node must
-    not end up being told to run on two.
+    The scheduler allocation is authoritative: a job asked for one node
+    running two tasks per node must not end up being told to run on two
+    nodes, or on one node running some other number of tasks per node --
+    both the ``--nnode(s)`` axis and the ``--nproc_per_node`` axis this test
+    is parametrized over must hold, not just whichever one a given
+    parametrization happens to name.
 
     There are two defensible ways to honor that -- reject the flag, or accept
     it and reconcile it with the allocation -- so the assertion allows either
@@ -263,8 +267,12 @@ def test_flag_cannot_silently_contradict_the_allocation(tmp_path,
         return
 
     # Accepted. The allocation must still be the one the launcher requested,
-    # and the flag must not have been passed through to contradict it.
+    # on both axes -- nodes and tasks per node -- and the flag must not have
+    # been passed through to contradict it.
     assert "#SBATCH --nodes=1" in script, (
+        f"{conflicting_flag} changed the allocation:\n{script}"
+    )
+    assert "#SBATCH --ntasks-per-node=2" in script, (
         f"{conflicting_flag} changed the allocation:\n{script}"
     )
     run_line = _run_line(script)
