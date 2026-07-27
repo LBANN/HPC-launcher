@@ -112,6 +112,45 @@ def _rank_identity(world_size, rank, local_world_size, local_rank):
     }
 
 
+def _user_code_path_entry(target, is_module):
+    """
+    Return the ``sys.path`` entry the interpreter would have created had the
+    user's code been started directly, so that ``runpy`` can find the modules
+    sitting next to it.
+
+    Neither of the two mechanisms that normally supply this entry applies
+    here. ``runpy.run_path`` does not add the target file's directory to
+    ``sys.path`` (unlike ``python script.py``), and Python's own automatic
+    ``sys.path[0]`` insertion names the directory of the program it was given
+    -- which is the launch folder, since that is where the trampoline is
+    copied to and executed from. The launch folder contains nothing but launch
+    artifacts, so a training script whose neighbour ``helper.py`` it imports
+    failed with ``ModuleNotFoundError``.
+
+    For a script the entry is the script's *own* directory. Deliberately not
+    the invocation directory, which is what the generated launch script puts
+    on ``PYTHONPATH``: the two differ whenever the script lives in a
+    subdirectory (``torchrun-hpc src/train.py``) or outside the tree the user
+    launched from, and it is the script's neighbours that it expects to
+    import.
+
+    For ``-m`` there is no script and therefore no such directory, so follow
+    ``python -m`` itself, which prepends the working directory. Note that the
+    schedulers run the job *from the launch folder*, so under a real launch
+    this is that folder rather than the directory the user typed the command
+    in; module mode still relies on the launch script exporting the invocation
+    directory on ``PYTHONPATH``, which the trampoline has no way to recover on
+    its own.
+
+    :param target: The script path, or the module name when ``is_module``.
+    :param is_module: True if the command is being run as ``-m <module>``.
+    :return: An absolute directory to prepend to ``sys.path``.
+    """
+    if is_module:
+        return os.getcwd()
+    return os.path.dirname(os.path.abspath(target))
+
+
 def _apply_memory_fraction(local_device_id):
     """
     Apply the optional GPU memory-fraction cap to the device this rank has
@@ -237,6 +276,11 @@ def main():
 
     # Note that run_path will prepend the args[0] back onto the sys.argv so it needs to be stripped off first
     sys.argv = sys.argv[1:] if not is_module else sys.argv[2:]
+
+    # Give the user's code the import root the interpreter would have given
+    # it. runpy supplies none, and the trampoline runs out of the launch
+    # folder, so without this a sibling module is simply not importable.
+    sys.path.insert(0, _user_code_path_entry(args[0], is_module))
 
     # Run underlying script
     if is_module:
