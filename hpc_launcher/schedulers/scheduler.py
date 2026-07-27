@@ -304,10 +304,21 @@ class Scheduler:
         header.write("#!/bin/sh\n")
         cmd_args = []
 
-        self.build_scheduler_specific_arguments(system, blocking)
-
-        # Enable the system to apply some customization to the scheduler instance
+        # Enable the system to apply some customization to the scheduler
+        # instance. This has to happen *before* the arguments are built:
+        # ``customize_scheduler`` is the only producer of scheduler fields such
+        # as ``ld_preloads`` (set from ``LBANN_USE_THIS_RCCL``), and
+        # ``build_scheduler_specific_arguments`` is what turns them into
+        # ``--env=LD_PRELOAD`` / ``--export=ALL,LD_PRELOAD``. With the calls the
+        # other way around the field was still None when it was read, so a
+        # blocking launch silently dropped the preload -- while ``--bg``
+        # appeared to work, because ``launcher_script`` makes a second pass over
+        # the same instance. The customizations that are *dict* edits
+        # (``common_launch_args`` and friends) always survived either order,
+        # since ``launch_command`` consumes those dicts itself.
         system.customize_scheduler(self)
+
+        self.build_scheduler_specific_arguments(system, blocking)
 
         if self.override_launch_args:
             for k,v in self.override_launch_args.items():
