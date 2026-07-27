@@ -101,8 +101,20 @@ def configure_launch(
                 gpus_per_proc = max(system_params.gpus_per_node // procs_per_node, 1)
 
         if procs_per_node and procs_per_node * gpus_per_proc > system_params.gpus_per_node:
-            logger.info(
-                f"The combination of {procs_per_node} processes per node and {gpus_per_proc} GPUs per process exceeds the number of GPUs per node {system_params.gpus_per_node} - Job will not launch, please fix requested parameters"
+            # NOTE: this is deliberately *not* raised as an error and the
+            # requested (oversubscribed) values are deliberately *not*
+            # clamped here, unlike the correction above: this branch is only
+            # reached when gpus_per_proc is individually valid (<=
+            # gpus_per_node) and was therefore either given explicitly by
+            # the user or already accepted as-is, so both remedies would
+            # override an explicit, individually-valid user request with no
+            # unambiguous "correct" replacement value (e.g. it is not clear
+            # whether procs_per_node or gpus_per_proc is the one that should
+            # give way). What changes here is only that this can no longer
+            # claim an outcome ("Job will not launch") that it does not
+            # enforce, and it is no longer silent at default verbosity.
+            logger.warning(
+                f"The combination of {procs_per_node} processes per node and {gpus_per_proc} GPUs per process exceeds the number of GPUs per node {system_params.gpus_per_node} - proceeding with the requested configuration anyway, but the scheduler may reject this job or GPUs may be oversubscribed at runtime; adjust --procs-per-node/--gpus-per-proc if this is unintended"
             )
 
     # If the user requested a specific number of processes per node, honor that
@@ -115,6 +127,14 @@ def configure_launch(
         if gpus_at_least > 0:
             nodes = ceildiv(gpus_at_least, procs_per_node)
         elif gpumem_at_least > 0:
+            if not system_params.mem_per_gpu:
+                raise ValueError(
+                    f"--gpumem-at-least was requested but system "
+                    f"{system.system_name!r} reports no GPU memory per GPU "
+                    f"(mem_per_gpu={system_params.mem_per_gpu}); this system "
+                    "appears to have no GPUs (or none were auto-detected), "
+                    "so --gpumem-at-least cannot be satisfied"
+                )
             num_gpus = ceildiv(gpumem_at_least, system_params.mem_per_gpu)
             nodes = ceildiv(num_gpus, procs_per_node)
             if nodes == 1:
