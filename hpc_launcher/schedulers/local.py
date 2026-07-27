@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, Optional
 import os
 import shlex
 import logging
-from hpc_launcher.schedulers import parse_env_list
 
 logger = logging.getLogger(__name__)
 
@@ -32,63 +31,136 @@ class LocalScheduler(Scheduler):
     """
     A class that runs the job without any underlying batch scheduler. Used
     in ``--local`` jobs.
+
+    A local job is the degenerate case of a scheduled one -- a single
+    process, started directly, with no submit command in front of it -- not a
+    different kind of job. Everything else the base class puts in a launch
+    script (the system's environment block, ``PYTHONPATH``,
+    ``HPC_LAUNCHER_MAX_GPU_MEM``, the ``--save-hostlist`` block, argument
+    quoting) applies here exactly as it does everywhere else, so this class
+    *extends* :meth:`Scheduler.launcher_script` by filling in the handful of
+    scheduler-shaped hooks below rather than reimplementing it. Every
+    guarantee the base class grew was silently missing under ``--local``
+    while that method was reimplemented, and ``--local`` is the backend users
+    reach for first when something is already going wrong.
+
+    What genuinely differs is confined to those hooks: there is no submit
+    command (:meth:`launch_command`), no directive syntax
+    (:meth:`batch_script_prefix`), no parallel launcher
+    (:meth:`require_parallel_internal_run_command`), no rank election to
+    perform (:meth:`script_runs_once_per_task`), and no ``--chdir``-style
+    option, so the script performs its own ``cd``
+    (:meth:`build_command_string_and_batch_script`).
     """
 
     def launch_command(self, system: "System", blocking: bool = True, cli_env_only: bool = False) -> list[str]:
+        """
+        A local job is started directly, so there is no submit command to
+        prefix it with.
+
+        This is also why the launcher script is the only channel this
+        scheduler has: anything the base class would hand to a command line
+        has nowhere to go. See
+        :meth:`build_command_string_and_batch_script`.
+        """
         return []
 
-    def launcher_script(
+    def batch_script_prefix(self) -> str:
+        """
+        There is no scheduler to read directive lines, so anything the base
+        class writes as a directive can only be a comment here. Emitting it
+        as one -- rather than dropping it -- keeps the generated script an
+        honest record of the request: the only arguments that reach this path
+        locally are ``-x`` overrides, which have no scheduler argv to
+        override, and the comment says as much.
+        """
+        return "# no scheduler, ignored:"
+
+    def require_parallel_internal_run_command(self, blocking: bool) -> bool:
+        """
+        There is no parallel launcher (``srun``/``flux run``/``jsrun``) to
+        place in front of the command: the script runs the command itself.
+        """
+        return False
+
+    def script_runs_once_per_task(self, blocking: bool) -> bool:
+        """
+        A local job is exactly one process, so the two cases the base class
+        distinguishes -- "the script is the per-task program" and "the script
+        runs once for the whole allocation" -- coincide, and the rank-0 guard
+        the base emits for the first case has no election left to perform.
+
+        Report the second so the ``--save-hostlist`` write is emitted
+        unguarded: this script is already the single writer, and there is no
+        scheduler-provided per-task rank variable for a guard to test. (The
+        old hand-rolled version guarded on a ``RANK`` it had exported itself
+        one line earlier, which is the shell-snapshot pattern that rank
+        identity was moved out of the launch scripts to eliminate.)
+        """
+        return False
+
+    def export_hostlist(self) -> str:
+        """The one host of a local job is the host we are running on."""
+        return "export HPC_LAUNCHER_HOSTLIST=$(hostname)\n"
+
+    def build_command_string_and_batch_script(
         self,
         system: "System",
-        command: str,
-        args: Optional[list[str]] = None,
         blocking: bool = True,
-        save_hostlist: bool = False,
-        launch_dir: str = "",
-    ) -> str:
-        envvars = [parse_env_list(*e) for e in system.environment_variables()]
-        envvars += [
-            f"export {k}={v}" for k, v in system.passthrough_environment_variables()
-        ]
-        envvars += [
-            "export RANK=0",
-        ]
-        if save_hostlist:
-            hostlist_file = os.path.join(launch_dir, "hpc_launcher_hostlist.txt")
-            envvars += [
-                "export HPC_LAUNCHER_HOSTLIST=$(hostname)\n",
-                'if [ "${RANK}" = "0" ]; then\n',
-                "    echo ${HPC_LAUNCHER_HOSTLIST} > " + shlex.quote(hostlist_file) + "\n",
-                "fi\n\n",
-            ]
-        header = "\n".join(envvars)
+        cli_env_only: bool = False,
+        for_launch_cmd: bool = True,
+    ) -> (str, list[str]):
+        """
+        Build the launch-script header, routing everything into the script.
+
+        The base class uses ``blocking``/``cli_env_only`` to decide *where*
+        the environment travels: on a blocking run it hands the passthrough
+        variables to :meth:`cli_env_arg`, because for a real scheduler the
+        blocking launch command (``srun``, ``flux run``) is the parallel
+        launcher and carries them. A local job has no launch command at all
+        (:meth:`launch_command` returns ``[]``), so that channel does not
+        exist and the answer is always "write it into the script" -- which is
+        precisely the branch the base class takes for a non-blocking,
+        non-``cli_env_only`` call. Ask it for that branch instead of
+        reimplementing the method; skipping this call entirely is what used
+        to drop the ``-x`` override pass (applied here) under ``--local``.
+
+        :param system: The system to use.
+        :param blocking: Ignored -- see above; a local job answers the
+                         question this parameter asks the same way either
+                         way.
+        :param cli_env_only: Ignored, for the same reason: there is no
+                             command line to put the environment on.
+        :param for_launch_cmd: Passed through unchanged.
+        :return: A tuple of (shell script header as a string, list of
+                 command-line arguments).
+        """
+        (header, cmd_args) = super().build_command_string_and_batch_script(
+            system, blocking=False, cli_env_only=False, for_launch_cmd=for_launch_cmd
+        )
 
         if self.work_dir:
-            # The working directory can carry a user-controlled job name (it is
-            # embedded in an auto-generated folder name), so quote it before it
-            # is interpreted by /bin/sh in the cd.
+            # No scheduler is available to place the job in its working
+            # directory (there is no --chdir/-D to set), so the script does
+            # it. The working directory can carry a user-controlled job name
+            # (it is embedded in an auto-generated folder name), so quote it
+            # before it is interpreted by /bin/sh in the cd.
             header += f"\ncd {shlex.quote(os.path.abspath(self.work_dir))}\n"
 
-        # Quote the command arguments so that values containing shell
-        # metacharacters (spaces, ';', '()', quotes, ...) survive as a single
-        # token rather than being re-interpreted by /bin/sh. Without this the
-        # child's real exit status cannot be observed (e.g. a shell syntax
-        # error would mask it), which defeats exit-code propagation.
-        run_args = " ".join(shlex.quote(a) for a in args)
-
-        return f"""#!/bin/sh
-# Setup
-{header}
-
-# Run
-{command} {run_args}
-"""
+        return (header, cmd_args)
 
     def get_job_id(self, output: str) -> Optional[str]:
         return None
 
     @classmethod
     def get_parallel_configuration(cls) -> tuple[int, int, int, int]:
+        """
+        A local job is always exactly one process: ``--local`` does not spawn
+        the ``-N``/``-n``/``-g`` job size it is given, so this is the true
+        configuration rather than a misreport of a larger one.
+        ``common_args.validate_scheduler_arguments`` warns when a larger size
+        was requested.
+        """
         return 1, 0, 1, 0
 
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:

@@ -17,6 +17,7 @@ Common arguments for CLI utilities.
 import argparse
 from hpc_launcher.schedulers import get_schedulers
 from hpc_launcher.schedulers.scheduler import Scheduler
+from hpc_launcher.schedulers.local import LocalScheduler
 from hpc_launcher.systems.system import System, GenericSystem
 from hpc_launcher.systems import autodetect, configure
 import logging
@@ -24,6 +25,8 @@ import os
 
 from dataclasses import fields
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 class ParseKVAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -498,6 +501,89 @@ def validate_arguments(args: argparse.Namespace):
 
     if args.batch_script and not os.path.exists(args.batch_script):
         raise ValueError(f"A pre-generated batch script file name was provided but the file does not exist.")
+
+
+def requested_process_count(args: argparse.Namespace) -> int:
+    """
+    The number of processes the user's *own* flags ask for, or 0 when they
+    did not say.
+
+    Read this before ``process_arguments``/``configure_launch``, which fill
+    ``args.procs_per_node`` in from the detected system: on a four-GPU node a
+    bare ``-N 1`` resolves to four processes per node. A check keyed on the
+    resolved job size would therefore fire on the most ordinary ``launch
+    --local -N 1`` invocation there is, so the one caller that needs this
+    (:func:`validate_scheduler_arguments`) needs the request, not the
+    resolution.
+
+    :param args: The parsed arguments, before ``process_arguments``.
+    :return: The number of processes requested, or 0 if unspecified.
+    """
+    if args.gpus_at_least:
+        # A minimum accelerator count is one process per accelerator.
+        return args.gpus_at_least
+    if args.nodes:
+        # Without -n the per-node count is whatever the system decides, but
+        # the node count alone already pins a lower bound.
+        return args.nodes * (args.procs_per_node or 1)
+    # --gpumem-at-least resolves entirely from system parameters, so the
+    # request says nothing about the process count on its own.
+    return 0
+
+
+def validate_scheduler_arguments(
+    scheduler: Scheduler,
+    args: argparse.Namespace,
+    requested_procs: int = 0,
+) -> None:
+    """
+    Validation checks that depend on which scheduler was actually selected.
+    Raises exceptions on failure. Call this immediately after
+    ``select_scheduler``, before any launch artifacts are created.
+
+    :func:`validate_arguments` runs before a scheduler exists and can only
+    test the raw flags, which is not enough here: ``--local``, ``--scheduler
+    local``, ``--scheduler LocalScheduler`` and -- on a host with no batch
+    system -- plain autodetection all select the same ``LocalScheduler``, but
+    only the first sets ``args.local``. A guard written against ``args.local``
+    is blind to the other three.
+
+    :param scheduler: The scheduler instance returned by ``select_scheduler``.
+    :param args: The parsed arguments.
+    :param requested_procs: The process count from
+                            :func:`requested_process_count`, captured before
+                            ``process_arguments`` resolved system defaults.
+    """
+    if not isinstance(scheduler, LocalScheduler):
+        return
+
+    # A local "submission" is just running the script: there is no scheduler
+    # to hand it to, and no server-side redirection to point at
+    # out.log/err.log (a real scheduler sets --output/--error on the submit
+    # command for exactly this reason; those files are otherwise only opened
+    # on the blocking path). So --bg would run the job in the foreground,
+    # capture its stdout, and -- on success -- discard it: exit 0, no job ID,
+    # output permanently lost.
+    if args.bg:
+        raise ValueError(
+            f'"--local" jobs cannot be run in the background '
+            f"({type(scheduler).__name__} was selected)"
+        )
+
+    # --local starts exactly one process. It does not spawn -N/-n/-g, and it
+    # cannot: there is no launcher to spawn them with. Saying so is the whole
+    # remedy -- a user smoke-testing a distributed script otherwise gets a
+    # green single-rank run that looks exactly like a passing multi-rank one,
+    # having exercised no rendezvous or collective code path at all.
+    if requested_procs > 1:
+        logger.warning(
+            f'"--local" runs a single process: the requested job size of '
+            f"{requested_procs} processes is not spawned, so nothing "
+            f"distributed is exercised. Drop --local (or select a batch "
+            f"scheduler with --scheduler) to actually run {requested_procs} "
+            f"processes."
+        )
+
 
 # See if the system can be autodetected and then process some special arguments
 # that can autoselect the number of ranks / GPUs

@@ -112,6 +112,12 @@ def main():
     # library, so unless the user asked for "MPI" (validated/uppercased by
     # argparse's --comm-backend choices), fall back to that "*CCL"
     # optimization even when --comm-backend was not given at all.
+    #
+    # The job size the user's own flags ask for is captured first, before
+    # process_arguments resolves it against the detected system, so the
+    # scheduler validation further down can tell "-n 2" apart from "this node
+    # has two GPUs".
+    requested_procs = common_args.requested_process_count(args)
     system = common_args.process_arguments(args, logger)
     if args.job_comm_protocol == "MPI":
         logger.warning(
@@ -121,6 +127,11 @@ def main():
         system.job_comm_protocol = "*CCL"
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
+
+    # Checks that need the resolved scheduler rather than the raw flags:
+    # --scheduler local selects the same LocalScheduler as --local without
+    # setting args.local. Run before any launch artifacts are created.
+    common_args.validate_scheduler_arguments(scheduler, args, requested_procs)
 
     if args.rdv is None:
         # Disable this until further testing

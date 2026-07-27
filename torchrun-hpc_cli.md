@@ -194,8 +194,11 @@ torchrun-hpc -N 1 -n 4 train.py --epochs 100
 # Multi-node training (2 nodes, 4 GPUs each)
 torchrun-hpc -N 2 -n 4 train.py --batch-size 256
 
-# Local testing without scheduler
-torchrun-hpc --local -N 2 -n 2 test_script.py
+# Local testing without a scheduler. Note that --local starts exactly one
+# process no matter what job size is requested, so it smoke-tests startup,
+# imports and single-rank code -- not rendezvous or collectives, which need a
+# second rank. Requesting more than one process prints a warning.
+torchrun-hpc --local -N 1 -n 1 test_script.py
 ```
 
 ### Rendezvous Configuration
@@ -479,7 +482,9 @@ if __name__ == "__main__":
 
 1. **Use MPI rendezvous** (`-r mpi`) for stable HPC environments
 2. **Match processes to GPUs**: Set `-n` equal to GPUs per node
-3. **Test locally first**: Use `--local` flag for debugging
+3. **Test locally first**: Use the `--local` flag for debugging, remembering
+   that it runs a single process regardless of the requested job size --
+   multi-rank behavior still has to be tested under a real scheduler
 4. **Save setup scripts**: Use `--setup-only` to review job configuration
 5. **Monitor GPU memory**: Use `--fraction-max-gpu-mem` to prevent OOM
 6. **Use exclusive nodes** for performance-critical training
