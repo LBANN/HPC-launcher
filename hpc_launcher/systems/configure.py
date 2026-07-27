@@ -13,7 +13,7 @@
 # SPDX-License-Identifier: (Apache-2.0)
 import logging
 from typing import Optional
-from dataclasses import dataclass, fields, asdict
+from dataclasses import dataclass, fields, asdict, replace
 from hpc_launcher.systems import autodetect
 from hpc_launcher.systems.system import System, SystemParams
 from hpc_launcher.utils import ceildiv
@@ -70,6 +70,19 @@ def configure_launch(
             # for the active system params
             system.active_system_params = SystemParams()
             system_params = system.active_system_params()
+        else:
+            # `system_params` may be one of the module-level `SystemParams`
+            # instances that are deliberately reused as the value for many
+            # systems/queues (e.g. `_mi300a_node` backs every queue on
+            # tuolumne, elcap, rzadams and tenaya, plus tioga's `mi300a`
+            # queue). Copy it before the override loop below mutates fields
+            # in place via `__dict__`, so a CLI override for this job can't
+            # corrupt that shared template for every other job that reuses
+            # it for the rest of the process's lifetime (e.g. a test suite,
+            # notebook, or sweep script that calls into the launcher more
+            # than once).
+            system_params = replace(system_params)
+            system.active_system_params = system_params
         for field in fields(system_params):
             if field.name in cli_system_params:
                 system_params.__dict__[field.name] = convert_to_type_of_another(cli_system_params[field.name], system_params.__dict__[field.name])
