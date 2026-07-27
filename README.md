@@ -28,6 +28,22 @@ Or install directly from GitHub:
 pip install git+https://github.com/LBANN/HPC-launcher.git
 ```
 
+GPU vendor management libraries used for autodetecting accelerators
+(`amdsmi` for AMD, `nvidia-ml-py` for NVIDIA) are optional extras rather
+than a default part of the install, since the base install has no way to
+know what hardware the *runtime* machine will have -- only the one it
+happens to be built on. Opt in to the one(s) matching your systems:
+```bash
+pip install hpc-launcher[rocm]
+pip install hpc-launcher[cuda]
+```
+
+`amdsmi` is not version-constrained here, because the version that works is
+the one matching the ROCm install on the machine you *run* on, which the
+package cannot know. If autodetection fails with an `undefined symbol` error
+from `amdsmi`, install the build matching your local ROCm, e.g.
+`pip install 'amdsmi==6.4.2'` for ROCm 6.4.2.
+
 ## Example Usage
 
 Using the launch command to execute a command in parallel
