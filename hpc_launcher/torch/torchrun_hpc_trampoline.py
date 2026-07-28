@@ -102,7 +102,7 @@ def _rank_identity(world_size, rank, local_world_size, local_rank):
     :param local_rank: This process's rank within its node.
     :return: A mapping of environment variable name to value.
     """
-    node_rank = rank // local_world_size if local_world_size else 0
+    node_rank = (rank // local_world_size) if local_world_size else 0
     return {
         "WORLD_SIZE": f"{world_size}",
         "RANK": f"{rank}",

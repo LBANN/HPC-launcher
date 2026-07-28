@@ -221,17 +221,19 @@ def setup_arguments(parser: argparse.ArgumentParser):
         help="Run locally (i.e., one process without a batch " "scheduler)",
     )
 
+    # `choices` makes an unrecognized value a usage error rather than a silent
+    # no-op: the only consumer of this flag (the El Capitan RCCL/AWS-OFI setup)
+    # matches a closed set of spellings and otherwise skips its environment
+    # configuration without any other warning.
     group.add_argument(
         "--comm-backend",
         dest="job_comm_protocol",
         type=str.upper,
         choices=COMM_BACKEND_CHOICES,
         default=None,
-        help="Indicate if the job will primarily use a specific communication protocol and set any relevant environment variables. Case-insensitive; one of MPI or *CCL (NCCL, RCCL). An unrecognized value is a "
-        "usage error rather than a silent no-op, since the only consumer of "
-        "this flag (the El Capitan RCCL/AWS-OFI setup) matches a closed set "
-        "of spellings and otherwise skips its environment configuration "
-        "without any other warning.",
+        help="The communication protocol the job primarily uses, which sets "
+        "any relevant environment variables. Case-insensitive; NCCL and RCCL "
+        "are both spellings of *CCL.",
     )
 
     group.add_argument(

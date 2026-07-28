@@ -76,7 +76,7 @@ async def _run_process(
     err_file: Optional[io.FileIO] = None,
     color_stderr: bool = False,
     buffer_size: int = 32,
-    env: Optional[dict] = None,
+    env: Optional[dict[str, str]] = None,
 ) -> int:
     """
     Runs a process asynchronously and pipes its stdout and stderr to up to two
@@ -191,7 +191,7 @@ def run_process_with_live_output(
     err_file: Optional[io.FileIO] = None,
     color_stderr: bool = False,
     buffer_size: int = 32,
-    env: Optional[dict] = None,
+    env: Optional[dict[str, str]] = None,
 ) -> int:
     """
     Runs a process asynchronously and pipes its stdout and stderr to up to two
