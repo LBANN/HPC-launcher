@@ -65,6 +65,13 @@ def rocm_test_env(monkeypatch, tmp_path):
         "CRAY_LD_LIBRARY_PATH",
     ):
         monkeypatch.delenv(var, raising=False)
+    # TMPDIR gates the MIOpen cache paths (the profile's ``if tmpdir:``), so
+    # pin it instead of inheriting the harness's. Tests that assert those
+    # vars are *present* would otherwise pass or fail purely on whether the
+    # ambient shell happened to export TMPDIR -- set under a scheduler and on
+    # most LC login nodes, unset on a stock CI runner. The two tests that are
+    # specifically about TMPDIR override this explicitly.
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "tmp"))
     _fake_torch(monkeypatch, None)
     root = tmp_path / "rccl-plugins"
     # raising=False: harmless if the constant does not exist.

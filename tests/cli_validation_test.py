@@ -48,6 +48,7 @@ import sys
 import pytest
 
 from hpc_launcher.cli import common_args
+from hpc_launcher.systems.lc import el_capitan_family
 
 from conftest import require_torch
 
@@ -334,8 +335,49 @@ def _nccl_net_plugin_present(launch_dir) -> bool:
     return script.exists() and "NCCL_NET_PLUGIN" in script.read_text()
 
 
+@pytest.fixture
+def el_capitan_rccl_env(monkeypatch, tmp_path):
+    """
+    Pin the two host-dependent inputs to the RCCL/AWS-OFI block so the
+    ``--comm-backend`` tests below assert on the CLI's behaviour rather than
+    on the machine running them.
+
+    ``ElCapitan.environment_variables()`` emits ``NCCL_NET_PLUGIN`` only when
+    a ROCm version resolves *and* an aws-ofi-rccl plugin tree is found for
+    it. Both come from the host: the version from ``torch.version.hip`` or
+    ``ROCM_PATH``, the plugin from ``/collab/usr/global/tools/rccl/$SYS_TYPE``.
+    On an LC MI300A node both are present and these tests passed; on a
+    CPU-only CI runner neither is, so the profile took its "could not
+    determine the ROCm runtime version" path and the tests failed for a
+    reason that has nothing to do with ``--comm-backend``. Point the probe at
+    a scratch tree and pin the version, exactly as
+    ``tests/el_capitan_env_test.py`` does for this same profile.
+
+    The version is pinned by patching ``_rocm_runtime_version`` rather than
+    by faking ``torch`` in ``sys.modules`` (el_capitan_env_test's approach):
+    ``test_launch_and_torchrun_hpc_agree_on_comm_backend`` runs
+    ``torchrun_hpc.main()`` in-process, which needs the real module. Version
+    *resolution* is covered on its own in el_capitan_env_test.py; what these
+    tests need is only that it lands somewhere determinate.
+    """
+    for var in ("NCCL_NET", "NCCL_NET_PLUGIN", "LBANN_USE_THIS_OFI_PLUGIN"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("SYS_TYPE", "test_sys_type")
+    root = tmp_path / "rccl-plugins"
+    (root / "test_sys_type" / "rocm-7.2.0" / "install" / "lib").mkdir(parents=True)
+    monkeypatch.setattr(el_capitan_family, "_AWS_OFI_RCCL_ROOT", str(root))
+    # 7.2 so the >=7.1 branch (the one that sets NCCL_NET_PLUGIN) is taken.
+    monkeypatch.setattr(
+        el_capitan_family,
+        "_rocm_runtime_version",
+        lambda: el_capitan_family._RocmRuntime((7, 2, 0), "test", False),
+    )
+
+
 @pytest.mark.parametrize("backend", ["NCCL", "nccl", "RCCL", "rccl"])
-def test_launch_comm_backend_nccl_and_rccl_agree(monkeypatch, tmp_path, backend):
+def test_launch_comm_backend_nccl_and_rccl_agree(
+    monkeypatch, tmp_path, el_capitan_rccl_env, backend
+):
     """
     ``launch --comm-backend NCCL`` (either case) on an El-Capitan-family
     system must enable the same RCCL/AWS-OFI environment block as
@@ -369,7 +411,9 @@ def test_launch_comm_backend_nccl_and_rccl_agree(monkeypatch, tmp_path, backend)
     )
 
 
-def test_launch_and_torchrun_hpc_agree_on_comm_backend(monkeypatch, tmp_path):
+def test_launch_and_torchrun_hpc_agree_on_comm_backend(
+    monkeypatch, tmp_path, el_capitan_rccl_env
+):
     """
     The core of M2: ``launch`` and ``torchrun-hpc`` must not diverge for the
     same ``--comm-backend`` value.
