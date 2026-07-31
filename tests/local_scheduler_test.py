@@ -12,33 +12,35 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-``LocalScheduler`` regression tests (round 2: O1, O2, M1).
+``LocalScheduler`` regression tests.
 
-These three findings are one defect wearing three hats: ``LocalScheduler``
-overrode the base class wholesale instead of extending it, so every
-guarantee the base grew afterwards was silently dropped for the one backend
-users reach for first when debugging -- and every guard written against
-``args.local`` missed the equivalent ``--scheduler local`` spelling.
+The three defects covered here are one defect wearing three hats:
+``LocalScheduler`` overrode the base class wholesale instead of extending
+it, so every guarantee the base grew afterwards was silently dropped for the
+one backend users reach for first when debugging -- and every guard written
+against ``args.local`` missed the equivalent ``--scheduler local`` spelling.
 
-- **O1** -- ``--local -N 2 -n 2`` runs exactly *one* OS process. That is a
-  spawn limitation, not a misreport: there is no second process anywhere, so
-  nothing distributed is exercised. It cannot be fixed by reporting a
-  different world size, so the launcher must at least say so out loud
-  instead of producing a green single-rank run that looks like a passing
-  two-rank one. The doc example that told users to do exactly this goes with
-  it.
-- **O2** -- the wholesale ``launcher_script`` override never emitted
-  ``export HPC_LAUNCHER_MAX_GPU_MEM`` (so ``--fraction-max-gpu-mem`` was
-  ignored under ``--local`` only) or ``export PYTHONPATH``, and never called
-  ``build_command_string_and_batch_script``, which is where ``-x`` overrides
-  are applied -- so ``-x`` was silently ignored under ``--local`` too.
-- **M1** -- ``validate_arguments`` expressed "``--local`` jobs cannot be run
-  in the background" in terms of ``args.local``, but ``--scheduler local``
-  and ``--scheduler LocalScheduler`` select the *same* ``LocalScheduler``
-  with ``args.local`` False. The guard was blind, the unsupported path ran,
-  and because ``launch_command()`` returns ``[]`` the "submission" was a
-  direct ``subprocess.run(..., capture_output=True)`` whose stdout was
-  written nowhere: no ``out.log``, no job ID, exit 0, output gone.
+- **One process, whatever was requested** -- ``--local -N 2 -n 2`` runs
+  exactly *one* OS process. That is a spawn limitation, not a misreport:
+  there is no second process anywhere, so nothing distributed is exercised.
+  It cannot be fixed by reporting a different world size, so the launcher
+  must at least say so out loud instead of producing a green single-rank run
+  that looks like a passing two-rank one. The doc example that told users to
+  do exactly this goes with it.
+- **A wholesale script override** -- the replaced ``launcher_script`` never
+  emitted ``export HPC_LAUNCHER_MAX_GPU_MEM`` (so ``--fraction-max-gpu-mem``
+  was ignored under ``--local`` only) or ``export PYTHONPATH``, and never
+  called ``build_command_string_and_batch_script``, which is where ``-x``
+  overrides are applied -- so ``-x`` was silently ignored under ``--local``
+  too.
+- **A guard keyed on the flag, not the scheduler** -- ``validate_arguments``
+  expressed "``--local`` jobs cannot be run in the background" in terms of
+  ``args.local``, but ``--scheduler local`` and ``--scheduler
+  LocalScheduler`` select the *same* ``LocalScheduler`` with ``args.local``
+  False. The guard was blind, the unsupported path ran, and because
+  ``launch_command()`` returns ``[]`` the "submission" was a direct
+  ``subprocess.run(..., capture_output=True)`` whose stdout was written
+  nowhere: no ``out.log``, no job ID, exit 0, output gone.
 
 ``--local`` genuinely runs on a login node, so everything here is driven
 through the real CLI entry points and asserts on generated scripts, real
@@ -81,7 +83,7 @@ def _common_args_parser() -> argparse.ArgumentParser:
 
 
 # ---------------------------------------------------------------------------
-# O1 -- --local runs one process, whatever job size was requested
+# --local runs one process, whatever job size was requested
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize(
     "size_flags",
@@ -222,7 +224,7 @@ def test_doc_does_not_advertise_a_multiprocess_local_run():
 
 
 # ---------------------------------------------------------------------------
-# O2 -- the local launcher script must extend the base, not replace it
+# The local launcher script must extend the base, not replace it
 # ---------------------------------------------------------------------------
 def test_local_script_exports_max_gpu_mem(tmp_path):
     """
@@ -308,9 +310,10 @@ def test_local_script_keeps_what_it_legitimately_overrides(tmp_path):
 
 def test_local_end_to_end_delivers_the_launcher_environment(tmp_path):
     """
-    The end-to-end form of O2, through the real CLI: the running process must
-    see the GPU memory cap in its environment and a ``PYTHONPATH`` that lets
-    it import a module sitting next to where the user invoked the launcher.
+    The end-to-end form of the two tests above, through the real CLI: the
+    running process must see the GPU memory cap in its environment and a
+    ``PYTHONPATH`` that lets it import a module sitting next to where the
+    user invoked the launcher.
 
     The probe script deliberately lives *outside* the invocation directory,
     because Python puts a script's own directory on ``sys.path`` -- a probe
@@ -359,7 +362,7 @@ def test_local_end_to_end_delivers_the_launcher_environment(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# M1 -- the background guard must follow the scheduler, not the flag
+# The background guard must follow the scheduler, not the flag
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize(
     "select_flags",

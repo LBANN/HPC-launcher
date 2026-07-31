@@ -237,9 +237,9 @@ def test_nccl_net_plugin_fuzzy_tree_match(monkeypatch, rocm_test_env):
 
 def test_miopen_paths_omitted_without_tmpdir(monkeypatch):
     """
-    N5: without ``TMPDIR`` set (common on a plain login shell -- nothing in
-    this codebase ever sets it), the MIOpen cache-path env vars must be
-    omitted entirely, matching Corona's ``if tmpdir:`` guard
+    Without ``TMPDIR`` set (common on a plain login shell -- nothing in this
+    codebase ever sets it), the MIOpen cache-path env vars must be omitted
+    entirely, matching Corona's ``if tmpdir:`` guard
     (``hpc_launcher/systems/lc/corona.py``) for the identical block. Before
     the fix, ``tmpdir = os.environ.get("TMPDIR")`` was interpolated
     unconditionally into ``f"{tmpdir}/MIOpen_user_db"``, so an unset

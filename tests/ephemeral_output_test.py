@@ -22,11 +22,11 @@ That path used to run the job with a bare
 through ``console_pipe.run_process_with_live_output``. One root cause, three
 user-visible consequences, one per group of tests below:
 
-- (round 2, J4a) nothing reached the terminal until the job exited. A
+- (buffering) nothing reached the terminal until the job exited. A
   multi-hour training run showed a blank terminal for hours, stdout/stderr
   interleaving was lost, and every byte of output accumulated in the
   launcher's RSS.
-- (round 2, J4b) the path skipped ``console_pipe``'s ``start_new_session``
+- (orphaning) the path skipped ``console_pipe``'s ``start_new_session``
   and signal-forwarding machinery, so a SIGTERM to the launcher killed the
   launcher alone and left the scheduler child reparented to PID 1, still
   running and now unkillable by job-cleanup tooling that only knows the
@@ -119,12 +119,12 @@ def _children_of(pid: int) -> list[int]:
 
 
 # ---------------------------------------------------------------------------
-# J4a -- the ephemeral path must stream, not buffer until exit.
+# Buffering -- the ephemeral path must stream, not buffer until exit.
 # ---------------------------------------------------------------------------
 def test_ephemeral_blocking_launch_uses_live_output(monkeypatch, stub_system):
     """
     Structural form of the streaming guarantee, and the primary regression
-    test for J4: an ephemeral blocking launch must be run by
+    test for this path: an ephemeral blocking launch must be run by
     ``console_pipe.run_process_with_live_output`` -- the same machinery the
     ``-l`` path (``scheduler.py``'s ``if blocking:`` branch) already uses --
     rather than by a private ``subprocess.run``.
@@ -260,7 +260,7 @@ def test_ephemeral_output_arrives_before_the_job_exits():
 
 
 # ---------------------------------------------------------------------------
-# J4b -- a SIGTERM to the launcher must not orphan the scheduler child.
+# Orphaning -- a SIGTERM to the launcher must not orphan the scheduler child.
 # ---------------------------------------------------------------------------
 @pytest.mark.skipif(
     not sys.platform.startswith("linux"), reason="uses /proc and ps --ppid"

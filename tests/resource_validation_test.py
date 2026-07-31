@@ -12,27 +12,28 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-Regression tests for round-2 review findings L1/L2/L3, all in
+Regression tests for three resource-validation defects, all in
 ``hpc_launcher/systems/configure.py``:
 
-* L1: the GPU-oversubscription check used to log a message claiming
-  "Job will not launch" at ``logger.info`` (invisible at default
-  verbosity) and then return the uncorrected, oversubscribed
-  configuration anyway -- an outcome the message did not actually
-  enforce. It is now a ``logger.warning`` (visible by default) that no
-  longer asserts an outcome it does not enforce. It deliberately still
-  does *not* raise or silently clamp the values in this specific branch
-  -- see the docstring on ``test_gpu_oversubscription_is_now_a_visible_warning``
-  for why not, which is also the reason this fix is a warning rather
-  than a ``ValueError`` unlike L2 below.
+* **The oversubscription warning.** The GPU-oversubscription check used to
+  log a message claiming "Job will not launch" at ``logger.info``
+  (invisible at default verbosity) and then return the uncorrected,
+  oversubscribed configuration anyway -- an outcome the message did not
+  actually enforce. It is now a ``logger.warning`` (visible by default)
+  that no longer asserts an outcome it does not enforce. It deliberately
+  still does *not* raise or silently clamp the values in this specific
+  branch -- see the docstring on
+  ``test_gpu_oversubscription_is_now_a_visible_warning`` for why not,
+  which is also the reason this fix is a warning rather than a
+  ``ValueError`` unlike the division below.
 
-* L2: ``--gpumem-at-least`` divided by ``system_params.mem_per_gpu``
-  unconditionally, which is exactly ``0`` on the "Generic CPU"
-  autodetect fallback (and on any other GPU-less/unrecognized host),
-  producing a bare ``ZeroDivisionError`` traceback instead of an
-  actionable error.
+* **Dividing by a zero GPU memory size.** ``--gpumem-at-least`` divided by
+  ``system_params.mem_per_gpu`` unconditionally, which is exactly ``0`` on
+  the "Generic CPU" autodetect fallback (and on any other
+  GPU-less/unrecognized host), producing a bare ``ZeroDivisionError``
+  traceback instead of an actionable error.
 
-* L3: CLI ``--system-params``/``-p`` overrides wrote directly into the
+* **Mutating a shared template.** CLI ``--system-params``/``-p`` overrides wrote directly into the
   ``__dict__`` of whatever ``SystemParams`` instance
   ``system.system_parameters()`` returned. Several of those instances
   are module-level singletons deliberately reused as the value for many
@@ -124,7 +125,7 @@ class _MockGenericCpuFallbackSystem(System):
 
 
 # ---------------------------------------------------------------------------
-# L1
+# GPU oversubscription: a visible warning, not an invisible false claim
 # ---------------------------------------------------------------------------
 @patch(
     "hpc_launcher.systems.autodetect.autodetect_current_system",
@@ -132,7 +133,7 @@ class _MockGenericCpuFallbackSystem(System):
 )
 def test_gpu_oversubscription_is_now_a_visible_warning(mock_autodetect, caplog):
     """
-    Reproduces the exact structural shape of the L1 bug: ``gpus_per_proc``
+    Reproduces the exact structural shape of the bug: ``gpus_per_proc``
     is individually valid (<= gpus_per_node), so the auto-correction branch
     at configure.py:112-114 is skipped, but ``procs_per_node * gpus_per_proc``
     still exceeds ``gpus_per_node`` (4 requested vs. 3 available on the
@@ -153,10 +154,9 @@ def test_gpu_oversubscription_is_now_a_visible_warning(mock_autodetect, caplog):
     elsewhere), so raising here -- or silently clamping the values to
     something that fits -- would turn that pre-existing, currently
     green test red with no way to update it. The chosen fix therefore
-    preserves the returned values exactly and only fixes what the
-    defect report calls out as the actual problem: the message must
-    stop claiming an outcome it does not enforce, and it must be visible
-    at default verbosity.
+    preserves the returned values exactly and only fixes the actual
+    problem: the message must stop claiming an outcome it does not
+    enforce, and it must be visible at default verbosity.
     """
     with caplog.at_level(logging.WARNING):
         system, nodes, procs_per_node, gpus_per_proc = configure_launch(
@@ -190,13 +190,13 @@ def test_gpu_oversubscription_is_now_a_visible_warning(mock_autodetect, caplog):
 )
 def test_gpu_per_proc_still_auto_clamped_when_individually_invalid(mock_autodetect):
     """
-    Sanity check that the L1 fix did not touch the pre-existing, legitimate
-    auto-correction path: when ``gpus_per_proc`` is *individually* invalid
+    Sanity check that the warning fix did not touch the pre-existing,
+    legitimate auto-correction path: when ``gpus_per_proc`` is *individually* invalid
     (here, 4 requested but only 3 GPUs/node exist), it is still clamped
     down to fit rather than warned about. This is the same scenario
     ``launch_config_test.py::test_launch_config`` covers ("Ask for too
     many GPUs per proc"); duplicated narrowly here as a fast, local check
-    that the L1 change didn't regress it.
+    that the change didn't regress it.
     """
     system, nodes, procs_per_node, gpus_per_proc = configure_launch(
         None, 2, 1, 4, 0, 0, None
@@ -207,7 +207,7 @@ def test_gpu_per_proc_still_auto_clamped_when_individually_invalid(mock_autodete
 
 
 # ---------------------------------------------------------------------------
-# L2
+# --gpumem-at-least must not divide by a zero GPU memory size
 # ---------------------------------------------------------------------------
 @patch(
     "hpc_launcher.systems.autodetect.autodetect_current_system",
@@ -215,7 +215,7 @@ def test_gpu_per_proc_still_auto_clamped_when_individually_invalid(mock_autodete
 )
 def test_gpumem_at_least_on_gpu_less_host_raises_clean_error(mock_autodetect):
     """
-    Reproduces L2: on a GPU-less/unrecognized host, ``mem_per_gpu`` is
+    The reproducer: on a GPU-less/unrecognized host, ``mem_per_gpu`` is
     exactly ``0``. Before the fix, ``--gpumem-at-least`` unconditionally
     computed ``ceildiv(gpumem_at_least, system_params.mem_per_gpu)``,
     dividing by that zero and raising a bare, unactionable
@@ -236,7 +236,7 @@ def test_gpumem_at_least_on_gpu_less_host_raises_clean_error(mock_autodetect):
 )
 def test_gpumem_at_least_unaffected_on_a_real_gpu_system(mock_autodetect):
     """
-    Sanity check that the L2 guard is scoped to the ``mem_per_gpu == 0``
+    Sanity check that the guard is scoped to the ``mem_per_gpu == 0``
     case and does not disturb ``--gpumem-at-least`` on an ordinary GPU
     system (mem_per_gpu=11 on the mock's "mockq" queue, 3 GPUs/node).
     """
@@ -249,15 +249,15 @@ def test_gpumem_at_least_unaffected_on_a_real_gpu_system(mock_autodetect):
 
 
 # ---------------------------------------------------------------------------
-# L3
+# -p overrides must not mutate a shared SystemParams template
 # ---------------------------------------------------------------------------
 @patch("hpc_launcher.systems.autodetect.autodetect_current_system")
 def test_system_params_cli_override_does_not_mutate_shared_template(
     mock_autodetect,
 ):
     """
-    Reproduces L3 with the real, in-repo shared instance the review report
-    names: ``_mi300a_node`` in ``el_capitan_family.py`` is a single
+    Reproduces the bug against a real, in-repo shared instance:
+    ``_mi300a_node`` in ``el_capitan_family.py`` is a single
     module-level ``SystemParams`` object reused as the value for pbatch and
     pdebug on tuolumne, elcap, rzadams and tenaya, *and* tioga's mi300a
     queue (``ElCapitan._system_params``, `el_capitan_family.py:157-203`).
@@ -286,7 +286,7 @@ def test_system_params_cli_override_does_not_mutate_shared_template(
         assert system1.active_system_params.fraction_max_gpu_mem == 0.111
 
         # The shared module-level template itself must be untouched --
-        # this is the actual corruption the report describes.
+        # mutating it is the actual corruption.
         assert _mi300a_node.fraction_max_gpu_mem == original_fraction, (
             "a --system-params override for one job mutated the shared "
             "_mi300a_node singleton in place; it also backs elcap, "

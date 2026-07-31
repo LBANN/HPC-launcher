@@ -150,8 +150,8 @@ def test_batch_submission_stderr_is_not_a_failure(
     stderr. The non-blocking path used to treat any non-empty stderr as an
     error (``if process.returncode or process.stderr``), which produced the
     self-contradictory "exited with error code 0", skipped ``get_job_id``,
-    discarded the submit command's stdout entirely, and -- once the C1 fix
-    added ``returncode or 1`` -- made ``launch --bg`` exit 1.
+    discarded the submit command's stdout entirely, and -- once the
+    exit-code fix added ``returncode or 1`` -- made ``launch --bg`` exit 1.
 
     The damage is not cosmetic: the job really is queued and consuming
     allocation, but its ID is never reported, so it cannot be cancelled,
@@ -185,8 +185,8 @@ def test_batch_submission_failure_reports_failure(
     tmp_path, monkeypatch, stub_system, capfd
 ):
     """
-    The C1 invariant, which the stderr fix must not undo: a submit command
-    that exits non-zero must report failure, with a non-``None`` non-zero
+    The exit-code invariant, which the stderr fix must not undo: a submit
+    command that exits non-zero must report failure, with a non-``None`` non-zero
     return code (``LaunchResult.returncode`` of ``None`` means "submitted,
     still running" and makes the CLI exit 0), and no job ID.
 

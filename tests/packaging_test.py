@@ -12,8 +12,9 @@
 #
 # SPDX-License-Identifier: (Apache-2.0)
 """
-Regression coverage for Q1: ``setup.py`` used to probe the *build* machine
-for GPU vendor libraries (``ctypes.util.find_library("amdhip64")`` /
+Regression coverage for build reproducibility: ``setup.py`` used to probe
+the *build* machine for GPU vendor libraries
+(``ctypes.util.find_library("amdhip64")`` /
 ``("cudart")``) and fold the matching hard dependency (``amdsmi`` /
 ``nvidia-ml-py``) straight into ``install_requires``. That means the exact
 same source tree produces a *different* wheel depending on whether it was
@@ -90,7 +91,7 @@ def _load_setup_kwargs(monkeypatch, tmp_path, *, amdhip64: str | None,
 
 def test_install_requires_is_independent_of_build_host(monkeypatch, tmp_path):
     """
-    The reproducer for Q1: ``install_requires`` must be identical no
+    The reproducer: ``install_requires`` must be identical no
     matter which GPU vendor libraries (if any) happen to be present on
     the machine running ``setup.py``. Before the fix, an AMD build host
     got ``amdsmi`` baked in, an NVIDIA build host got ``nvidia-ml-py``,

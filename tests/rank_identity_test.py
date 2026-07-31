@@ -14,12 +14,12 @@
 """
 Rank identity must be published by the component that knows it.
 
-Round-2 review findings K1, K2 and K3 are three faces of one mistake: the
-generated shell script published rank identity, and the script does not always
-run where a rank exists.
+The defects below are three faces of one mistake: the generated shell script
+published rank identity, and the script does not always run where a rank
+exists.
 
-- **K1** -- ``export RANK=${SLURM_PROCID}`` was written into the *batch*
-  script for a ``--bg`` submission. That script runs once, at allocation
+- **``RANK``** -- ``export RANK=${SLURM_PROCID}`` was written into the
+  *batch* script for a ``--bg`` submission. That script runs once, at allocation
   scope, before ``srun``/``flux run`` ever forks a task, so the value was
   frozen and inherited unchanged by every task: ``0`` under Slurm (whose
   batch step really is a one-task step with ``SLURM_PROCID=0``), empty under
@@ -29,17 +29,18 @@ run where a rank exists.
   N-way concurrent write to one path. The same line was also expanded on the
   *launch host* for the ephemeral CLI-env path, where the scheduler's rank
   variable is not set at all.
-- **K1's ``--save-hostlist`` half** -- the ``if [ "${RANK}" = "0" ]`` guard was
+- **``--save-hostlist``, which depends on ``RANK``** -- the
+  ``if [ "${RANK}" = "0" ]`` guard was
   evaluated in that same batch scope. Under Slurm it saw ``0`` and the file was
   written by luck; under Flux and LSF it compared ``""`` to ``"0"`` and the
   hostlist file was silently never created.
-- **K2** -- ``LOCAL_RANK`` was set to ``local_rank % len(visible_devices)``, a
+- **``LOCAL_RANK``** -- it was set to ``local_rank % len(visible_devices)``, a
   *device index*. The launcher always passes ``--gpus-per-task`` (default 1),
   so each task sees exactly one device and every rank on the node reported
   ``LOCAL_RANK=0``. Note that the round-robin device *selection* is correct
   and deliberately unchanged (see ``gpu_visibility_test.py``); only its reuse
   as an identity was wrong.
-- **K3** -- ``NODE_RANK`` was documented and set nowhere.
+- **``NODE_RANK``** -- documented, and set nowhere.
 
 The fix moves all of it into ``torchrun_hpc_trampoline``, which is executed
 once per task by construction and already computes the rank it hands to
@@ -103,7 +104,7 @@ def _torchrun_style_script(scheduler_cls, blocking, launch_dir,
 
 
 # ---------------------------------------------------------------------------
-# K1 -- the generated script must not publish a rank it cannot know
+# The generated script must not publish a rank it cannot know
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("scheduler_cls",
                          [SlurmScheduler, FluxScheduler, LSFScheduler])
@@ -227,7 +228,7 @@ def test_ephemeral_cli_env_does_not_pin_a_launch_host_rank(scheduler_cls,
 
 
 # ---------------------------------------------------------------------------
-# K1 -- the same thing, demonstrated by executing the generated script
+# The same thing, demonstrated by executing the generated script
 # ---------------------------------------------------------------------------
 _STUB_TASK_LOOP = """\
 i=0
@@ -515,11 +516,11 @@ def _run_trampoline(monkeypatch, tmp_path, *, world_size, rank,
 
 def test_trampoline_overrides_a_frozen_batch_scope_rank(monkeypatch, tmp_path):
     """
-    K1, from the task's side. Model a job whose batch script left
-    ``RANK=0`` in the environment of all four tasks (Slurm's behaviour), and
-    check that the rank each task's script finally reads is its own.
+    The frozen ``RANK``, from the task's side. Model a job whose batch script
+    left ``RANK=0`` in the environment of all four tasks (Slurm's behaviour),
+    and check that the rank each task's script finally reads is its own.
 
-    This is the half of K1 the trampoline owns: it already computes this rank
+    This is the half the trampoline owns: it already computes this rank
     and hands it to ``init_process_group``, so publishing it costs nothing and
     is correct on every scheduler and both launch paths.
     """
@@ -535,7 +536,7 @@ def test_trampoline_overrides_a_frozen_batch_scope_rank(monkeypatch, tmp_path):
 def test_local_rank_is_the_node_local_rank_not_a_device_index(
         local_rank, monkeypatch, tmp_path):
     """
-    K2. A single visible device is the *default* configuration, not an edge
+    A single visible device is the *default* configuration, not an edge
     case: the launcher always passes ``--gpus-per-task`` (default 1) and the
     scheduler confines each task to its own GPU, so
     ``local_rank % len(visible)`` is ``0`` for every rank on the node.
@@ -600,7 +601,7 @@ def test_device_index_and_local_rank_are_independent(monkeypatch, tmp_path):
 def test_node_rank_is_published(world_size, rank, local_world_size, expected,
                                 monkeypatch, tmp_path):
     """
-    K3. ``NODE_RANK`` was documented in ``torchrun-hpc_cli.md`` and set
+    ``NODE_RANK`` was documented in ``torchrun-hpc_cli.md`` and set
     nowhere, so a script written against the documented contract -- or a
     HuggingFace/DeepSpeed-style script that expects it next to
     ``RANK``/``LOCAL_RANK`` -- died with a ``KeyError`` at startup. Both

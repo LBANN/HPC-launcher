@@ -14,7 +14,7 @@
 """
 Regression tests for the Sierra family's CPU-affinity binding.
 
-N4: ``Sierra.customize_scheduler()`` computed the jsrun ``--bind=packed:N``
+``Sierra.customize_scheduler()`` computed the jsrun ``--bind=packed:N``
 value from a hardcoded local ``procs_per_node = 2``, instead of the live
 ``scheduler.procs_per_node`` that ``LSFScheduler`` itself reads one line
 away (in ``build_scheduler_specific_arguments``) for ``--tasks_per_rs``.
@@ -81,7 +81,7 @@ def test_default_procs_per_node_is_four():
 
 def test_bind_packed_matches_default_procs_per_node(monkeypatch, tmp_path):
     """
-    The N4 reproducer: a default (no ``--procs-per-node`` override) Sierra
+    The reproducer: a default (no ``--procs-per-node`` override) Sierra
     job requests 4 procs/node. The jsrun line must bind
     ``packed:8`` (16 cores/socket over 2 procs/socket) -- matching
     ``--tasks_per_rs=4`` -- not the old hardcoded ``packed:16``, which

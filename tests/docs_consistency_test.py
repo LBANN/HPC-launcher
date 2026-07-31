@@ -13,20 +13,19 @@
 # SPDX-License-Identifier: (Apache-2.0)
 """
 Mechanically checks documentation claims in ``launch_cli.md`` and
-``torchrun-hpc_cli.md`` against the behavior they describe (round 2 review
-findings R1-R4).
+``torchrun-hpc_cli.md`` against the behavior they describe.
 
-Each finding gets two kinds of test, and the distinction matters:
+Each documented claim gets two kinds of test, and the distinction matters:
 
 - A *code-behavior* test that pins down what the CLI actually does. These do
   not change: the fixes in this batch are doc-only (plus a help-string
   wording fix in ``common_args.py`` that changes no behavior), so these tests
   pass both before and after the fix -- they are characterization tests, not
   regression reproducers.
-- A *doc-text* test that inspects the ``.md`` files (and, for R4, the
-  argparse ``help=`` string) directly. These fail against the original,
-  incorrect documentation and pass once the docs are corrected -- they are
-  genuine reproducers for the documentation bug.
+- A *doc-text* test that inspects the ``.md`` files (and, for the
+  ``--save-hostlist`` claim, the argparse ``help=`` string) directly. These
+  fail against the original, incorrect documentation and pass once the docs
+  are corrected -- they are genuine reproducers for the documentation bug.
 """
 import argparse
 import os
@@ -53,7 +52,7 @@ def _read(path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# R1 -- --batch-script is documented for torchrun-hpc but cannot be invoked.
+# --batch-script is documented for torchrun-hpc but cannot be invoked.
 # ---------------------------------------------------------------------------
 def test_batch_script_is_not_invocable_on_torchrun_hpc():
     """
@@ -68,7 +67,7 @@ def test_batch_script_is_not_invocable_on_torchrun_hpc():
     ``--batch-script`` to ``torchrun-hpc`` and have it accepted: giving both
     a command and ``--batch-script`` is a ``ValueError``, and omitting the
     command to avoid that is a hard argparse error ("required: command").
-    This pins the code side of R1 exactly as reproduced in the review.
+    This pins down that code-side behavior.
     """
     # --batch-script together with a command: rejected deep inside
     # validate_arguments with a raw ValueError/traceback, not a clean CLI
@@ -117,7 +116,7 @@ def test_torchrun_hpc_doc_does_not_advertise_batch_script():
 
 
 # ---------------------------------------------------------------------------
-# R2 -- "--launch-dir not set + blocking job -> no files" is false for
+# "--launch-dir not set + blocking job -> no files" is false for
 # torchrun-hpc.
 # ---------------------------------------------------------------------------
 def test_torchrun_hpc_blocking_without_launch_dir_still_creates_a_folder(tmp_path):
@@ -156,8 +155,8 @@ def test_launch_blocking_without_launch_dir_creates_no_files(tmp_path):
     Contrast case, also a characterization test: the equivalent ``launch``
     invocation (blocking, no ``-l``, no ``--bg``, no ``--batch-script``)
     genuinely creates nothing, which is what the shared bullet list
-    describes correctly for ``launch`` -- R2 is specifically about the
-    bullet list being wrong for ``torchrun-hpc``, not for ``launch``.
+    describes correctly for ``launch`` -- the bullet list is wrong for
+    ``torchrun-hpc`` only.
     """
     before = set(os.listdir(tmp_path))
     proc = subprocess.run(
@@ -188,8 +187,8 @@ def test_torchrun_hpc_doc_launch_dir_bullets_do_not_claim_no_files_when_blocking
 
 
 # ---------------------------------------------------------------------------
-# R3 -- "--launch-dir not set + non-blocking -> current directory"
-# contradicts the --bg row above it.
+# "--launch-dir not set + non-blocking -> current directory" contradicts the
+# --bg row above it.
 # ---------------------------------------------------------------------------
 def test_launch_bg_without_launch_dir_uses_timestamped_dir_not_cwd(tmp_path):
     """
@@ -243,7 +242,7 @@ def test_launch_doc_launch_dir_bullets_do_not_claim_cwd_for_non_blocking():
 
 
 # ---------------------------------------------------------------------------
-# R4 -- -v/--verbose claims to save the hostlist; nothing implements it.
+# -v/--verbose claims to save the hostlist; nothing implements it.
 # ---------------------------------------------------------------------------
 def test_verbose_alone_does_not_save_hostlist(tmp_path):
     """

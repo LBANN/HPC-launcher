@@ -25,18 +25,17 @@ CLI validation and usability regression tests.
   raising ``shutil.SameFileError``.
 - A relative-path argument that would not resolve from the launch directory
   produces a warning.
-- (round 2, M2) ``--comm-backend`` validates and normalizes case-insensitively
-  in one place shared by ``launch`` and ``torchrun-hpc``, so the two CLIs
-  agree on what a given value means instead of ``launch`` silently
-  forwarding an unrecognized value into a consumer that ignores it.
-- (round 2, M4) ``torchrun-hpc --dry-run`` must not write (or clobber) the
-  trampoline file.
-- (round 2, M5) ``--out``/``--err`` with a directory component is a clean
-  validation error, not an uncaught ``FileNotFoundError`` with a half-built
-  launch directory left behind.
-- (round 2, M3) ``--out`` and ``--err`` naming the same file is a clean
-  validation error, instead of being accepted and then silently reduced to
-  one of the two streams.
+- ``--comm-backend`` validates and normalizes case-insensitively in one
+  place shared by ``launch`` and ``torchrun-hpc``, so the two CLIs agree on
+  what a given value means instead of ``launch`` silently forwarding an
+  unrecognized value into a consumer that ignores it.
+- ``torchrun-hpc --dry-run`` must not write (or clobber) the trampoline file.
+- ``--out``/``--err`` with a directory component is a clean validation
+  error, not an uncaught ``FileNotFoundError`` with a half-built launch
+  directory left behind.
+- ``--out`` and ``--err`` naming the same file is a clean validation error,
+  instead of being accepted and then silently reduced to one of the two
+  streams.
 """
 import argparse
 import importlib
@@ -285,7 +284,7 @@ def test_no_relative_arg_warning_when_launch_dir_is_cwd(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# M2 -- --comm-backend must validate and normalize case-insensitively, in one
+# --comm-backend must validate and normalize case-insensitively, in one
 # place shared by `launch` and `torchrun-hpc`.
 # ---------------------------------------------------------------------------
 def _run_main_el_capitan(monkeypatch, tmp_path, module_name, argv,
@@ -297,9 +296,10 @@ def _run_main_el_capitan(monkeypatch, tmp_path, module_name, argv,
     ``tests/system_autodetect_test.py`` uses for every El-Capitan-family
     test.
 
-    In-process rather than ``subprocess`` is required specifically here:
-    M2's bug only shows up once ``ElCapitan.environment_variables()`` runs
-    (it is the sole consumer of ``job_comm_protocol``), and a *subprocess*'s
+    In-process rather than ``subprocess`` is required specifically here: the
+    ``--comm-backend`` bug only shows up once
+    ``ElCapitan.environment_variables()`` runs (it is the sole consumer of
+    ``job_comm_protocol``), and a *subprocess*'s
     hostname cannot be patched from the parent test process the way
     ``sys.argv`` can be -- ``socket.gethostname()`` is a real syscall
     wrapper that ignores both monkeypatching done in another process and the
@@ -415,8 +415,8 @@ def test_launch_and_torchrun_hpc_agree_on_comm_backend(
     monkeypatch, tmp_path, el_capitan_rccl_env
 ):
     """
-    The core of M2: ``launch`` and ``torchrun-hpc`` must not diverge for the
-    same ``--comm-backend`` value.
+    The core of the shared-validation fix: ``launch`` and ``torchrun-hpc``
+    must not diverge for the same ``--comm-backend`` value.
 
     Before the fix, ``launch --comm-backend NCCL`` produced a script missing
     the RCCL/AWS-OFI block (see
@@ -519,7 +519,7 @@ def test_comm_backend_invalid_value_rejected_by_torchrun_hpc(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# M4 -- torchrun-hpc --dry-run must not write (or clobber) the trampoline.
+# torchrun-hpc --dry-run must not write (or clobber) the trampoline.
 # ---------------------------------------------------------------------------
 def test_dry_run_does_not_write_or_clobber_trampoline(tmp_path):
     """
@@ -590,9 +590,8 @@ def test_dry_run_does_not_create_trampoline_when_absent(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# M5 -- --out/--err with a directory component must be a clean validation
-# error, not an uncaught FileNotFoundError with a half-built launch dir left
-# behind.
+# --out/--err with a directory component must be a clean validation error,
+# not an uncaught FileNotFoundError with a half-built launch dir left behind.
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("flag", ["--out", "--err"])
 def test_out_err_with_directory_component_is_clean_error(tmp_path, flag):
@@ -634,8 +633,8 @@ def test_out_err_with_directory_component_is_clean_error(tmp_path, flag):
 
 
 # ---------------------------------------------------------------------------
-# M3 -- --out and --err resolving to the same path must be rejected, not
-# silently reduced to one of the two streams.
+# --out and --err resolving to the same path must be rejected, not silently
+# reduced to one of the two streams.
 # ---------------------------------------------------------------------------
 def test_out_and_err_at_the_same_path_are_rejected(tmp_path):
     """

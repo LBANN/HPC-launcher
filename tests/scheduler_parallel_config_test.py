@@ -103,7 +103,7 @@ def test_flux_local_world_size_truncates_on_uneven_distribution(monkeypatch):
     division for the identical reason, and its only existing test
     (``trampoline_device_test.py::test_cpu_gloo_two_ranks_init``) uses 2
     tasks on 1 node, which divides evenly and never exercises this edge.
-    Recorded here as a finding, not fixed here: whether an uneven split
+    Recorded here, not fixed here: whether an uneven split
     should raise instead of truncating is a design decision for the
     schedulers generally, not something to change under one backend as a
     side effect of adding coverage.

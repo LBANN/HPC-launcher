@@ -231,7 +231,7 @@ def test_primary_device_index_in_range(visible, local_rank, expected,
 def test_local_rank_is_not_the_primary_device_index(tmp_path):
     """
     The primary device index and ``LOCAL_RANK`` are different quantities and
-    must not collapse into one (round-2 review K2).
+    must not collapse into one.
 
     Round-robin selection over the visible list is correct -- that is what
     ``test_primary_device_index_in_range`` above pins -- but with the
