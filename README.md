@@ -38,11 +38,20 @@ pip install hpc-launcher[rocm]
 pip install hpc-launcher[cuda]
 ```
 
-`amdsmi` is not version-constrained here, because the version that works is
-the one matching the ROCm install on the machine you *run* on, which the
-package cannot know. If autodetection fails with an `undefined symbol` error
-from `amdsmi`, install the build matching your local ROCm, e.g.
-`pip install 'amdsmi==6.4.2'` for ROCm 6.4.2.
+`amdsmi` is not version-constrained by `[rocm]`, because the version that
+works is the one matching the ROCm install on the machine you *run* on,
+which the package cannot know. When installing from source *on* the machine
+you will run on, use `[rocm-auto]` instead -- it reads the local ROCm
+version (`$ROCM_PATH/.info/version`, default `/opt/rocm`) at install time
+and constrains `amdsmi` to the closest release PyPI offers:
+```bash
+pip install 'hpc-launcher[rocm-auto] @ git+https://github.com/LBANN/HPC-launcher.git'
+```
+(`[rocm-auto]` only helps for source installs: a pre-built wheel's
+dependency metadata is frozen on the machine that built it.) If
+autodetection fails with an `undefined symbol` error from `amdsmi`, install
+the build matching your local ROCm, e.g. `pip install 'amdsmi~=6.4.2'` for
+ROCm 6.4.2.
 
 ## Example Usage
 

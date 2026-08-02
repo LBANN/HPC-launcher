@@ -28,6 +28,7 @@ simulated build hosts -- AMD-only, NVIDIA-only, and CPU-only -- and check
 that the computed package metadata does not depend on which one it was.
 """
 import importlib.util
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -145,6 +146,14 @@ def test_gpu_extras_available_regardless_of_build_host(monkeypatch, tmp_path):
     library, a wheel built on a CPU-only CI runner would ship an empty
     (uninstallable-as-intended) ``[rocm]``/``[cuda]`` extra, which just
     relocates the non-reproducibility bug instead of fixing it.
+
+    One deliberate carve-out from strict host-independence: the *version
+    pin* on amdsmi may follow the system ROCm release, because an amdsmi
+    that doesn't match the ROCm runtime it talks to is broken at runtime
+    (amdsmi_pin_test.py covers that behavior, including the
+    HPC_LAUNCHER_UNPINNED_AMDSMI escape hatch for wheel builds). The
+    *presence* of the extras and their package sets must still never
+    depend on the build host.
     """
     cpu_only_host = _load_setup_kwargs(
         monkeypatch, tmp_path, amdhip64=None, cudart=None
@@ -154,8 +163,16 @@ def test_gpu_extras_available_regardless_of_build_host(monkeypatch, tmp_path):
         rocm_version="6.4.2",
     )
 
+    def package_names(extras_require):
+        return {
+            extra: sorted(re.split(r"[=<>!~\[; ]", dep, maxsplit=1)[0] for dep in deps)
+            for extra, deps in extras_require.items()
+        }
+
     extras_require = cpu_only_host["extras_require"]
-    assert extras_require == amd_host["extras_require"]
+    assert package_names(extras_require) == package_names(
+        amd_host["extras_require"]
+    )
     assert any("amdsmi" in dep.lower() for dep in extras_require.get("rocm", [])), (
         "extras_require['rocm'] should carry amdsmi regardless of the build "
         "host's detected GPU vendor"

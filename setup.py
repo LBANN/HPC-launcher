@@ -2,52 +2,44 @@ import os
 import re
 from setuptools import find_packages, setup
 
-def get_torch_rocm_version():
-    """ROCm version the PyTorch in this environment was built against.
+def get_rocm_version():
+    """Detect the ROCm version installed on this system."""
+    rocm_path = os.environ.get('ROCM_PATH', '/opt/rocm')
+    version_file = os.path.join(rocm_path, '.info', 'version')
 
-    Returns None when torch is absent or is a CPU/CUDA build, so the
-    caller can leave amdsmi unpinned.
-    """
-    try:
-        from importlib.metadata import version as pkg_version
-        torch_version = pkg_version("torch")
-    except Exception:
-        return None
-
-    # ROCm wheels carry a local version tag, e.g. "2.4.1+rocm6.2"
-    match = re.search(r'\+rocm(\d+\.\d+(?:\.\d+)?)', torch_version)
-    if match:
-        return match.group(1)
-
-    # Source builds lack the tag; torch.version.hip is e.g.
-    # "6.2.41133-dd7f9576" where only major.minor identify the ROCm release
-    try:
-        import torch
-        hip_version = getattr(torch.version, "hip", None)
-        if hip_version:
-            match = re.match(r'\d+\.\d+', hip_version)
+    if os.path.exists(version_file):
+        with open(version_file) as f:
+            # Extract major.minor.patch
+            match = re.match(r'\d+\.\d+\.\d+', f.read().strip())
             if match:
                 return match.group(0)
-    except Exception:
-        pass
 
     return None
 
 def amdsmi_requirement():
-    """Pin amdsmi to the ROCm release PyTorch uses, when known."""
-    rocm_version = get_torch_rocm_version()
+    """Best-effort amdsmi pin for the [rocm-auto] extra.
+
+    Pins as close to this machine's ROCm release as PyPI allows. amdsmi's
+    release history has gaps (e.g. no 6.2.3, and 6.2.2 exists only as
+    6.2.2.post0) and lags GitHub/ROCm (nothing past 7.0.x while ROCm 7.2
+    ships), so an exact ``==`` pin can be unsatisfiable even for a real
+    ROCm release. Instead:
+
+    - ROCm < 7: ``~=X.Y.Z`` -- the newest release of the system's
+      major.minor at or above its patch level (post-releases included).
+    - ROCm >= 7: ``>=X,<X.(minor+1)`` -- the newest release in the major
+      that doesn't exceed the system's minor.
+
+    Returns an unpinned ``amdsmi`` when no system ROCm is found.
+    """
+    rocm_version = get_rocm_version()
     if not rocm_version:
         return "amdsmi"
 
-    parts = rocm_version.split('.')
-    major, minor = int(parts[0]), int(parts[1])
-    # Releases of amdsmi on PyPI lag the GitHub/ROCm releases, so for
-    # ROCm >= 7 accept anything in the major up through torch's release
+    major, minor, _ = (int(p) for p in rocm_version.split('.'))
     if major >= 7:
         return f"amdsmi>={major},<{major}.{minor + 1}"
-    if len(parts) >= 3:
-        return f"amdsmi=={rocm_version}"
-    return f"amdsmi=={major}.{minor}.*"
+    return f"amdsmi~={rocm_version}"
 
 with open("README.md", "r") as fp:
     long_description = fp.read()
@@ -67,10 +59,14 @@ with open(os.path.join("hpc_launcher", "version.py"), "r") as fp:
 # unconditionally, exactly like the torch/mpi/testing groups below --
 # users opt in with `pip install hpc-launcher[rocm]` / `[cuda]`.
 #
-# The [rocm] extra does inspect the *Python environment* (not the
-# hardware): amdsmi only talks to the ROCm runtime PyTorch loads, so if
-# a ROCm build of torch is already installed the pin follows its ROCm
-# release. With no torch, or a CPU/CUDA torch, amdsmi stays unpinned.
+# [rocm-auto] is the one deliberate exception: it probes the machine
+# running pip ($ROCM_PATH/.info/version) and pins amdsmi as close to
+# that ROCm release as PyPI allows, because an amdsmi that doesn't match
+# the ROCm runtime it talks to is broken at runtime. Users installing
+# from source on the machine they'll run on can pick it for the right
+# pin automatically; everyone else ([rocm], and any published wheel,
+# whose metadata is frozen at build time) gets unpinned amdsmi and can
+# pin by hand per the README.
 setup(
     name="hpc-launcher",
     version=version,
@@ -99,7 +95,8 @@ setup(
         "mpi": ["mpi4py>=3.1.4", "mpi_rdv"],
         "testing": ["pytest"],
         "e2e_testing": ["accelerate"],
-        "rocm": [amdsmi_requirement()],
+        "rocm": ["amdsmi"],
+        "rocm-auto": [amdsmi_requirement()],
         "cuda": ["nvidia-ml-py"],
     },
 )
