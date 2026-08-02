@@ -27,10 +27,24 @@ full device list, picks the same first entry, and the whole node computes on
 one physical GPU -- with collectives failing on duplicate devices and that GPU
 taking N times the memory pressure.
 
-The import path is accelerator-free today, so these tests assert that
-structural property directly rather than trying to observe the (hardware- and
+The import path is accelerator-free today, so the test below asserts that
+structural property directly -- that the import touches nothing under
+``torch.cuda`` at all -- rather than trying to observe the (hardware- and
 vendor-dependent) pinning it would cause. Re-introducing an import-time probe
-such as ``torch.cuda.is_available()`` fails them immediately.
+such as ``torch.cuda.is_available()`` fails it immediately.
+
+An earlier version of this file also asserted
+``torch.cuda.is_initialized() is False`` after a real import, on the theory
+that this was the more direct, hardware-level check. It was removed: on this
+ROCm build ``is_initialized()`` tracks only torch's own ``_lazy_init``, not
+whether the HIP runtime has actually latched the visible-device list, so it
+stayed ``False`` in both a clean import and one carrying the historical
+``torch.cuda.is_available()`` bug this file guards against (verified with
+``ctypes`` calls directly against ``libamdhip64.so``, and by re-introducing
+that exact bug and observing this quantity fail to move). It also ran only
+where a CUDA/HIP build of torch was importable, i.e. never in CI. The
+recorder-based test below is strictly stronger: it is vendor-agnostic, needs
+no accelerator or torch build at all, and does catch that bug.
 """
 import json
 import os
@@ -38,8 +52,6 @@ import subprocess
 import sys
 
 import pytest
-
-from conftest import require_torch
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -139,47 +151,4 @@ def test_import_does_not_touch_cuda(module, tmp_path):
         f"importing {module} touched {cuda_touches}; accelerator calls on the "
         "import path initialize the CUDA/HIP runtime before per-worker GPU "
         "visibility can be narrowed, which pins every worker to one GPU"
-    )
-
-
-def test_import_leaves_cuda_runtime_uninitialized(tmp_path):
-    """
-    The same guarantee, measured against the real torch: after importing the
-    package the CUDA/HIP runtime must still be uninitialized, so a caller can
-    change ``*_VISIBLE_DEVICES`` afterwards and have it take effect.
-
-    On a host with no accelerator this can only ever pass, which is why the
-    recorder-based test above is the portable guard; this one is what actually
-    bites on a GPU node.
-    """
-    require_torch()
-
-    script = tmp_path / "check_init.py"
-    script.write_text(
-        "import json\n"
-        "import sys\n"
-        "import hpc_launcher.torch\n"
-        "import torch\n"
-        "state = {'initialized': torch.cuda.is_initialized(),\n"
-        "         'available': torch.cuda.is_available()}\n"
-        "with open(sys.argv[1], 'w') as fh:\n"
-        "    json.dump(state, fh)\n"
-    )
-    result_file = tmp_path / "state.json"
-
-    env = os.environ.copy()
-    env["PYTHONPATH"] = REPO_ROOT + os.pathsep + env.get("PYTHONPATH", "")
-
-    proc = subprocess.run(
-        [sys.executable, str(script), str(result_file)],
-        env=env,
-        capture_output=True,
-        universal_newlines=True,
-    )
-    assert proc.returncode == 0, f"{proc.stdout}\n{proc.stderr}"
-
-    state = json.loads(result_file.read_text())
-    assert state["initialized"] is False, (
-        "importing hpc_launcher.torch initialized the CUDA/HIP runtime; any "
-        "later narrowing of *_VISIBLE_DEVICES is then ignored"
     )

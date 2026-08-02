@@ -304,10 +304,21 @@ class Scheduler:
         header.write("#!/bin/sh\n")
         cmd_args = []
 
-        self.build_scheduler_specific_arguments(system, blocking)
-
-        # Enable the system to apply some customization to the scheduler instance
+        # Enable the system to apply some customization to the scheduler
+        # instance. This has to happen *before* the arguments are built:
+        # ``customize_scheduler`` is the only producer of scheduler fields such
+        # as ``ld_preloads`` (set from ``LBANN_USE_THIS_RCCL``), and
+        # ``build_scheduler_specific_arguments`` is what turns them into
+        # ``--env=LD_PRELOAD`` / ``--export=ALL,LD_PRELOAD``. With the calls the
+        # other way around the field was still None when it was read, so a
+        # blocking launch silently dropped the preload -- while ``--bg``
+        # appeared to work, because ``launcher_script`` makes a second pass over
+        # the same instance. The customizations that are *dict* edits
+        # (``common_launch_args`` and friends) always survived either order,
+        # since ``launch_command`` consumes those dicts itself.
         system.customize_scheduler(self)
+
+        self.build_scheduler_specific_arguments(system, blocking)
 
         if self.override_launch_args:
             for k,v in self.override_launch_args.items():
@@ -364,15 +375,28 @@ class Scheduler:
                     f"{prefix} " + " ".join(self.format_common_arg(k, v, quote_value=True)) + "\n"
                 )
 
+        # ``cli_env_only`` means the caller will not be writing a launch script
+        # we control -- an ephemeral run, or a user-supplied ``--batch-script``
+        # that must be copied verbatim -- so the scheduler command line is the
+        # only channel the environment has. That is true regardless of whether
+        # the job blocks: gating this on ``blocking`` as well meant a
+        # non-blocking immutable-script submission (``--batch-script`` with
+        # ``--bg``) fell through to the ``else`` branch, whose ``header`` buffer
+        # is discarded by ``launch_command``, silently dropping the entire
+        # launcher-injected tuning block.
         if len(env_vars):
-            if blocking and cli_env_only:
+            if cli_env_only:
                 self.cli_env_arg(env_vars)
             else:
                 for e in env_vars:
                     header.write(parse_env_list(*e))
 
+        # Same hole for passthrough variables. ``blocking`` is kept as an
+        # additional trigger because a blocking run has always delivered these
+        # on the launch command line (where they work equally well) and jobs
+        # rely on that; ``cli_env_only`` closes the non-blocking immutable case.
         if len(passthrough_env_vars):
-            if blocking:
+            if blocking or cli_env_only:
                 self.cli_env_arg(passthrough_env_vars)
             else:
                 for k, v in passthrough_env_vars:
@@ -465,6 +489,32 @@ class Scheduler:
         """
         raise NotImplementedError
 
+    def ephemeral_environment(self, system: "System") -> Optional[dict[str, str]]:
+        """
+        The complete environment to start an ephemeral (no launch folder) job
+        in, or None to hand the job the launcher's own environment unchanged.
+
+        The launcher has exactly three channels for the system's tuned
+        environment block, and an ephemeral run rules out one of them: there
+        is no launch script for :meth:`launcher_script` to write ``export``
+        lines into. Every scheduler that has a submit/run command uses the
+        second -- ``launch_command`` is built with ``cli_env_only=True``, so
+        :meth:`cli_env_arg` puts the block on that command line (Slurm's
+        ``--export=``, Flux's ``--env=``) -- and for those, None is correct:
+        the environment is already travelling.
+
+        This third channel exists for a scheduler with no launch command at
+        all to hang arguments off (``--local``, whose
+        :meth:`launch_command` is ``[]``), which was therefore left with no
+        channel whatsoever and silently ran ephemeral jobs with the system's
+        entire environment block missing.
+
+        :param system: The system to take the environment from.
+        :return: A complete environment mapping for the child, or None to
+                 inherit the launcher's.
+        """
+        return None
+
     def launch_command(
             self, system: "System", blocking: bool = True, cli_env_only: bool = False
     ) -> list[str]:
@@ -484,8 +534,9 @@ class Scheduler:
         # Both commands get the submit args
         for k,v in self.common_launch_args.items():
             cmd_args += self.format_common_arg(k, v)
-        for k,v in self.submit_only_args.items():
-            cmd_args += self.format_submit_arg(k, v)
+        if self.emit_submit_args_on_launch_command(blocking):
+            for k,v in self.submit_only_args.items():
+                cmd_args += self.format_submit_arg(k, v)
         if not blocking:
             return self.nonblocking_launch_command() + cmd_args
 
@@ -493,6 +544,16 @@ class Scheduler:
         if self.enable_run_args_on_launch_command():
             for k,v in self.run_only_args.items():
                 cmd_args += self.format_run_arg(k, v)
+
+        # With no launch directory there is no launch script, so the parallel
+        # run command has nowhere else to go and belongs on the command line.
+        # Schedulers whose blocking launch command is already the parallel
+        # launcher (srun, flux run) report False here and are unaffected.
+        if not self.work_dir and self.require_parallel_internal_run_command(blocking):
+            cmd_args += self.internal_script_run_command().split()
+            for k, v in self.run_only_args.items():
+                cmd_args += self.format_run_arg(k, v)
+
         return self.blocking_launch_command() + cmd_args
 
     def export_hostlist(self) -> str:
@@ -512,11 +573,49 @@ class Scheduler:
         else:
             return False
 
+    def script_runs_once_per_task(self, blocking: bool) -> bool:
+        """
+        Does the generated launch script execute once per task, or once for
+        the whole allocation?
+
+        These are the only two possibilities, and they are the complement of
+        :meth:`require_parallel_internal_run_command`: if the script has to
+        carry the parallel run command (``srun``/``flux run``/``jsrun``) then
+        the script itself is what the submit command runs -- once, at
+        allocation scope -- and the tasks are forked from inside it.
+        Otherwise the launch command *is* the parallel launcher and the script
+        is the per-task program.
+
+        Anything in the script that names a rank is only meaningful in the
+        second case; at allocation scope the scheduler's per-task variables
+        are either unset (Flux, LSF) or a meaningless constant (Slurm's
+        one-task batch step reports ``SLURM_PROCID=0``).
+
+        :param blocking: Whether the launch command waits for the job.
+        :return: True if the script body runs once per task.
+        """
+        return not self.require_parallel_internal_run_command(blocking)
+
     def enable_run_args_on_launch_command(self) -> bool:
         """
         Allow scheduler to explicitly enable or disable appending the runtime
         arguments to the launch command.
         :return: bool indicating if run arguments are appended to launch command
+        """
+        return True
+
+    def emit_submit_args_on_launch_command(self, blocking: bool) -> bool:
+        """
+        Should the submit-only arguments be appended to the launch command?
+
+        True for schedulers whose submit and run commands are the same
+        program, so that a flag accepted by one is accepted by the other
+        (srun, flux run). LSF is the exception: inside an existing allocation
+        its blocking launch command is jsrun, which shares no options with
+        bsub.
+
+        :return: bool indicating if submit arguments are appended to the
+                 launch command
         """
         return True
 
@@ -571,21 +670,49 @@ class Scheduler:
         # Configure header and command line with scheduler job options
         script += header_lines
         script += "\n"
-        if launch_dir != os.getcwd():
-            callee_directory = os.path.dirname(launch_dir)
-            logger.info(f"Callee directory: {callee_directory} - and {launch_dir}")
-            # The launch-dir path can carry a user-controlled job name (it is
-            # embedded in an auto-generated folder name); quote the literal path
-            # so it cannot inject shell syntax, while leaving the trailing
-            # ${PYTHONPATH} reference to expand as intended.
-            script += f"export PYTHONPATH={shlex.quote(callee_directory)}:" + "${PYTHONPATH}\n"
+        # The job runs from the launch directory, so re-add the directory the
+        # user launched from: that is what keeps the command's sibling modules
+        # importable (for torchrun-hpc, nothing else adds it at all). Nothing
+        # in the launcher ever chdirs -- the working directory is handed to the
+        # scheduler as an argument -- so the process cwd here is still the
+        # invocation directory. It used to be computed as
+        # ``dirname(launch_dir)``, which coincides with the invocation
+        # directory only when the launch directory sits directly beneath it: an
+        # absolute ``-l /p/lustre1/shared/runs/job1`` instead put that
+        # directory's unrelated (and plausibly group-writable) parent ahead of
+        # site-packages on every rank's import path.
+        invocation_directory = os.getcwd()
+        if launch_dir != invocation_directory:
+            logger.info(
+                f"Callee directory: {invocation_directory} - and {launch_dir}"
+            )
+            # Quote the literal path so it cannot inject shell syntax, while
+            # leaving the trailing ${PYTHONPATH} reference to expand as
+            # intended.
+            script += f"export PYTHONPATH={shlex.quote(invocation_directory)}:" + "${PYTHONPATH}\n"
         if save_hostlist:
             hostlist_file = os.path.join(launch_dir, "hpc_launcher_hostlist.txt")
-            script += f'export RANK={self.get_parallel_rank_env_variable()}\n'
             script += self.export_hostlist()
-            script += 'if [ "${RANK}" = "0" ]; then\n'
-            script += "    echo ${HPC_LAUNCHER_HOSTLIST} > " + shlex.quote(hostlist_file) + "\n"
-            script += "fi\n\n"
+            write_hostlist = (
+                "echo ${HPC_LAUNCHER_HOSTLIST} > " + shlex.quote(hostlist_file) + "\n"
+            )
+            if self.script_runs_once_per_task(blocking):
+                # This script *is* the per-task program, so exactly one task
+                # may write the file. Test the scheduler's own per-task
+                # variable directly: a ``RANK`` snapshot taken by an earlier
+                # ``export`` is what stopped working the moment the same block
+                # moved to allocation scope.
+                script += f'if [ "{self.get_parallel_rank_env_variable()}" = "0" ]; then\n'
+                script += "    " + write_hostlist
+                script += "fi\n\n"
+            else:
+                # The script runs once, ahead of the parallel run command, so
+                # it is already the single writer -- and no rank variable is
+                # set for it to test. The old guard compared Slurm's
+                # meaningless batch-step ``SLURM_PROCID=0`` (true by luck) or
+                # an unset Flux/LSF variable (so the file was silently never
+                # created).
+                script += write_hostlist + "\n"
 
         if system.active_system_params:
             system_params = system.active_system_params
@@ -897,14 +1024,31 @@ class Scheduler:
             logger.info(f'Launching {" ".join(full_cmdline)}')
 
             if not dry_run:
-                process = subprocess.run(full_cmdline, capture_output=True)
-                sys.stdout.buffer.write(process.stdout)
-                sys.stderr.buffer.write(process.stderr)
-                if process.returncode or process.stderr:
-                    logging.error(
-                        f"Interactive scheduler exited with error code {process.returncode}"
+                # Same live tee-ing as the launch-folder blocking branch
+                # below, minus the files: an ephemeral run is defined by
+                # creating none, so the console is the only destination.
+                # This branch used to call
+                # ``subprocess.run(..., capture_output=True)`` and print the
+                # result afterwards, which (a) showed the user nothing until
+                # the job exited -- a blank terminal for the length of a
+                # training run, with every byte held in the launcher's RSS,
+                # and the two streams no longer interleaved in the order they
+                # were written -- and (b) skipped ``console_pipe``'s
+                # ``start_new_session`` and signal forwarding, so a SIGTERM to
+                # the launcher killed the launcher alone and reparented the
+                # still-running job to PID 1.
+                returncode = run_process_with_live_output(
+                    full_cmdline,
+                    color_stderr=color_stderr,
+                    env=self.ephemeral_environment(system),
+                )
+                # Only the exit status decides success: plenty of successful
+                # programs (and schedulers) log to stderr.
+                if returncode:
+                    logger.error(
+                        f"Interactive scheduler exited with error code {returncode}"
                     )
-                return LaunchResult(job_id=None, returncode=process.returncode)
+                return LaunchResult(job_id=None, returncode=returncode)
             return LaunchResult(job_id=None, returncode=0)
         else:
             full_cmdline = cmd + [filename]
@@ -946,12 +1090,22 @@ class Scheduler:
             else:
                 # Run batch script and get job ID
                 process = subprocess.run(full_cmdline, capture_output=True)
-                if process.returncode or process.stderr:
+                # Always show the user what the submit command said on stderr,
+                # but never treat it as a failure signal: schedulers routinely
+                # warn on an otherwise successful submission (e.g. sbatch's
+                # "can't honor --ntasks-per-node ... Ignoring" notice, or a site
+                # job_submit plugin's slurm.log_user() message). Only the exit
+                # status decides -- otherwise a queued job's ID is thrown away
+                # and the launcher reports "error code 0".
+                sys.stderr.buffer.write(process.stderr)
+                if process.returncode:
                     logging.error(
                         f"Batch scheduler exited with error code {process.returncode}"
                     )
-                    sys.stderr.buffer.write(process.stderr)
-                    return LaunchResult(job_id=None, returncode=process.returncode or 1)
+                    # A genuine failure often explains itself on stdout; do not
+                    # swallow it.
+                    sys.stdout.buffer.write(process.stdout)
+                    return LaunchResult(job_id=None, returncode=process.returncode)
                 # Successful non-blocking submission: the job is still running,
                 # so there is no exit code to report yet.
                 return LaunchResult(

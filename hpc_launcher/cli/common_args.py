@@ -17,12 +17,16 @@ Common arguments for CLI utilities.
 import argparse
 from hpc_launcher.schedulers import get_schedulers
 from hpc_launcher.schedulers.scheduler import Scheduler
+from hpc_launcher.schedulers.local import LocalScheduler
 from hpc_launcher.systems.system import System, GenericSystem
 from hpc_launcher.systems import autodetect, configure
 import logging
 import os
 
 from dataclasses import fields
+from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 class ParseKVAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -78,6 +82,48 @@ class ParseOverrideKVAction(argparse.Action):
             overrides[key] = value
 
 
+# Values accepted by --comm-backend, matched case-insensitively (argparse's
+# `type=str.upper` + `choices=` below normalize the case before comparing).
+# Kept here, rather than inline in `setup_arguments`, so `resolve_comm_backend`
+# can document the mapping against the same list.
+#
+# "*CCL" is accepted because the docs used to list it as an option verbatim
+# ("Options: MPI, *CCL (NCCL, RCCL)"), so a user may well have typed it; it is
+# also the internal spelling every consumer matches on. Now that unrecognized
+# values are a usage error rather than a silent no-op, turning a previously
+# working invocation into a hard failure would be a poor trade.
+COMM_BACKEND_CHOICES = ("MPI", "NCCL", "RCCL", "*CCL")
+
+
+def resolve_comm_backend(job_comm_protocol: Optional[str]) -> Optional[str]:
+    """
+    Normalize a validated ``--comm-backend`` value to what
+    ``System.job_comm_protocol`` consumers understand.
+
+    By the time this runs, argparse has already restricted and uppercased
+    ``job_comm_protocol`` to one of ``COMM_BACKEND_CHOICES`` or left it
+    ``None`` -- see the ``--comm-backend`` argument in ``setup_arguments``.
+    The only consumer today (``ElCapitan.environment_variables``) matches
+    ``"RCCL"`` or the generic ``"*CCL"`` marker case-insensitively; it has no
+    notion of ``"NCCL"`` at all. The CLI's own help text already documents
+    NCCL and RCCL as interchangeable spellings of "whichever collective
+    library is native to this system's accelerators" ("MPI or *CCL (NCCL,
+    RCCL)"), so both collapse to ``"*CCL"`` here. This is the one place
+    shared by ``launch`` and ``torchrun-hpc`` (both route through
+    ``process_arguments``), so the two CLIs agree on what a given
+    ``--comm-backend`` value means instead of ``launch`` forwarding ``NCCL``
+    verbatim into a consumer that silently ignores it.
+
+    :param job_comm_protocol: The parsed ``--comm-backend`` value (already
+                               validated/uppercased by argparse), or ``None``.
+    :return: ``job_comm_protocol`` unchanged for ``"MPI"`` or ``None``;
+             ``"*CCL"`` for ``"NCCL"``/``"RCCL"``.
+    """
+    if job_comm_protocol in (None, "MPI"):
+        return job_comm_protocol
+    return "*CCL"
+
+
 def create_scheduler_arguments(**kwargs) -> dict[str, str]:
     cmdline_args = {}
     for field in fields(Scheduler):
@@ -99,7 +145,8 @@ def setup_arguments(parser: argparse.ArgumentParser):
         "-v",
         action="store_true",
         default=False,
-        help="Run in verbose mode.  Also save the hostlist as if --save-hostlist is set",
+        help="Run in verbose mode, logging additional INFO-level messages "
+        "about job setup and submission.",
     )
 
     # Job size arguments
@@ -174,12 +221,19 @@ def setup_arguments(parser: argparse.ArgumentParser):
         help="Run locally (i.e., one process without a batch " "scheduler)",
     )
 
+    # `choices` makes an unrecognized value a usage error rather than a silent
+    # no-op: the only consumer of this flag (the El Capitan RCCL/AWS-OFI setup)
+    # matches a closed set of spellings and otherwise skips its environment
+    # configuration without any other warning.
     group.add_argument(
         "--comm-backend",
         dest="job_comm_protocol",
-        type=str,
+        type=str.upper,
+        choices=COMM_BACKEND_CHOICES,
         default=None,
-        help="Indicate if the job will primarily use a specific communication protocol and set any relevant environment variables: MPI or *CCL (NCCL, RCCL)",
+        help="The communication protocol the job primarily uses, which sets "
+        "any relevant environment variables. Case-insensitive; NCCL and RCCL "
+        "are both spellings of *CCL.",
     )
 
     group.add_argument(
@@ -423,11 +477,142 @@ def validate_arguments(args: argparse.Namespace):
         if args.save_hostlist:
             raise ValueError("Saving the hostlist was requested for a ephemeral interative job.")
 
+    # Same rejection as -o/--output-script above, and for the same reason:
+    # both are joined onto the launch folder (scheduler.py's
+    # create_launch_folder/create_launch_folder_name) whose intermediate
+    # directories are never created, so a path-bearing --out/--err would
+    # otherwise reach an uncaught FileNotFoundError at `open(..., "wb")`
+    # well after the launch directory (and launch.sh) already exist on
+    # disk -- a raw traceback plus a half-built launch directory instead of
+    # a clean, upfront validation error. Rejecting here (rather than
+    # os.makedirs(..., exist_ok=True) at the point of use) keeps --out/--err
+    # consistent with -o's existing, documented "no path component" rule
+    # instead of quietly adding nested-log-directory support that was never
+    # asked for -- and scheduler.py's log-file handling is out of scope for
+    # this fix. Checked after the ephemeral-job block above so that an
+    # ephemeral job with a path-bearing --out/--err reports the more
+    # fundamental "not allowed in this mode at all" error first.
+    for flag, log_file in (("--out", args.out_log_file), ("--err", args.err_log_file)):
+        if log_file and os.path.dirname(log_file):
+            raise ValueError(
+                f"User provided {flag} filename cannot be a absolute or relative path: {log_file}"
+            )
+
+    # "--out X --err X" reads as a request for one combined log, and used to
+    # be accepted and then not honored: the blocking path opens two
+    # independent "wb" handles on the one path and gives one to each of
+    # console_pipe's two replicators, which write from their own file offsets
+    # and overwrite each other. With small outputs one stream simply
+    # disappears; with larger ones the file is arbitrarily interleaved
+    # garbage. Neither is visible from the run -- the console shows both
+    # streams and the exit status is unaffected.
+    #
+    # Rejected rather than merged (by sharing one handle) because the merge a
+    # user is picturing is not the one they would get: the two replicators
+    # read fixed-size chunks concurrently with no line framing, so a shared
+    # handle produces output torn mid-line rather than a readable combined
+    # log. Rejecting here also covers --bg, where these two names become the
+    # scheduler's own --output/--error directives, and keeps --out/--err
+    # consistent with the -o and path-component checks alongside it. By this
+    # point both are bare filenames (the loop above rejected any directory
+    # component), so comparing them directly is comparing the paths they will
+    # resolve to inside the launch folder.
+    if args.out_log_file and args.out_log_file == args.err_log_file:
+        raise ValueError(
+            f"The --out and --err filenames must differ, but both are "
+            f"{args.out_log_file}: the two streams are written independently "
+            f"and would overwrite each other. To combine them, redirect "
+            f"stderr into stdout in the launched command instead."
+        )
+
     if args.output_script and args.batch_script:
         raise ValueError("Cannot specify both an output script name: {args.output_script} and a pre-generated batch script {args.batch_script}.")
 
     if args.batch_script and not os.path.exists(args.batch_script):
         raise ValueError(f"A pre-generated batch script file name was provided but the file does not exist.")
+
+
+def requested_process_count(args: argparse.Namespace) -> int:
+    """
+    The number of processes the user's *own* flags ask for, or 0 when they
+    did not say.
+
+    Read this before ``process_arguments``/``configure_launch``, which fill
+    ``args.procs_per_node`` in from the detected system: on a four-GPU node a
+    bare ``-N 1`` resolves to four processes per node. A check keyed on the
+    resolved job size would therefore fire on the most ordinary ``launch
+    --local -N 1`` invocation there is, so the one caller that needs this
+    (:func:`validate_scheduler_arguments`) needs the request, not the
+    resolution.
+
+    :param args: The parsed arguments, before ``process_arguments``.
+    :return: The number of processes requested, or 0 if unspecified.
+    """
+    if args.gpus_at_least:
+        # A minimum accelerator count is one process per accelerator.
+        return args.gpus_at_least
+    if args.nodes:
+        # Without -n the per-node count is whatever the system decides, but
+        # the node count alone already pins a lower bound.
+        return args.nodes * (args.procs_per_node or 1)
+    # --gpumem-at-least resolves entirely from system parameters, so the
+    # request says nothing about the process count on its own.
+    return 0
+
+
+def validate_scheduler_arguments(
+    scheduler: Scheduler,
+    args: argparse.Namespace,
+    requested_procs: int = 0,
+) -> None:
+    """
+    Validation checks that depend on which scheduler was actually selected.
+    Raises exceptions on failure. Call this immediately after
+    ``select_scheduler``, before any launch artifacts are created.
+
+    :func:`validate_arguments` runs before a scheduler exists and can only
+    test the raw flags, which is not enough here: ``--local``, ``--scheduler
+    local``, ``--scheduler LocalScheduler`` and -- on a host with no batch
+    system -- plain autodetection all select the same ``LocalScheduler``, but
+    only the first sets ``args.local``. A guard written against ``args.local``
+    is blind to the other three.
+
+    :param scheduler: The scheduler instance returned by ``select_scheduler``.
+    :param args: The parsed arguments.
+    :param requested_procs: The process count from
+                            :func:`requested_process_count`, captured before
+                            ``process_arguments`` resolved system defaults.
+    """
+    if not isinstance(scheduler, LocalScheduler):
+        return
+
+    # A local "submission" is just running the script: there is no scheduler
+    # to hand it to, and no server-side redirection to point at
+    # out.log/err.log (a real scheduler sets --output/--error on the submit
+    # command for exactly this reason; those files are otherwise only opened
+    # on the blocking path). So --bg would run the job in the foreground,
+    # capture its stdout, and -- on success -- discard it: exit 0, no job ID,
+    # output permanently lost.
+    if args.bg:
+        raise ValueError(
+            f'"--local" jobs cannot be run in the background '
+            f"({type(scheduler).__name__} was selected)"
+        )
+
+    # --local starts exactly one process. It does not spawn -N/-n/-g, and it
+    # cannot: there is no launcher to spawn them with. Saying so is the whole
+    # remedy -- a user smoke-testing a distributed script otherwise gets a
+    # green single-rank run that looks exactly like a passing multi-rank one,
+    # having exercised no rendezvous or collective code path at all.
+    if requested_procs > 1:
+        logger.warning(
+            f'"--local" runs a single process: the requested job size of '
+            f"{requested_procs} processes is not spawned, so nothing "
+            f"distributed is exercised. Drop --local (or select a batch "
+            f"scheduler with --scheduler) to actually run {requested_procs} "
+            f"processes."
+        )
+
 
 # See if the system can be autodetected and then process some special arguments
 # that can autoselect the number of ranks / GPUs
@@ -444,7 +629,7 @@ def process_arguments(args: argparse.Namespace, logger: logging.Logger) -> Syste
             args.gpus_at_least,
             args.gpumem_at_least,
             args.system_params,
-            args.job_comm_protocol,
+            resolve_comm_backend(args.job_comm_protocol),
         )
     )
 

@@ -78,7 +78,7 @@ class SlurmScheduler(Scheduler):
             self.submit_only_args["--chdir"] = f"{os.path.abspath(self.work_dir)}"
 
         if self.ld_preloads:
-            self.common_launch_args['--export=ALL,LD_PRELOAD'] = f'{",".join(self.ld_preloads)}'
+            self._merge_export([f'LD_PRELOAD={",".join(self.ld_preloads)}'])
 
         if self.time_limit is not None:
             self.common_launch_args["--time"] = f"{_time_string(self.time_limit)}"
@@ -123,15 +123,30 @@ class SlurmScheduler(Scheduler):
     def nonblocking_launch_command(self) -> list[str]:
         return ["sbatch"]
 
+    def _merge_export(self, entries: list[str]) -> None:
+        """
+        Fold ``NAME=value`` entries into Slurm's single ``--export`` token.
+
+        srun and sbatch accept only one ``--export``; a second occurrence
+        replaces the first rather than adding to it. Every producer of
+        exported variables therefore has to merge into the same argument
+        instead of introducing its own -- which is how LD_PRELOAD used to be
+        lost on the ephemeral path, where it was emitted as a separate
+        ``--export=ALL,LD_PRELOAD`` alongside the environment's ``--export``.
+
+        :param entries: ``NAME=value`` strings to add.
+        """
+        if "--export" in self.submit_only_args:
+            self.submit_only_args["--export"] += "," + ",".join(entries)
+        else:
+            self.submit_only_args["--export"] = "ALL," + ",".join(entries)
+
     def cli_env_arg(self, env_list) -> None:
         # Expand ${VAR} references, merge duplicate keys, and dequote values
         # like the shell-script path would before folding them into Slurm's
         # single --export=ALL,k=v,... token.
         env_vars = [f"{k}={v}" for k, v in self.expand_cli_env(env_list).items()]
-        if "--export" in self.submit_only_args:
-            self.submit_only_args["--export"] += "," + ",".join(env_vars)
-        else:
-            self.submit_only_args["--export"] = "ALL," + ",".join(env_vars)
+        self._merge_export(env_vars)
         return
 
     def export_hostlist(self) -> str:
@@ -190,8 +205,13 @@ class SlurmScheduler(Scheduler):
     # Instance method (not a classmethod): it reads the per-instance
     # rendezvous port so all env entries of one launch agree.
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
+        # No RANK entry: this list becomes ``export`` lines in the generated
+        # script, which for a --bg submission is the *batch* script running
+        # once at allocation scope, so ``export RANK=${SLURM_PROCID}`` froze
+        # the batch step's 0 into every task. On the ephemeral CLI path it is
+        # expanded on the launch host, where SLURM_PROCID is unset at all.
+        # The trampoline publishes RANK from the rank it already computes.
         env_list = []
-        env_list.append(("RANK", self.get_parallel_rank_env_variable()))
         if protocol.lower() == "tcp":
             env_list.append(
                 (

@@ -72,12 +72,26 @@ class Sierra(System):
         # Note: There are actually 22 cores/socket, but it seems that
         # powers of 2 are better for performance.
         cores_per_socket = 16
-        procs_per_node = 2
+        # Derive from the live scheduler value (the actual procs/node the
+        # job requested -- see LSFScheduler.build_scheduler_specific_arguments,
+        # which uses the same value for --tasks_per_rs) rather than a fixed
+        # constant: a hardcoded value here silently drifts out of sync with
+        # the real process count and produces overlapping affinity masks.
+        procs_per_node = scheduler.procs_per_node
         procs_per_socket = (procs_per_node + 1) // 2
-        cores_per_proc = cores_per_socket // procs_per_socket
+        # Floor at one core: past 32 procs/node the division reaches zero, and
+        # "bind each process to no cores" is not a thing to ask jsrun for. The
+        # request is already oversubscribed at that point, so hand out the
+        # smallest real binding rather than an unsatisfiable one.
+        cores_per_proc = max(1, cores_per_socket // procs_per_socket)
         if isinstance(scheduler, LSFScheduler):
             scheduler.run_only_args["--bind"] = "packed:{}".format(cores_per_proc)
-            scheduler.run_only_args["--smpiargs"] = '"-gpu"'
+            # Just the value: the double quotes one would write around it at a
+            # shell prompt are the shell's, and neither path that consumes this
+            # has a shell to strip them. The argv path execs jsrun directly,
+            # and the script path shlex-quotes the value, which preserves any
+            # embedded quotes rather than removing them.
+            scheduler.run_only_args["--smpiargs"] = "-gpu"
         return
 
     @property

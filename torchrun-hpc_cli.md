@@ -16,7 +16,7 @@ torchrun-hpc [options] command [args...]
 torchrun-hpc [-h] [--verbose] [-N NODES] [-n PROCS_PER_NODE] [--gpus-per-proc GPUS_PER_PROC]
              [-q QUEUE] [-t TIME_LIMIT] [-g GPUS_AT_LEAST] [--gpumem-at-least GPUMEM_AT_LEAST]
              [--exclusive] [--local] [--comm-backend JOB_COMM_PROTOCOL]
-             [-x KEY=VALUE [KEY=VALUE ...]] [--bg] [--batch-script BATCH_SCRIPT]
+             [-x KEY=VALUE [KEY=VALUE ...]] [--bg]
              [--scheduler {local,flux,slurm,lsf}]
              [-l [LAUNCH_DIR]] [-o OUTPUT_SCRIPT] [--setup-only] [--dry-run]
              [--account ACCOUNT] [--dependency DEPENDENCY] [-J JOB_NAME]
@@ -40,7 +40,7 @@ torchrun-hpc [-h] [--verbose] [-N NODES] [-n PROCS_PER_NODE] [--gpus-per-proc GP
 | Option | Short Form | Description |
 |--------|------------|-------------|
 | `--help` | `-h` | Show help message and exit |
-| `--verbose` | `-v` | Run in verbose mode. Also save the hostlist as if `--save-hostlist` is set |
+| `--verbose` | `-v` | Run in verbose mode, logging additional INFO-level messages about job setup and submission |
 
 ### PyTorch-Specific Options
 
@@ -102,8 +102,17 @@ Arguments that determine when a job will run.
 | Option | Description | Notes |
 |--------|-------------|-------|
 | `--bg` | Run job in background | Launcher won't wait for job start; uses timestamped directory by default |
-| `--batch-script` | Launch a user-provided batch script | |
 | `--scheduler` | Override default batch scheduler | Options: None, local, LocalScheduler, flux, FluxScheduler, slurm, SlurmScheduler, lsf, LSFScheduler |
+
+> **Note:** `--batch-script` is **not supported** by `torchrun-hpc`, even
+> though the shared argument parser still accepts the flag. `torchrun-hpc`'s
+> `command` positional is mandatory (unlike `launch`'s optional `command`),
+> so combining `--batch-script` with a command always fails validation
+> ("A pre-generated batch script file name was provided and an explicit
+> command ... - invalid combination"), and omitting the command to avoid
+> that fails argparse's own "required: command" check instead. There is
+> currently no way to invoke this flag successfully on `torchrun-hpc`; use
+> [`launch`](./launch_cli.md) to run a pre-generated batch script.
 
 ## Script Options
 
@@ -125,8 +134,10 @@ Batch scheduler script parameters.
 - **No argument**: Creates timestamped launch directory
 - **With argument**: Creates directory named `[LAUNCH_DIR]`
 - **Argument = "."**: Creates launch script in current directory
-- **Not set + blocking job**: Runs without creating files
-- **Not set + non-blocking job**: Creates launch file and logs in current directory
+- **Not set**: `torchrun-hpc` **always** creates a timestamped launch
+  directory (see the callout below), whether the job is blocking or run
+  with `--bg` -- unlike `launch`, there is no file-less or
+  current-directory-by-default mode when `-l` is omitted
 - **Note**: Double dash `--` needed if this is the last argument
 
 > **Important — the job runs from the launch directory.** `torchrun-hpc` always
@@ -183,8 +194,11 @@ torchrun-hpc -N 1 -n 4 train.py --epochs 100
 # Multi-node training (2 nodes, 4 GPUs each)
 torchrun-hpc -N 2 -n 4 train.py --batch-size 256
 
-# Local testing without scheduler
-torchrun-hpc --local -N 2 -n 2 test_script.py
+# Local testing without a scheduler. Note that --local starts exactly one
+# process no matter what job size is requested, so it smoke-tests startup,
+# imports and single-rank code -- not rendezvous or collectives, which need a
+# second rank. Requesting more than one process prints a warning.
+torchrun-hpc --local -N 1 -n 1 test_script.py
 ```
 
 ### Rendezvous Configuration
@@ -352,10 +366,26 @@ The command sets standard PyTorch distributed environment variables:
 |----------|-------------|
 | `WORLD_SIZE` | Total number of processes |
 | `RANK` | Global rank of the process |
-| `LOCAL_RANK` | Local rank on the node |
+| `LOCAL_RANK` | Rank of the process within its node (`0` .. *procs-per-node* - 1). An identity, **not** a device index -- see below |
 | `MASTER_ADDR` | Address of rank 0 node |
 | `MASTER_PORT` | Port for communication |
-| `NODE_RANK` | Rank of the current node |
+| `NODE_RANK` | Rank of the current node (`RANK // ` *procs-per-node*) |
+
+These are set inside each task, by the process that knows its own rank, so
+they hold the same correct values for interactive runs and for `--bg`
+submissions.
+
+### `LOCAL_RANK` is not a device index
+
+torchrun-hpc asks the scheduler for `--gpus-per-proc` GPUs *per task*, and the
+scheduler confines each task to exactly those GPUs. A rank's own GPUs are
+therefore numbered from `0` within its process no matter what its local rank
+is: with the default `--gpus-per-proc 1` every rank on the node sees a single
+device, `cuda:0`, and that device is its own.
+
+Use `LOCAL_RANK` to identify the rank on its node -- local-leader election,
+per-node-rank data sharding, per-rank log file names -- and index into the
+*visible* device list to choose a device. The example below does both.
 
 ## PyTorch Script Requirements
 
@@ -373,15 +403,22 @@ import os
 def main():
     args = sys.argv[1:]
     torch_dist_initialized = dist.is_initialized()
+    avail_gpus = []
     for e in ["CUDA_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"]:
         if os.getenv(e):
-            gpus = os.getenv(e)
+            avail_gpus = os.getenv(e).split(",")
+            break
 
-    if gpus:
-        avail_gpus = gpus.split(",")
-
+    # Who am I: global rank, my place on my node, and which node that is.
     local_rank = int(os.environ['LOCAL_RANK'])
-    print(f"Local Rank: {local_rank}")
+    node_rank = int(os.environ['NODE_RANK'])
+    print(f"Local Rank: {local_rank} on node {node_rank}")
+
+    # Which device do I use: an index into the devices *this process* can see.
+    # With the default --gpus-per-proc 1 that list has one entry, so this is 0
+    # for every rank on the node -- each rank's single visible device is its
+    # own GPU. It is NOT the same number as local_rank.
+    device_id = local_rank % len(avail_gpus) if avail_gpus else 0
 
     if torch_dist_initialized:
         print(
@@ -394,16 +431,16 @@ def main():
 
     # Set the device
     if torch.cuda.is_available():
-        torch.cuda.set_device(local_rank)
+        torch.cuda.set_device(device_id)
 
     # Create model and move to device
-    model = YourModel().cuda(local_rank)
+    model = YourModel().cuda(device_id)
 
     # Wrap with DDP
     model = torch.nn.parallel.DistributedDataParallel(
         model,
-        device_ids=[local_rank],
-        output_device=local_rank
+        device_ids=[device_id],
+        output_device=device_id
     )
 
     # Your training code here
@@ -445,7 +482,9 @@ if __name__ == "__main__":
 
 1. **Use MPI rendezvous** (`-r mpi`) for stable HPC environments
 2. **Match processes to GPUs**: Set `-n` equal to GPUs per node
-3. **Test locally first**: Use `--local` flag for debugging
+3. **Test locally first**: Use the `--local` flag for debugging, remembering
+   that it runs a single process regardless of the requested job size --
+   multi-rank behavior still has to be tested under a real scheduler
 4. **Save setup scripts**: Use `--setup-only` to review job configuration
 5. **Monitor GPU memory**: Use `--fraction-max-gpu-mem` to prevent OOM
 6. **Use exclusive nodes** for performance-critical training

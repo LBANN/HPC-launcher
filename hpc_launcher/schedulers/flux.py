@@ -185,8 +185,12 @@ class FluxScheduler(Scheduler):
         return (world_size, rank, local_world_size, local_rank)
 
     def dynamically_configure_rendezvous_protocol(self, protocol: str) -> list[str]:
+        # No RANK entry: this list becomes ``export`` lines in the generated
+        # script, which for a --bg submission is the batch script -- a Flux
+        # initial program, for which FLUX_TASK_RANK is actively unset -- so
+        # every task inherited an empty RANK. The trampoline publishes RANK
+        # per task instead. See SlurmScheduler for the full rationale.
         env_list = []
-        env_list.append(("RANK", self.get_parallel_rank_env_variable()))
         if protocol.lower() == "tcp":
             env_list.append(
                 (

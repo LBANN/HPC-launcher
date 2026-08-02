@@ -76,6 +76,7 @@ async def _run_process(
     err_file: Optional[io.FileIO] = None,
     color_stderr: bool = False,
     buffer_size: int = 32,
+    env: Optional[dict[str, str]] = None,
 ) -> int:
     """
     Runs a process asynchronously and pipes its stdout and stderr to up to two
@@ -88,6 +89,11 @@ async def _run_process(
                      that the file must be opened in binary mode.
     :param color_stderr: If True, colors the standard error output in red.
     :param buffer_size: Output buffer size in characters.
+    :param env: An optional complete environment for the child. ``None``
+                (the default) inherits the launcher's own environment; a
+                caller that has an environment to inject and no other channel
+                for it (see ``Scheduler.ephemeral_environment``) passes the
+                merged mapping here.
     :return: The command's exit code.
     """
     # Create the subprocess in its own session/process group so that we can
@@ -102,6 +108,7 @@ async def _run_process(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         start_new_session=True,
+        env=env,
     )
 
     # Read the stdout and stderr concurrently.
@@ -178,28 +185,31 @@ async def _run_process(
                 pass
 
 
-def run_process_without_files(command: list[str]) -> int:
-    """
-    Runs a process "clasically" (i.e., without redirecting output and error
-    streams).
-
-    :param command: The command to run and its arguments.
-    :return: The command's exit code.
-    """
-    result = subprocess.run(" ".join(command), shell=True)
-    return result.returncode
-
-
 def run_process_with_live_output(
     command: list[str],
     out_file: Optional[io.FileIO] = None,
     err_file: Optional[io.FileIO] = None,
     color_stderr: bool = False,
     buffer_size: int = 32,
+    env: Optional[dict[str, str]] = None,
 ) -> int:
     """
     Runs a process asynchronously and pipes its stdout and stderr to up to two
     streams.
+
+    Every run goes through :func:`_run_process`, including the console-only
+    case in which no output files were requested. There used to be a
+    short-circuit here to a ``subprocess.run(" ".join(command), shell=True)``
+    helper for that case, on the reasoning that with nothing to tee to there
+    was nothing for the tee-er to do. That is not what the async path
+    provides: it is also what puts the child in its own session and installs
+    the SIGINT/SIGTERM forwarding that guarantees the job dies with the
+    launcher. Taking the shortcut left the ephemeral (no launch folder) run
+    -- the documented default for a blocking ``launch`` -- with a child in
+    the launcher's own process group and no handler to signal it, so a
+    SIGTERM to the launcher orphaned the job to PID 1. It also re-joined
+    argv with spaces and handed the result to a shell, re-parsing any
+    argument containing a space or a shell metacharacter.
 
     :param command: The command to run and its arguments.
     :param out_file: An optional handle to a file to pipe ``stdout`` to. Note
@@ -208,15 +218,15 @@ def run_process_with_live_output(
                      that the file must be opened in binary mode.
     :param color_stderr: If True, colors the standard error output in red.
     :param buffer_size: Output buffer size in characters.
+    :param env: An optional complete environment for the child. ``None``
+                (the default) inherits the launcher's own environment.
     :return: The command's exit code.
     """
     if not command:
         return 0
-    if out_file is not None or err_file is not None or color_stderr:
-        return asyncio.run(
-            _run_process(command, out_file, err_file, color_stderr, buffer_size)
-        )
-    return run_process_without_files(command)
+    return asyncio.run(
+        _run_process(command, out_file, err_file, color_stderr, buffer_size, env)
+    )
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ visible list, exposed as LOCAL_RANK). Choosing a primary is not the same as
 restricting the process to it, and this file is about the difference.
 """
 import os
+import socket
 import subprocess
 import sys
 
@@ -155,6 +156,17 @@ def test_trampoline_preserves_granted_devices(granted_var, granted_value,
     ROCm the launcher deliberately moves ROCR_VISIBLE_DEVICES into
     HIP_VISIBLE_DEVICES on import; that rename is expected, but the *set* of
     devices must survive it intact.
+
+    Every visibility variable that ends up set must name the full granted
+    list, rather than the union of them all naming it between them. A union
+    cannot see a narrowing performed through a *different* variable than the
+    one the rank was granted: a trampoline handed
+    ``CUDA_VISIBLE_DEVICES=0,1,2,3`` that confined the rank by writing
+    ``HIP_VISIBLE_DEVICES=0`` would leave the union intact and pass, while on
+    a ROCm build the process really can only reach GPU 0 -- exactly the
+    "invalid device ordinal for cuda:1" failure this file exists to prevent.
+    The rename is still accepted, because it leaves one variable set and that
+    one lists everything granted.
     """
     require_torch()
 
@@ -162,19 +174,27 @@ def test_trampoline_preserves_granted_devices(granted_var, granted_value,
                                            tmp_path)
 
     granted = set(granted_value.split(","))
-    still_visible = set()
-    for var in _VISIBILITY_VARS:
-        if seen.get(var):
-            still_visible.update(seen[var].split(","))
+    set_vars = {var: seen[var] for var in _VISIBILITY_VARS if seen.get(var)}
 
-    assert still_visible == granted, (
+    assert set_vars, (
         f"the rank was granted devices {sorted(granted)} via {granted_var} "
-        f"but its script sees {sorted(still_visible)} (raw: {seen}); the "
-        "devices the scheduler allocated must not be hidden from the rank"
+        f"but its script sees no visibility variable at all (raw: {seen})"
     )
+    for var, value in set_vars.items():
+        assert set(value.split(",")) == granted, (
+            f"the rank was granted devices {sorted(granted)} via "
+            f"{granted_var}, but {var}={value} narrows it to "
+            f"{sorted(set(value.split(',')))} (raw: {seen}); the devices the "
+            "scheduler allocated must not be hidden from the rank, by any "
+            "variable"
+        )
 
     # The primary device is selected by index into the granted list, so it is
     # always a valid index -- but selecting one must not have hidden the rest.
+    # Note this helper runs a single rank, so LOCAL_RANK is 0 either way and
+    # the range check below cannot distinguish a correct node-local rank from
+    # a collapsed one; test_local_rank_is_not_the_primary_device_index is what
+    # covers that.
     assert seen["LOCAL_RANK"] is not None, seen
     assert 0 <= int(seen["LOCAL_RANK"]) < len(granted), seen
 
@@ -206,6 +226,100 @@ def test_primary_device_index_in_range(visible, local_rank, expected,
     monkeypatch.delenv("HIP_VISIBLE_DEVICES", raising=False)
 
     assert tramp._select_local_device_id(local_rank) == expected
+
+
+def test_local_rank_is_not_the_primary_device_index(tmp_path):
+    """
+    The primary device index and ``LOCAL_RANK`` are different quantities and
+    must not collapse into one.
+
+    Round-robin selection over the visible list is correct -- that is what
+    ``test_primary_device_index_in_range`` above pins -- but with the
+    launcher's default ``--gpus-per-proc 1`` each task is confined to a single
+    device, so the selected index is ``0`` for *every* rank on the node. If
+    ``LOCAL_RANK`` is that index, every rank claims to be local rank 0 and
+    local-leader election, per-node-rank sharding and per-local-rank log names
+    all quietly break, while each rank is nonetheless holding a distinct GPU.
+
+    Four real ranks are launched (a rendezvous over loopback with the gloo
+    backend, as in ``trampoline_device_test.py``). The visibility environment
+    is set so that the trampoline is handed a one-device list -- the real
+    per-task view -- while torch itself sees no accelerator, which is the only
+    way to have both properties in an environment with no working GPU
+    collective: ``ROCR_VISIBLE_DEVICES`` carries the granted device with the
+    ROCR->HIP rename disabled, and both ``CUDA_VISIBLE_DEVICES`` and
+    ``HIP_VISIBLE_DEVICES`` are emptied so every torch build takes the CPU
+    path.
+    """
+    require_torch()
+
+    user_script = tmp_path / "report_local_rank.py"
+    user_script.write_text(
+        "import os\n"
+        "with open(os.environ['LOCAL_RANK_REPORT'], 'w') as fh:\n"
+        "    fh.write(os.environ.get('LOCAL_RANK', '<UNSET>'))\n"
+    )
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+
+    base_env = os.environ.copy()
+    base_env["TORCHRUN_HPC_SCHEDULER"] = "slurm"
+    base_env["SLURM_NTASKS"] = "4"
+    base_env["SLURM_NNODES"] = "1"
+    base_env["TORCHRUN_HPC_RDV_PROTOCOL"] = f"tcp://127.0.0.1:{port}"
+    base_env["PYTHONPATH"] = REPO_ROOT + os.pathsep + base_env.get("PYTHONPATH", "")
+    # One granted device, as --gpus-per-proc 1 produces, but no accelerator
+    # for torch: see the docstring.
+    base_env["TORCHRUN_HPC_UNSWAP_ROCR_HIP_VIS_DEV"] = "TRUE"
+    base_env["ROCR_VISIBLE_DEVICES"] = "0"
+    base_env["CUDA_VISIBLE_DEVICES"] = ""
+    base_env["HIP_VISIBLE_DEVICES"] = ""
+
+    procs, reports = [], []
+    for rank in range(4):
+        env = base_env.copy()
+        env["SLURM_PROCID"] = str(rank)
+        env["SLURM_LOCALID"] = str(rank)
+        report = tmp_path / f"local_rank_{rank}.txt"
+        env["LOCAL_RANK_REPORT"] = str(report)
+        reports.append(report)
+        procs.append(
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "hpc_launcher.torch.torchrun_hpc_trampoline",
+                    str(user_script),
+                ],
+                env=env,
+                cwd=str(tmp_path),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+            )
+        )
+
+    outputs = []
+    try:
+        for proc in procs:
+            outputs.append(proc.communicate(timeout=300))
+    except subprocess.TimeoutExpired:
+        for proc in procs:
+            proc.kill()
+        pytest.fail("the four ranks did not complete their rendezvous")
+
+    for rank, proc in enumerate(procs):
+        assert proc.returncode == 0, f"rank {rank}: {outputs[rank][0]}"
+
+    seen = [r.read_text() for r in reports]
+    assert seen == ["0", "1", "2", "3"], (
+        f"four ranks on one node reported LOCAL_RANK {seen}; each rank holds "
+        "a distinct GPU but they cannot all be local rank 0 -- LOCAL_RANK is "
+        "the rank's place on the node, not the index of the device it picked"
+    )
 
 
 def test_primary_device_selection_does_not_restrict_visibility(monkeypatch):

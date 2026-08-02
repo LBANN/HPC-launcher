@@ -220,8 +220,9 @@ class ElCapitan(System):
         env_list.append(("MIOPEN_DEBUG_DISABLE_FIND_DB", "0"))
         env_list.append(("MIOPEN_DISABLE_CACHE", "0"))
         tmpdir = os.environ.get("TMPDIR")
-        env_list.append(("MIOPEN_USER_DB_PATH", f"{tmpdir}/MIOpen_user_db"))
-        env_list.append(("MIOPEN_CUSTOM_CACHE_DIR", f"{tmpdir}/MIOpen_custom_cache"))
+        if tmpdir:
+            env_list.append(("MIOPEN_USER_DB_PATH", f"{tmpdir}/MIOpen_user_db"))
+            env_list.append(("MIOPEN_CUSTOM_CACHE_DIR", f"{tmpdir}/MIOpen_custom_cache"))
 
         if os.getenv("CRAY_LD_LIBRARY_PATH") is not None:
             env_list.append(

@@ -55,11 +55,22 @@ def main():
         args.launch_dir = ""
         logger.info(f"Using a predefined launch script needs to run jobs from a launch directory -- automatically setting the -l (--launch-dir) CLI argument")
 
+    # Capture the job size the user's own flags ask for *before*
+    # process_arguments resolves it against the detected system, so the
+    # scheduler validation below can tell "-n 2" apart from "this node has
+    # two GPUs".
+    requested_procs = common_args.requested_process_count(args)
+
     # Process special arguments that can autoselect the number of ranks / GPUs
     system = common_args.process_arguments(args, logger)
 
     # Pick batch scheduler
     scheduler = launch_helpers.select_scheduler(args, logger, system)
+
+    # Checks that need the resolved scheduler rather than the raw flags:
+    # --scheduler local selects the same LocalScheduler as --local without
+    # setting args.local. Run before any launch artifacts are created.
+    common_args.validate_scheduler_arguments(scheduler, args, requested_procs)
 
     folder_name = None
     script_file = None
