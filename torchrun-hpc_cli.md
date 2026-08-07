@@ -66,6 +66,7 @@ These options determine the number of nodes, accelerators, and ranks for the job
 | `--nodes` | `-N` | Specifies the number of requested nodes | |
 | `--procs-per-node` | `-n` | Specifies the number of requested processes per node | Mutually exclusive with `-g` |
 | `--gpus-per-proc` | | Specifies the number of requested GPUs per process | Default: 1 |
+| `--cpus-per-task` | `-c` | Specifies the number of CPUs per task/process | Scheduler default if unset; inside an allocation gives the nested job step an exact CPU footprint so concurrent steps can pack side by side |
 | `--queue` | `-q` | Specifies the queue to use | |
 | `--time-limit` | `-t` | Set a time limit for the job in minutes | |
 | `--gpus-at-least` | `-g` | Specifies the total number of accelerators requested | Mutually exclusive with `-n` and `-N` |

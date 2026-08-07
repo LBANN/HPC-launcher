@@ -50,6 +50,7 @@ These options determine the number of nodes, accelerators, and ranks for the job
 | `--nodes` | `-N` | Specifies the number of requested nodes | |
 | `--procs-per-node` | `-n` | Specifies the number of requested processes per node | Mutually exclusive with `-g` |
 | `--gpus-per-proc` | | Specifies the number of requested GPUs per process | Default: 1 |
+| `--cpus-per-task` | `-c` | Specifies the number of CPUs per task/process | Scheduler default if unset; inside an allocation gives the nested job step an exact CPU footprint so concurrent steps can pack side by side |
 | `--queue` | `-q` | Specifies the queue to use | |
 | `--time-limit` | `-t` | Set a time limit for the job in minutes | |
 | `--gpus-at-least` | `-g` | Specifies the total number of accelerators requested | Mutually exclusive with `-n` and `-N` |
@@ -191,6 +192,42 @@ launch -N 2 --exclusive ./exclusive_app
 # Local execution without scheduler
 launch -N 1 --local ./test_script.py
 ```
+
+### Running Inside an Existing Allocation
+
+When `launch` is invoked from inside a scheduler allocation (`salloc`,
+`sbatch`, `flux alloc`, ...), a blocking launch runs as a *nested job step*
+on the resources the allocation already holds -- it does not request a new
+allocation.
+
+```bash
+# Inherit the allocation's node count (no job-size flag needed)
+launch ./application
+
+# Use a subset of the allocation
+launch -N 1 ./application
+
+# Two concurrent steps that pack side by side without sharing CPUs
+launch -N 1 -c 8 ./application_a &
+launch -N 1 -c 8 ./application_b &
+```
+
+Notes:
+
+- With no `-N`/`-g`/`--gpumem-at-least`, the node count is inherited from the
+  enclosing allocation.
+- Requesting more nodes than the allocation holds is rejected upfront (SLURM
+  would otherwise silently queue it as a brand-new allocation).
+- On SLURM, allocation-selection flags (`--queue`/`--account`/
+  `--reservation`) are dropped with a warning for a nested step: those
+  properties are fixed by the enclosing allocation.
+- On SLURM, `--overlap` is added to nested steps by default so concurrent
+  launches do not block each other on "step creation temporarily disabled".
+  It is omitted when `-c`/`--cpus-per-task` (steps pack onto disjoint CPUs
+  instead) or `--exclusive` is given, and can be removed with
+  `-x ~--overlap`.
+- Non-blocking (`--bg`) submissions are unaffected: submitting a batch job
+  from inside an allocation deliberately creates a new job.
 
 ### Job Scheduling
 

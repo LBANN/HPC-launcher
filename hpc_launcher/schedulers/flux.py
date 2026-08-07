@@ -60,6 +60,15 @@ class FluxScheduler(Scheduler):
             if not blocking:
                 self.submit_only_args["--gpus-per-slot"] = tmp
 
+        # CPUs (cores) per task. Flux names the flag differently for a task
+        # (flux run) and an allocation (flux batch), like --gpus-per-task
+        # above.
+        if self.cpus_per_task:
+            tmp = f"{self.cpus_per_task}"
+            self.run_only_args["--cores-per-task"] = tmp
+            if not blocking:
+                self.submit_only_args["--cores-per-slot"] = tmp
+
         # Request for node exclusivity
         if self.exclusive:
             self.submit_only_args["--exclusive"] = ""

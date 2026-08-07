@@ -44,9 +44,32 @@ def _time_string(minutes):
 @dataclass
 class SlurmScheduler(Scheduler):
 
+    @staticmethod
+    def in_slurm_allocation() -> bool:
+        """
+        Is this process already inside a Slurm allocation (salloc/sbatch)?
+
+        When ``SLURM_JOB_ID`` is set, ``srun`` creates a nested job step
+        within that allocation rather than requesting a new one -- provided
+        its options stay compatible with the enclosing job. The launch
+        arguments are built differently in that case (see
+        ``build_scheduler_specific_arguments``).
+        """
+        return os.getenv("SLURM_JOB_ID") is not None
+
     def build_scheduler_specific_arguments(
         self, system: "System", blocking: bool = True
     ):
+        # A blocking launch inside an existing allocation is a nested job
+        # step: srun inherits the allocation from SLURM_JOB_ID, and any
+        # allocation-level option that contradicts the enclosing job
+        # (partition, account, reservation, exclusivity, or a node count the
+        # allocation cannot cover) makes srun try to satisfy the request as a
+        # *new* allocation instead of running the step in the current one.
+        # Non-blocking (sbatch) submissions are left untouched: submitting a
+        # new batch job from inside an allocation is a deliberate new job.
+        nested_job_step = blocking and self.in_slurm_allocation()
+
         if self.out_log_file and not blocking:
             self.submit_only_args["--output"] = f"{self.out_log_file}"
         if self.err_log_file and not blocking:
@@ -57,7 +80,39 @@ class SlurmScheduler(Scheduler):
             # On Sierra family systems srun is a proxy to lrun and lacks this flag
             self.run_only_args["-u"] = None
 
+        if nested_job_step and not self.cpus_per_task and not self.exclusive:
+            # Since Slurm 20.11 a job step is given exclusive use of all CPUs
+            # on the nodes it runs on, so a second concurrent step inside the
+            # same allocation blocks on "Job <id> step creation temporarily
+            # disabled, retrying (Requested nodes are busy)" until the first
+            # finishes. --overlap lets steps share resources, so several
+            # launches can run side by side in one allocation (sizing them so
+            # they do not contend is up to the user; remove the flag with
+            # `-x ~--overlap` to restore exclusive steps).
+            #
+            # Not added when the step's CPU footprint is stated explicitly:
+            # with --cpus-per-task Slurm can pack disjoint concurrent steps
+            # side by side without sharing CPUs (--cpus-per-task implies
+            # --exact), and with --exclusive the user has asked for dedicated
+            # resources -- both are contradicted by --overlap.
+            self.run_only_args["--overlap"] = None
+
         # Number of Nodes
+        if nested_job_step:
+            # Within the allocation, -N <= the allocation's node count runs
+            # as a job step on the nodes already held; asking for more is
+            # what silently turns the srun into a request for a brand-new
+            # allocation (which then pends behind the one the user is
+            # sitting in). Fail fast with an explanation instead.
+            alloc_nodes = self.num_nodes_in_allocation()
+            if alloc_nodes is not None and self.nodes > alloc_nodes:
+                raise ValueError(
+                    f"Requested {self.nodes} nodes inside an allocation of "
+                    f"{alloc_nodes} node(s): srun would treat this as a new "
+                    f"allocation request rather than a job step. Request at "
+                    f"most {alloc_nodes} node(s) (or omit the job-size flags "
+                    f"to inherit the allocation's size)."
+                )
         self.common_launch_args["--nodes"] = f"{self.nodes}"
 
         # Total number of Tasks / Processes
@@ -65,6 +120,12 @@ class SlurmScheduler(Scheduler):
 
         # Number of Tasks per node
         self.common_launch_args["--ntasks-per-node"] = f"{self.procs_per_node}"
+
+        # CPUs per task. On srun --cpus-per-task implies --exact, giving a
+        # nested job step a precise CPU footprint so concurrent steps pack
+        # side by side instead of one step claiming every CPU on its nodes.
+        if self.cpus_per_task:
+            self.common_launch_args["--cpus-per-task"] = f"{self.cpus_per_task}"
 
         # Set the Number of GPUs per task
         if self.gpus_per_proc > 0:
@@ -103,14 +164,25 @@ class SlurmScheduler(Scheduler):
         if self.job_name:
             self.common_launch_args["--job-name"] = f"{self.job_name}"
 
-        if self.queue:
-            self.submit_only_args["--partition"] = f"{self.queue}"
-
-        if self.account:
-            self.submit_only_args["--account"] = f"{self.account}"
-
-        if self.reservation:
-            self.submit_only_args["--reservation"] = f"{self.reservation}"
+        # Allocation-selection options. For a nested job step these are
+        # already fixed by the enclosing allocation; passing a conflicting
+        # value makes srun request a new allocation instead of running a
+        # step, so drop them (loudly) rather than forward them.
+        for flag, value in (
+            ("--partition", self.queue),
+            ("--account", self.account),
+            ("--reservation", self.reservation),
+        ):
+            if not value:
+                continue
+            if nested_job_step:
+                logger.warning(
+                    f"WARNING: Dropping {flag}={value}: it selects an "
+                    f"allocation, and this launch runs as a job step inside "
+                    f"the existing allocation {os.getenv('SLURM_JOB_ID')}"
+                )
+            else:
+                self.submit_only_args[flag] = f"{value}"
 
         return
 
