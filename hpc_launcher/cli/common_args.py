@@ -15,7 +15,7 @@
 Common arguments for CLI utilities.
 """
 import argparse
-from hpc_launcher.schedulers import get_schedulers
+from hpc_launcher.schedulers import get_schedulers, num_nodes_in_current_allocation
 from hpc_launcher.schedulers.scheduler import Scheduler
 from hpc_launcher.schedulers.local import LocalScheduler
 from hpc_launcher.systems.system import System, GenericSystem
@@ -174,6 +174,17 @@ def setup_arguments(parser: argparse.ArgumentParser):
         type=int,
         default=None,  # Internally, if there are GPUs, this will default to 1
         help="Specifies the number of requested GPUs per process (default: 1)",
+    )
+
+    group.add_argument(
+        "-c",
+        "--cpus-per-task",
+        type=int,
+        default=None,
+        help="Specifies the number of CPUs per task/process (scheduler "
+        "default if unset). Inside an existing allocation this gives the "
+        "nested job step an exact CPU footprint, so several steps can run "
+        "concurrently without sharing CPUs.",
     )
 
     group.add_argument("-q", "--queue", default=None, help="Specifies the queue to use")
@@ -432,7 +443,9 @@ def validate_arguments(args: argparse.Namespace):
     #              number of nodes/ranks
     if not args.nodes and not args.gpus_at_least and not args.gpumem_at_least:
         raise ValueError(
-            "One of the following flags has to be set: --nodes, --gpus-at-least, or --gpumem-at-least"
+            "One of the following flags has to be set: --nodes, --gpus-at-least, "
+            "or --gpumem-at-least (not required when running inside an existing "
+            "allocation, whose node count is inherited)"
         )
     if args.nodes and args.gpus_at_least:
         raise ValueError(
@@ -617,6 +630,29 @@ def validate_scheduler_arguments(
 # See if the system can be autodetected and then process some special arguments
 # that can autoselect the number of ranks / GPUs
 def process_arguments(args: argparse.Namespace, logger: logging.Logger) -> System:
+    # When invoked from inside an existing allocation (salloc/sbatch/flux
+    # alloc/bsub), a launch without any job-size flag inherits the
+    # allocation's node count instead of being rejected: the job becomes a
+    # nested job step on the resources that are already held, so requiring
+    # the user to restate a size the scheduler already knows would be pure
+    # ceremony (and, worse, restating it wrong is what asks the scheduler
+    # for a *new* allocation). --local is excluded because it runs a single
+    # process with no scheduler at all. Checked before validate_arguments,
+    # which otherwise raises for the missing size flags.
+    if (
+        not args.nodes
+        and not args.gpus_at_least
+        and not args.gpumem_at_least
+        and not args.local
+    ):
+        alloc_nodes = num_nodes_in_current_allocation()
+        if alloc_nodes:
+            args.nodes = alloc_nodes
+            logger.info(
+                f"No job size given; inheriting {alloc_nodes} node(s) from "
+                f"the current allocation and running as a nested job step"
+            )
+
     validate_arguments(args)
 
     # Set system and launch configuration based on arguments

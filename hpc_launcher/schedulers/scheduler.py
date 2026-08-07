@@ -188,6 +188,10 @@ class Scheduler:
     procs_per_node: int
     # GPUs per Process (or task) if any
     gpus_per_proc: int
+    # CPUs per task, if explicitly requested (scheduler default otherwise).
+    # Inside an allocation this also gives a job step an exact CPU footprint,
+    # letting several steps run concurrently without overlapping.
+    cpus_per_task: Optional[int] = None
     # Request exclusive access to the resources
     exclusive: Optional[bool] = None
     # Job name
